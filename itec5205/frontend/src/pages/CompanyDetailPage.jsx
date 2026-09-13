@@ -7,6 +7,10 @@ import PredictionPanel from "../features/predictions/PredictionPanel";
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
 }
+function changeColor(value) {
+  if (value === null || value === undefined || value === 0) return "var(--color-text-primary)";
+  return value > 0 ? "#16a34a" : "#dc2626";
+}
 
 export default function CompanyDetailPage() {
   const { ticker } = useParams();
@@ -26,6 +30,10 @@ export default function CompanyDetailPage() {
   if (!detail) return <div className="card muted">Loading...</div>;
 
   const { company, stats, ratios, history } = detail;
+  const dayChangePct =
+    stats.current_price != null && stats.previous_close
+      ? ((stats.current_price - stats.previous_close) / stats.previous_close) * 100
+      : null;
 
   return (
     <div>
@@ -33,7 +41,13 @@ export default function CompanyDetailPage() {
         <h2>{ticker} — {company.name}</h2>
         <p className="muted">{company.sector} / {company.industry}</p>
         <div className="filters-grid">
-          <div><strong>Price</strong><div>{stats.current_price ?? "-"}</div></div>
+          <div>
+            <strong>Price</strong>
+            <div style={{ color: changeColor(dayChangePct), fontWeight: 600 }}>
+              {stats.current_price != null ? `$${Number(stats.current_price).toFixed(2)}` : "-"}
+              {dayChangePct !== null && ` (${dayChangePct > 0 ? "+" : ""}${dayChangePct.toFixed(2)}%)`}
+            </div>
+          </div>
           <div><strong>Market Cap</strong><div>{stats.market_cap ?? "-"}</div></div>
           <div><strong>Trailing P/E</strong><div>{stats.trailing_pe ?? "-"}</div></div>
           <div><strong>Beta</strong><div>{stats.beta ?? "-"}</div></div>

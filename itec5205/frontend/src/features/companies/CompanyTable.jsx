@@ -7,6 +7,7 @@ const COLUMNS = [
   { key: "name", label: "Company", sortable: true },
   { key: "sector", label: "Sector", sortable: false },
   { key: "current_price", label: "Price", sortable: false },
+  { key: "day_change", label: "Change", sortable: false },
   { key: "market_cap", label: "Mkt Cap", sortable: true, fmt: (v) => fmtLarge(v) },
   { key: "trailing_pe", label: "P/E", sortable: true, fmt: fmtNum },
   { key: "roe", label: "ROE", sortable: true, fmt: fmtPct },
@@ -29,6 +30,14 @@ function fmtLarge(v) {
   if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
   if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
   return `$${n.toFixed(0)}`;
+}
+function dayChangePct(row) {
+  if (row.current_price == null || !row.previous_close) return null;
+  return ((row.current_price - row.previous_close) / row.previous_close) * 100;
+}
+function changeColor(value) {
+  if (value === null || value === undefined || value === 0) return "var(--color-text-primary)";
+  return value > 0 ? "#16a34a" : "#dc2626";
 }
 
 export default function CompanyTable() {
@@ -75,7 +84,16 @@ export default function CompanyTable() {
                 <td><Link to={`/companies/${row.ticker}`}>{row.ticker}</Link></td>
                 <td>{row.name}</td>
                 <td><span className="pill">{row.sector || "-"}</span></td>
-                <td>{row.current_price ?? "-"}</td>
+                <td style={{ color: changeColor(dayChangePct(row)), fontWeight: 600 }}>
+                  {row.current_price != null ? `$${Number(row.current_price).toFixed(2)}` : "-"}
+                </td>
+                <td style={{ color: changeColor(dayChangePct(row)), fontWeight: 600 }}>
+                  {(() => {
+                    const chg = dayChangePct(row);
+                    if (chg === null) return "-";
+                    return `${chg > 0 ? "+" : ""}${chg.toFixed(2)}%`;
+                  })()}
+                </td>
                 <td>{fmtLarge(row.market_cap)}</td>
                 <td>{fmtNum(row.trailing_pe)}</td>
                 <td>{fmtPct(row.roe)}</td>

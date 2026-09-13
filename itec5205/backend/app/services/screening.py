@@ -106,6 +106,7 @@ def search_companies(
                 sector: company.sector,
                 industry: company.industry,
                 current_price: stats.current_price,
+                previous_close: stats.previous_close,
                 market_cap: stats.market_cap,
                 trailing_pe: stats.trailing_pe,
                 forward_pe: stats.forward_pe,
