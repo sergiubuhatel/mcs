@@ -4,6 +4,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { apiClient } from "../api/client";
 import PredictionPanel from "../features/predictions/PredictionPanel";
 import { CloseIcon } from "../layout/icons";
+import { INTERVALS, filterByInterval } from "../utils/dateRanges";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -24,21 +25,6 @@ function fmtLarge(v) {
   return `$${n.toFixed(0)}`;
 }
 
-const INTERVALS = [
-  { key: "1M", days: 30 },
-  { key: "3M", days: 90 },
-  { key: "6M", days: 182 },
-  { key: "1Y", days: 365 },
-  { key: "ALL", days: null },
-];
-
-function filterHistoryByInterval(history, days) {
-  if (!days || history.length === 0) return history;
-  const lastDate = new Date(history[history.length - 1].date);
-  const cutoff = new Date(lastDate);
-  cutoff.setDate(cutoff.getDate() - days);
-  return history.filter((h) => new Date(h.date) >= cutoff);
-}
 
 export default function CompanyDetailPage() {
   const { ticker } = useParams();
@@ -111,7 +97,7 @@ export default function CompanyDetailPage() {
       </div>
 
       {(() => {
-        const rangeHistory = filterHistoryByInterval(history, INTERVALS.find((iv) => iv.key === range)?.days);
+        const rangeHistory = filterByInterval(history, range);
         const periodChangePct =
           rangeHistory.length >= 2 && rangeHistory[0].close
             ? ((rangeHistory[rangeHistory.length - 1].close - rangeHistory[0].close) / rangeHistory[0].close) * 100

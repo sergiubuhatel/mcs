@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiClient } from "../api/client";
 import { CloseIcon } from "../layout/icons";
+import { INTERVALS, filterByInterval } from "../utils/dateRanges";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -10,22 +11,6 @@ function fmtPct(v) {
 function changeColor(value) {
   if (value === null || value === undefined || value === 0) return "var(--color-text-primary)";
   return value > 0 ? "#16a34a" : "#dc2626";
-}
-
-const INTERVALS = [
-  { key: "1M", days: 30 },
-  { key: "3M", days: 90 },
-  { key: "6M", days: 182 },
-  { key: "1Y", days: 365 },
-  { key: "ALL", days: null },
-];
-
-function filterSeriesByInterval(series, days) {
-  if (!days || series.length === 0) return series;
-  const lastDate = new Date(series[series.length - 1].date);
-  const cutoff = new Date(lastDate);
-  cutoff.setDate(cutoff.getDate() - days);
-  return series.filter((s) => new Date(s.date) >= cutoff);
 }
 
 export default function PortfolioDetailPage() {
@@ -42,7 +27,7 @@ export default function PortfolioDetailPage() {
     setError(null);
     Promise.all([
       apiClient.get(`/api/portfolios/${id}`),
-      apiClient.get(`/api/portfolios/${id}/performance`),
+      apiClient.get(`/api/portfolios/${id}/performance`, { params: { days: 3650 } }), // up to ~10 years
     ])
       .then(([detailRes, perfRes]) => {
         setPortfolio(detailRes.data);
@@ -72,7 +57,7 @@ export default function PortfolioDetailPage() {
       </div>
     );
 
-  const rangeSeries = filterSeriesByInterval(series, INTERVALS.find((iv) => iv.key === range)?.days);
+  const rangeSeries = filterByInterval(series, range);
   const periodChangePct =
     rangeSeries.length >= 2 && rangeSeries[0].value
       ? ((rangeSeries[rangeSeries.length - 1].value - rangeSeries[0].value) / rangeSeries[0].value) * 100
