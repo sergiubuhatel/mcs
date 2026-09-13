@@ -139,6 +139,19 @@ def train_and_predict(
         model_path,
     )
 
+    last_actual_close = float(closes[-1])
+    forecast = []
+    previous_close = last_actual_close
+    for d, p in zip(forecast_dates, forecast_prices):
+        forecast.append({
+            "date": d,
+            "predicted_close": round(p, 2),
+            # vs. the last actual close (cumulative move from today) and vs. the prior forecast day.
+            "change_pct_from_last_close": round((p - last_actual_close) / last_actual_close * 100, 2),
+            "change_pct_from_prior_day": round((p - previous_close) / previous_close * 100, 2),
+        })
+        previous_close = p
+
     return {
         "ticker": ticker,
         "seq_len": seq_len,
@@ -148,6 +161,7 @@ def train_and_predict(
         "test_rmse": rmse,
         "test_mae": mae,
         "history_days": len(closes),
-        "forecast": [{"date": d, "predicted_close": round(p, 2)} for d, p in zip(forecast_dates, forecast_prices)],
+        "last_actual_close": round(last_actual_close, 2),
+        "forecast": forecast,
         "model_path": model_path,
     }

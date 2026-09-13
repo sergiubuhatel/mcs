@@ -3,6 +3,22 @@ import { useDispatch, useSelector } from "react-redux";
 import { fetchExistingRequested, trainRequested } from "./predictionsSlice";
 import { TrendChartIcon } from "../../layout/icons";
 
+function changeColor(value) {
+  if (value === null || value === undefined || value === 0) return "var(--color-text-primary)";
+  return value > 0 ? "#16a34a" : "#dc2626";
+}
+
+function ChangeBadge({ value }) {
+  if (value === null || value === undefined) return <span className="muted">-</span>;
+  const arrow = value > 0 ? "▲ " : value < 0 ? "▼ " : "";
+  const sign = value > 0 ? "+" : "";
+  return (
+    <span style={{ color: changeColor(value), fontWeight: value === 0 ? 400 : 600 }}>
+      {arrow}{sign}{value.toFixed(2)}%
+    </span>
+  );
+}
+
 export default function PredictionPanel({ ticker }) {
   const dispatch = useDispatch();
   const { status, progress, result, error } = useSelector((s) => s.predictions);
@@ -44,12 +60,23 @@ export default function PredictionPanel({ ticker }) {
           <p className="muted">
             Test RMSE: <strong>{result.test_rmse?.toFixed(2) ?? "-"}</strong> · Test MAE:{" "}
             <strong>{result.test_mae?.toFixed(2) ?? "-"}</strong> · trained on {result.history_days} days
+            {result.last_actual_close !== undefined && <> · Last close: <strong>${result.last_actual_close}</strong></>}
           </p>
           <table>
-            <thead><tr><th>Date</th><th>Predicted close</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Predicted close</th>
+                <th>Predict Change</th>
+              </tr>
+            </thead>
             <tbody>
               {result.forecast?.map((f) => (
-                <tr key={f.date}><td>{f.date}</td><td>{f.predicted_close}</td></tr>
+                <tr key={f.date}>
+                  <td>{f.date}</td>
+                  <td style={{ color: changeColor(f.change_pct_from_prior_day), fontWeight: 600 }}>${f.predicted_close}</td>
+                  <td><ChangeBadge value={f.change_pct_from_prior_day} /></td>
+                </tr>
               ))}
             </tbody>
           </table>

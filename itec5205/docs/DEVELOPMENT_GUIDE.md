@@ -269,9 +269,14 @@ python scripts/init_db.py
 python wsgi.py                       # Waitress serving Flask + Socket.IO on :5000 (no nginx needed locally)
 ```
 
-In a second terminal, the Celery worker (same env vars):
+In a **second terminal** (`cd backend`, activate the venv), the Celery
+worker. Environment variables are per-process/per-shell, so this terminal
+needs its own `set` calls too -- inheriting nothing from the first one:
 
 ```
+set ARANGO_HOST=http://localhost:8529
+set ARANGO_PASSWORD=root
+set REDIS_URL=redis://localhost:6379/0
 celery -A celery_worker.celery_app worker --loglevel=info --pool=solo
 ```
 
@@ -328,10 +333,19 @@ Socket.IO room/event.
 
 ## 6. Troubleshooting / operational gotchas
 
-- **`ArangoServerError`/`DatabaseListError: not authorized` when running a
-  backend script locally**: `ARANGO_PASSWORD` wasn't set in that shell, so
-  it defaulted to an empty string (`config.py`'s default). Set it to match
-  whatever's in `.env` (`root` by default) alongside `ARANGO_HOST`.
+- **`ArangoServerError`/`DatabaseListError: not authorized` (`[HTTP 401]
+  [ERR 11]`) when running a backend script, the Flask app, or the Celery
+  worker locally**: `ARANGO_PASSWORD` wasn't set *in that particular
+  shell*, so it defaulted to an empty string (`config.py`'s default) instead
+  of matching ArangoDB's real password (`root` by default). This is a
+  frequent trap specifically with the worker: getting the backend terminal
+  right doesn't help the *separate* worker terminal, since each `cmd`/
+  PowerShell window has its own environment -- `set ARANGO_PASSWORD=root`
+  (plus `ARANGO_HOST` and `REDIS_URL`) has to be run again in every new
+  terminal before starting `python wsgi.py` or the `celery worker` command
+  in it. A worker started without it will run fine (Redis connects, no
+  error) right up until the first task that actually touches ArangoDB,
+  where it fails.
 - **`docker compose restart backend` (or rebuilding just `backend`) makes
   the app briefly 502 through port 8080, even though `curl localhost:5000`
   works**: nginx resolves a plain `proxy_pass http://backend:5000;`
