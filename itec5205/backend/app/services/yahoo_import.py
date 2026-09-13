@@ -85,6 +85,14 @@ def read_tickers(path) -> list[str]:
     return tickers
 
 
+def get_existing_tickers() -> set[str]:
+    """Tickers that already have a `companies` document, i.e. have been
+    imported at least once. Used to support "only update what's missing"."""
+    db = get_db()
+    cursor = db.aql.execute("FOR c IN companies RETURN c._key")
+    return set(cursor)
+
+
 def _row(df: pd.DataFrame, label: str, col=0):
     """Best-effort lookup of a labeled row/column in a yfinance statement
     DataFrame. Returns None if the row is missing or the value isn't numeric."""

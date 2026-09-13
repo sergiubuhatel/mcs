@@ -88,33 +88,74 @@ export default function BottomBar() {
 
 function ImportPanel({ onClose }) {
   const dispatch = useDispatch();
+  const importState = useSelector((s) => s.dataImport);
   const [tickers, setTickers] = useState("");
   const [period, setPeriod] = useState("2y");
+  const [onlyMissing, setOnlyMissing] = useState(true);
+
+  const running = importState.status === "starting" || importState.status === "running";
+  const finished = importState.status === "done" || importState.status === "error";
 
   const submit = () => {
     const list = tickers.trim() ? tickers.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean) : undefined;
-    dispatch(importRequested({ tickers: list, period }));
+    dispatch(importRequested({ tickers: list, period, only_missing: onlyMissing }));
+  };
+
+  const closeAndReset = () => {
+    dispatch(resetImport());
     onClose();
   };
+
+  if (running || finished) {
+    const p = importState.progress;
+    const percent = p && p.total ? Math.min(100, Math.round((p.completed / p.total) * 100)) : 0;
+    return (
+      <div>
+        <h3>Import market data</h3>
+        {running && (
+          <>
+            <div className="progress-bar"><div style={{ width: `${percent}%` }} /></div>
+            <p className="muted">
+              {p ? `${p.ticker ? `Fetching ${p.ticker} — ` : ""}${p.completed}/${p.total} (${p.succeeded} ok, ${p.failed} failed)` : "Starting..."}
+            </p>
+          </>
+        )}
+        {importState.status === "done" && (
+          <p className="muted">
+            {importState.result?.message
+              ? importState.result.message
+              : `Done — ${importState.result?.succeeded_count ?? 0} imported, ${importState.result?.failed_count ?? 0} failed (of ${importState.result?.total ?? 0}).`}
+          </p>
+        )}
+        {importState.status === "error" && <p className="error-text">{importState.error}</p>}
+        {finished && <button className="btn secondary" onClick={closeAndReset}>Close</button>}
+      </div>
+    );
+  }
 
   return (
     <div>
       <h3>Import market data</h3>
-      <p className="muted">Leave tickers blank to import the full S&amp;P 500 universe (~500 companies, several minutes).</p>
+      <p className="muted">Since when should price history start? Leave tickers blank to cover the full S&amp;P 500 universe.</p>
       <div className="filters-grid">
         <div>
           <label>Tickers (comma-separated, optional)</label>
           <input value={tickers} onChange={(e) => setTickers(e.target.value)} placeholder="e.g. AAPL, MSFT" />
         </div>
         <div>
-          <label>History period</label>
+          <label>Since</label>
           <select value={period} onChange={(e) => setPeriod(e.target.value)}>
-            <option value="1y">1 year</option>
-            <option value="2y">2 years</option>
-            <option value="5y">5 years</option>
+            <option value="1y">1 year ago</option>
+            <option value="2y">2 years ago</option>
+            <option value="5y">5 years ago</option>
+            <option value="10y">10 years ago</option>
           </select>
         </div>
       </div>
+      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", margin: "8px 0" }}>
+        <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} />
+        Only update what hasn't been imported yet (skip tickers already in the database)
+      </label>
       <button className="btn" onClick={submit}><DownloadIcon /> Start Import</button>{" "}
       <button className="btn secondary" onClick={onClose}>Cancel</button>
     </div>

@@ -87,14 +87,19 @@ input::placeholder, textarea::placeholder { color: var(--color-text-secondary); 
 .filters-grid label { display: block; font-size: 0.78rem; color: var(--color-text-secondary); margin-bottom: 3px; }
 .filters-grid input, .filters-grid select { width: 100%; }
 
+/* Fixed (non-theme-swapping) accent so buttons look the same in light and
+   dark mode -- unlike --color-text-accent, which intentionally changes
+   between themes for body text/links. */
+:root { --btn-accent: #2b6cb0; }
+
 .btn {
   display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
-  border: 1px solid var(--color-text-accent);
-  background: var(--color-text-accent);
+  border: 1px solid var(--btn-accent);
+  background: var(--btn-accent);
   color: #ffffff;
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn.secondary { background: var(--color-bg-primary); color: var(--color-text-accent); }
+.btn.secondary { background: var(--color-bg-primary); color: var(--btn-accent); border-color: var(--btn-accent); }
 .btn.danger { background: var(--color-bg-primary); color: #dc2626; border-color: #dc2626; }
 
 table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }

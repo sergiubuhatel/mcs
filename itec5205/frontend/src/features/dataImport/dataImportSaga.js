@@ -47,6 +47,13 @@ function* handleImport(action) {
     yield put(importStarted());
     const { data } = yield call(apiClient.post, "/api/data/import", action.payload || {});
     const taskId = data.task_id;
+
+    if (!taskId) {
+      // Nothing to do (e.g. "only missing" found everything already imported).
+      yield put(importSucceeded({ stage: "done", total: 0, succeeded_count: 0, failed_count: 0, message: data.message }));
+      return;
+    }
+
     yield put(importTaskCreated(taskId));
 
     channel = createProgressChannel("import_progress", taskId);

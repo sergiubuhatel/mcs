@@ -9,7 +9,7 @@ from celery.result import AsyncResult
 from flask import Blueprint, jsonify, request
 
 from .. import config
-from ..services.yahoo_import import read_tickers
+from ..services.yahoo_import import get_existing_tickers, read_tickers
 from ..tasks.celery_app import celery_app
 from ..tasks.import_tasks import import_sp500_data
 
@@ -22,6 +22,13 @@ def trigger_import():
     tickers = body.get("tickers")
     if not tickers:
         tickers = read_tickers(config.TICKERS_FILE)
+    tickers = [t.upper() for t in tickers]
+
+    if body.get("only_missing"):
+        existing = get_existing_tickers()
+        tickers = [t for t in tickers if t not in existing]
+        if not tickers:
+            return jsonify({"task_id": None, "ticker_count": 0, "message": "Everything requested is already imported."}), 200
 
     task = import_sp500_data.delay(
         tickers=tickers,
