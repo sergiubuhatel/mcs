@@ -23,7 +23,11 @@ function JobStatus({ label, status, progress, error, onReset }) {
           <div className="progress-bar" style={{ width: 90, margin: 0 }}>
             <div style={{ width: `${pct(progress)}%` }} />
           </div>
-          <span>{progress ? `${progress.completed ?? 0}/${progress.total ?? "?"}` : "starting..."}</span>
+          <span>
+            {progress
+              ? `${progress.ticker ? `${progress.ticker} · ` : ""}${progress.completed ?? 0}/${progress.total ?? "?"} (${pct(progress)}%)`
+              : "starting..."}
+          </span>
         </>
       )}
       {status === "done" && <span style={{ color: "#16a34a" }}>done</span>}
@@ -120,7 +124,9 @@ function ImportPanel({ onClose }) {
           <>
             <div className="progress-bar"><div style={{ width: `${percent}%` }} /></div>
             <p className="muted">
-              {p ? `${p.ticker ? `Fetching ${p.ticker} — ` : ""}${p.completed}/${p.total} (${p.succeeded} ok, ${p.failed} failed)` : "Starting..."}
+              {p
+                ? `${p.ticker ? `Fetching ${p.ticker} — ` : ""}${p.completed}/${p.total} (${percent}%) — ${p.succeeded} ok, ${p.failed} failed`
+                : "Starting — this can take a few seconds before progress appears..."}
             </p>
           </>
         )}

@@ -27,8 +27,9 @@ function* consumeChannelUntilDone(channel) {
 
 function* pollStatusUntilDone(taskId) {
   while (true) {
-    yield delay(4000);
+    yield delay(2000);
     const { data } = yield call(apiClient.get, `/api/rl/status/${taskId}`);
+    if (data.state === "PROGRESS" && data.progress) yield put(progressUpdated(data.progress));
     if (data.state === "SUCCESS") return { stage: "done", ...data.result };
     if (data.state === "FAILURE") throw new Error(data.error || "RL training failed");
   }

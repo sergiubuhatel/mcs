@@ -37,8 +37,9 @@ function* consumeChannelUntilDone(channel) {
 
 function* pollStatusUntilDone(taskId) {
   while (true) {
-    yield delay(3000);
+    yield delay(2000);
     const { data } = yield call(apiClient.get, `/api/predictions/status/${taskId}`);
+    if (data.state === "PROGRESS" && data.progress) yield put(progressUpdated(data.progress));
     if (data.state === "SUCCESS") return { stage: "done", ...data.result };
     if (data.state === "FAILURE") throw new Error(data.error || "LSTM training failed");
   }
