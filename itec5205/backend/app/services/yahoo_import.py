@@ -9,7 +9,7 @@ writes everything to Arango instead of CSV.
 """
 
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 import yfinance as yf
@@ -107,11 +107,18 @@ def _row(df: pd.DataFrame, label: str, col=0):
     return float(value)
 
 
-def fetch_ticker_history(ticker: str, info: dict, period: str = "1y", interval: str = "1d") -> list[dict]:
+def fetch_ticker_history(ticker: str, info: dict, years: int = 2, interval: str = "1d") -> list[dict]:
     """Same behavior as the original fetch_stock_history.py: end-of-day close,
-    falling back to the live price for a session that hasn't closed yet."""
+    falling back to the live price for a session that hasn't closed yet.
+
+    Uses an explicit `start` date (today minus `years`) rather than
+    yfinance's `period` enum, which only recognizes a fixed set of values
+    (1y/2y/5y/10y/max) -- an explicit date supports any lookback, including
+    ones like 15 or 20 years that period="..." can't express.
+    """
     yf_ticker = yf.Ticker(ticker)
-    history = yf_ticker.history(period=period, interval=interval)
+    start = (date.today() - timedelta(days=365 * years)).isoformat()
+    history = yf_ticker.history(start=start, interval=interval)
     if history.empty:
         raise ValueError(f"No price history returned for ticker '{ticker}'")
 
@@ -211,7 +218,7 @@ def fetch_financial_ratios(ticker: str, yf_ticker: yf.Ticker) -> dict:
     }
 
 
-def import_ticker(ticker: str, period: str = "1y", interval: str = "1d") -> dict:
+def import_ticker(ticker: str, years: int = 2, interval: str = "1d") -> dict:
     """Fetch history + stats + financial ratios for one ticker and upsert
     them into ArangoDB. Returns a small summary dict for progress reporting."""
     yf_ticker = yf.Ticker(ticker)
@@ -243,7 +250,7 @@ def import_ticker(ticker: str, period: str = "1y", interval: str = "1d") -> dict
         overwrite=True,
     )
 
-    history_rows = fetch_ticker_history(ticker, info, period=period, interval=interval)
+    history_rows = fetch_ticker_history(ticker, info, years=years, interval=interval)
     prices_col = db.collection("stock_prices")
     for row in history_rows:
         row["_key"] = f"{ticker}_{row['date']}"

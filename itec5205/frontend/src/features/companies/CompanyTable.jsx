@@ -3,11 +3,11 @@ import { useDispatch, useSelector } from "react-redux";
 import { fetchRequested, setFilters, toggleSelected } from "./companiesSlice";
 
 const COLUMNS = [
-  { key: "ticker", label: "Ticker", sortable: false },
+  { key: "ticker", label: "Ticker", sortable: true },
   { key: "name", label: "Company", sortable: true },
-  { key: "sector", label: "Sector", sortable: false },
-  { key: "current_price", label: "Price", sortable: false },
-  { key: "day_change", label: "Change", sortable: false },
+  { key: "sector", label: "Sector", sortable: true },
+  { key: "current_price", label: "Price", sortable: true },
+  { key: "day_change", label: "Change", sortable: true },
   { key: "market_cap", label: "Mkt Cap", sortable: true, fmt: (v) => fmtLarge(v) },
   { key: "trailing_pe", label: "P/E", sortable: true, fmt: fmtNum },
   { key: "roe", label: "ROE", sortable: true, fmt: fmtPct },

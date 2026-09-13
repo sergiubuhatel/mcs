@@ -10,6 +10,7 @@ from ..db.arango_client import get_db
 # stays injection-safe even though sort direction/field can't be bind params
 # (AQL doesn't allow ASC/DESC or attribute names to be bind parameters).
 SORTABLE_FIELDS = {
+    "ticker": "company._key",
     "market_cap": "stats.market_cap",
     "trailing_pe": "stats.trailing_pe",
     "forward_pe": "stats.forward_pe",
@@ -26,6 +27,14 @@ SORTABLE_FIELDS = {
     "net_margin": "ratios.net_margin",
     "revenue_growth_yoy": "ratios.revenue_growth_yoy",
     "name": "company.name",
+    "sector": "company.sector",
+}
+
+# Fields that aren't a single stored attribute but a computed expression --
+# e.g. day-over-day change isn't stored, it's derived from two stats fields.
+COMPUTED_SORT_EXPRESSIONS = {
+    "day_change": "(stats.previous_close == null || stats.previous_close == 0) ? null : "
+    "(stats.current_price - stats.previous_close) / stats.previous_close",
 }
 
 FILTERABLE_RANGES = {
@@ -62,7 +71,7 @@ def search_companies(
     """
     db = get_db()
 
-    sort_field = SORTABLE_FIELDS.get(sort_by, SORTABLE_FIELDS["market_cap"])
+    sort_field = COMPUTED_SORT_EXPRESSIONS.get(sort_by) or SORTABLE_FIELDS.get(sort_by, SORTABLE_FIELDS["market_cap"])
     sort_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
 
     filter_clauses = ["stats != null"]

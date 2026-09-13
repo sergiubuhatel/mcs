@@ -32,7 +32,7 @@ def trigger_import():
 
     task = import_sp500_data.delay(
         tickers=tickers,
-        period=body.get("period", "2y"),
+        years=int(body.get("years", 10)),
         interval=body.get("interval", "1d"),
     )
     return jsonify({"task_id": task.id, "ticker_count": len(tickers)}), 202

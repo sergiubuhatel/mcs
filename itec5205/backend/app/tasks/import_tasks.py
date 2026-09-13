@@ -14,7 +14,7 @@ from .celery_app import celery_app
 
 
 @celery_app.task(bind=True, name="import_sp500_data")
-def import_sp500_data(self, tickers: list[str], period: str = "2y", interval: str = "1d", pause_seconds: float = 0.3):
+def import_sp500_data(self, tickers: list[str], years: int = 10, interval: str = "1d", pause_seconds: float = 0.3):
     total = len(tickers)
     succeeded = []
     failed = []
@@ -22,7 +22,7 @@ def import_sp500_data(self, tickers: list[str], period: str = "2y", interval: st
 
     for index, ticker in enumerate(tickers, start=1):
         try:
-            summary = import_ticker(ticker, period=period, interval=interval)
+            summary = import_ticker(ticker, years=years, interval=interval)
             succeeded.append(summary)
         except Exception as exc:  # noqa: BLE001 - keep going for the rest of the universe
             failed.append({"ticker": ticker, "error": str(exc)})

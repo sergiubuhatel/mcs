@@ -95,7 +95,7 @@ function ImportPanel({ onClose }) {
   const importState = useSelector((s) => s.dataImport);
   const [scope, setScope] = useState("all"); // "all" | "specific"
   const [tickers, setTickers] = useState("");
-  const [period, setPeriod] = useState("2y");
+  const [years, setYears] = useState(10);
   const [onlyMissing, setOnlyMissing] = useState(true);
 
   const running = importState.status === "starting" || importState.status === "running";
@@ -106,7 +106,10 @@ function ImportPanel({ onClose }) {
       scope === "specific" && tickers.trim()
         ? tickers.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean)
         : undefined; // undefined -> backend imports the full S&P 500 universe
-    dispatch(importRequested({ tickers: list, period, only_missing: onlyMissing }));
+    // "Only missing" only makes sense for the full-universe scope; typing
+    // specific tickers is a deliberate refresh request and must overwrite
+    // them even if they're already imported.
+    dispatch(importRequested({ tickers: list, years, only_missing: scope === "all" && onlyMissing }));
   };
 
   const closeAndReset = () => {
@@ -169,18 +172,24 @@ function ImportPanel({ onClose }) {
         </div>
         <div>
           <label>Since</label>
-          <select value={period} onChange={(e) => setPeriod(e.target.value)}>
-            <option value="1y">1 year ago</option>
-            <option value="2y">2 years ago</option>
-            <option value="5y">5 years ago</option>
-            <option value="10y">10 years ago</option>
+          <select value={years} onChange={(e) => setYears(Number(e.target.value))}>
+            <option value={1}>1 year ago</option>
+            <option value={2}>2 years ago</option>
+            <option value={5}>5 years ago</option>
+            <option value={10}>10 years ago</option>
+            <option value={15}>15 years ago</option>
+            <option value={20}>20 years ago</option>
           </select>
         </div>
       </div>
-      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", margin: "8px 0" }}>
-        <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} />
-        Only update what hasn't been imported yet (skip tickers already in the database)
-      </label>
+      {scope === "all" ? (
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", margin: "8px 0" }}>
+          <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} />
+          Only update what hasn't been imported yet (skip tickers already in the database)
+        </label>
+      ) : (
+        <p className="muted" style={{ margin: "8px 0" }}>Specific tickers are always re-fetched and will overwrite any existing data for them.</p>
+      )}
       <button className="btn" onClick={submit} disabled={scope === "specific" && !tickers.trim()}>
         <DownloadIcon /> Start Import
       </button>{" "}
