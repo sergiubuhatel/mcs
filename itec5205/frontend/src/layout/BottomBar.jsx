@@ -89,6 +89,7 @@ export default function BottomBar() {
 function ImportPanel({ onClose }) {
   const dispatch = useDispatch();
   const importState = useSelector((s) => s.dataImport);
+  const [scope, setScope] = useState("all"); // "all" | "specific"
   const [tickers, setTickers] = useState("");
   const [period, setPeriod] = useState("2y");
   const [onlyMissing, setOnlyMissing] = useState(true);
@@ -97,7 +98,10 @@ function ImportPanel({ onClose }) {
   const finished = importState.status === "done" || importState.status === "error";
 
   const submit = () => {
-    const list = tickers.trim() ? tickers.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean) : undefined;
+    const list =
+      scope === "specific" && tickers.trim()
+        ? tickers.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean)
+        : undefined; // undefined -> backend imports the full S&P 500 universe
     dispatch(importRequested({ tickers: list, period, only_missing: onlyMissing }));
   };
 
@@ -136,11 +140,26 @@ function ImportPanel({ onClose }) {
   return (
     <div>
       <h3>Import market data</h3>
-      <p className="muted">Since when should price history start? Leave tickers blank to cover the full S&amp;P 500 universe.</p>
+      <p className="muted">Choose what to import and since when price history should start.</p>
+      <div style={{ display: "flex", gap: 16, margin: "8px 0" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" }}>
+          <input type="radio" name="import-scope" checked={scope === "all"} onChange={() => setScope("all")} />
+          All S&amp;P 500 companies (~503 tickers)
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" }}>
+          <input type="radio" name="import-scope" checked={scope === "specific"} onChange={() => setScope("specific")} />
+          Specific tickers
+        </label>
+      </div>
       <div className="filters-grid">
         <div>
-          <label>Tickers (comma-separated, optional)</label>
-          <input value={tickers} onChange={(e) => setTickers(e.target.value)} placeholder="e.g. AAPL, MSFT" />
+          <label>Tickers (comma-separated)</label>
+          <input
+            value={tickers}
+            onChange={(e) => setTickers(e.target.value)}
+            placeholder="e.g. AAPL, MSFT"
+            disabled={scope !== "specific"}
+          />
         </div>
         <div>
           <label>Since</label>
@@ -156,7 +175,9 @@ function ImportPanel({ onClose }) {
         <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} />
         Only update what hasn't been imported yet (skip tickers already in the database)
       </label>
-      <button className="btn" onClick={submit}><DownloadIcon /> Start Import</button>{" "}
+      <button className="btn" onClick={submit} disabled={scope === "specific" && !tickers.trim()}>
+        <DownloadIcon /> Start Import
+      </button>{" "}
       <button className="btn secondary" onClick={onClose}>Cancel</button>
     </div>
   );

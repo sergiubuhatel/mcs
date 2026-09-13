@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchRequested, setFilters, toggleSelected } from "./companiesSlice";
 
@@ -42,6 +42,7 @@ function changeColor(value) {
 
 export default function CompanyTable() {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { results, total, filters, selected, loading, error } = useSelector((s) => s.companies);
 
   const onSort = (key) => {
@@ -77,11 +78,15 @@ export default function CompanyTable() {
           </thead>
           <tbody>
             {results.map((row) => (
-              <tr key={row.ticker}>
-                <td>
+              <tr
+                key={row.ticker}
+                onClick={() => navigate(`/companies/${row.ticker}`)}
+                style={{ cursor: "pointer" }}
+              >
+                <td onClick={(e) => e.stopPropagation()}>
                   <input type="checkbox" checked={!!selected[row.ticker]} onChange={() => dispatch(toggleSelected(row.ticker))} />
                 </td>
-                <td><Link to={`/companies/${row.ticker}`}>{row.ticker}</Link></td>
+                <td><Link to={`/companies/${row.ticker}`} onClick={(e) => e.stopPropagation()}>{row.ticker}</Link></td>
                 <td>{row.name}</td>
                 <td><span className="pill">{row.sector || "-"}</span></td>
                 <td style={{ color: changeColor(dayChangePct(row)), fontWeight: 600 }}>
