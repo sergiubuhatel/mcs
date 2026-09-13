@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { deleteRequested, fetchRequested } from "../features/portfolios/portfoliosSlice";
 import ManualPortfolioForm from "../features/portfolios/ManualPortfolioForm";
@@ -27,7 +28,7 @@ export default function PortfoliosPage() {
           <div key={p._key} style={{ borderTop: "1px solid var(--color-divider)", paddingTop: 10, marginTop: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <div>
-                <strong>{p.name}</strong> <span className="pill">{p.method}</span>
+                <Link to={`/portfolios/${p._key}`}><strong>{p.name}</strong></Link> <span className="pill">{p.method}</span>
               </div>
               <button className="btn danger" onClick={() => dispatch(deleteRequested(p._key))}>Delete</button>
             </div>

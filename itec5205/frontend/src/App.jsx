@@ -10,6 +10,7 @@ import ScreenerPage from "./pages/ScreenerPage";
 import PortfolioPage from "./pages/PortfolioPage";
 import PredictionPage from "./pages/PredictionPage";
 import CompanyDetailPage from "./pages/CompanyDetailPage";
+import PortfolioDetailPage from "./pages/PortfolioDetailPage";
 
 export default function App() {
   const darkMode = useSelector((s) => s.theme.darkMode);
@@ -32,6 +33,7 @@ export default function App() {
             <Route path="/portfolio" element={<PortfolioPage />} />
             <Route path="/prediction" element={<PredictionPage />} />
             <Route path="/companies/:ticker" element={<CompanyDetailPage />} />
+            <Route path="/portfolios/:id" element={<PortfolioDetailPage />} />
           </Routes>
         </main>
 

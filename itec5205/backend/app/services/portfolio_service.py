@@ -58,6 +58,24 @@ def compute_metrics(holdings: list[dict]) -> dict:
     }
 
 
+def compute_performance_series(holdings: list[dict], lookback_days: int = TRADING_DAYS_PER_YEAR) -> list[dict]:
+    """Historical cumulative value of the portfolio (holdings' fixed weights
+    applied to each day's actual returns), normalized to start at 100 --
+    the same shape of series as a stock's price history, for charting."""
+    tickers = [h["ticker"] for h in holdings]
+    weights = np.array([h["weight"] for h in holdings], dtype=float)
+
+    returns = _returns_matrix(tickers, lookback_days=lookback_days)
+    if returns.empty:
+        return []
+
+    returns = returns.reindex(columns=tickers).fillna(0.0)
+    portfolio_daily = returns.values @ weights
+    cumulative = 100.0 * np.cumprod(1.0 + portfolio_daily)
+
+    return [{"date": d, "value": round(float(v), 2)} for d, v in zip(returns.index, cumulative)]
+
+
 def _normalize_holdings(holdings: list[dict]) -> list[dict]:
     total = sum(h["weight"] for h in holdings)
     if total <= 0:

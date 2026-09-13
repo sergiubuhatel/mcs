@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { trainRequested, reset } from "./rlSlice";
 import { fetchRequested as fetchPortfoliosRequested } from "../portfolios/portfoliosSlice";
@@ -82,7 +83,10 @@ export default function RLTrainingPanel({ pool }) {
                 ))}
             </tbody>
           </table>
-          <p className="muted">Saved as portfolio id <code>{result.portfolio_id}</code>.</p>
+          <p className="muted">
+            Saved as portfolio id <code>{result.portfolio_id}</code>.{" "}
+            <Link to={`/portfolios/${result.portfolio_id}`}>View portfolio &amp; chart &rarr;</Link>
+          </p>
           <button className="btn secondary" onClick={() => dispatch(fetchPortfoliosRequested())}>Refresh portfolios list</button>
         </div>
       )}

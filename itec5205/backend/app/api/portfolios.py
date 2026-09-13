@@ -2,7 +2,13 @@
 
 from flask import Blueprint, jsonify, request
 
-from ..services.portfolio_service import create_portfolio, delete_portfolio, get_portfolio, list_portfolios
+from ..services.portfolio_service import (
+    compute_performance_series,
+    create_portfolio,
+    delete_portfolio,
+    get_portfolio,
+    list_portfolios,
+)
 
 bp = Blueprint("portfolios", __name__, url_prefix="/api/portfolios")
 
@@ -32,6 +38,16 @@ def create():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify(portfolio), 201
+
+
+@bp.get("/<portfolio_id>/performance")
+def performance(portfolio_id: str):
+    portfolio = get_portfolio(portfolio_id)
+    if portfolio is None:
+        return jsonify({"error": "Portfolio not found"}), 404
+    days = int(request.args.get("days", 500))
+    series = compute_performance_series(portfolio["holdings"], lookback_days=days)
+    return jsonify({"portfolio_id": portfolio_id, "series": series})
 
 
 @bp.delete("/<portfolio_id>")
