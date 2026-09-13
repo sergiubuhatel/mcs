@@ -1,0 +1,16 @@
+flask
+flask-cors
+flask-socketio
+python-socketio
+python-engineio
+python-arango
+celery
+redis
+flower
+yfinance
+pandas
+numpy
+gymnasium
+stable-baselines3
+torch
+waitress

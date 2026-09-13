@@ -1,156 +1,45 @@
-# Stock data tools
+# S&P 500 Investment Screener & RL Portfolio Builder
 
-Two standalone scripts for pulling Yahoo Finance data for a list of stock
-tickers into a single combined CSV file.
+A full-stack, data-intensive application (ITEC 5205 individual research
+project) for screening S&P 500 companies by financial indicators, saving a
+candidate pool, generating a low-risk/high-return portfolio allocation with
+reinforcement learning, and forecasting individual stock prices with an
+LSTM — built on Flask, React/Redux-Saga, ArangoDB, and Celery/Redis, fully
+Dockerized.
 
-- `fetch_stock_history.py` — 1 year of historical daily closing prices
-- `fetch_stock_stats.py` — current key statistics (price, market cap, P/E, etc.)
+- **Want to use the app?** → [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md)
+- **Want to understand/extend the code?** → [`docs/DEVELOPMENT_GUIDE.md`](docs/DEVELOPMENT_GUIDE.md)
+- **The academic writeup** → [`paper/ITEC5205_ResearchPaper.docx`](paper/ITEC5205_ResearchPaper.docx)
 
-## Setup
-
-```
-pip install -r requirements.txt
-```
-
-## Input file
-
-Both scripts take an input file as their first positional argument: a plain
-text file listing tickers, one per line (`#` lines are treated as comments
-and ignored).
-
-If the input file doesn't exist yet, it is created automatically with the
-default tickers — the "Magnificent 7": **AAPL, MSFT, GOOGL, AMZN, NVDA, META,
-TSLA**.
-
-Example `tickers.txt`:
+## Quick start
 
 ```
-AAPL
-MSFT
-GOOGL
-AMZN
-NVDA
-META
-TSLA
+docker compose up -d --build
+docker compose exec backend python scripts/init_db.py
 ```
 
----
+Then open **http://localhost:8080** and see the User's Guide for loading
+data and using the Screener / Pools / Portfolios pages.
 
-## fetch_stock_history.py
+| Service  | URL                     |
+|----------|-------------------------|
+| App      | http://localhost:8080   |
+| API      | http://localhost:5000/api |
+| ArangoDB | http://localhost:8529 (user `root`, password in `.env`) |
+| Flower (Celery monitor) | http://localhost:5555 |
 
-Pulls 1 year of historical daily closing prices for each ticker and writes
-them all into a single combined CSV.
-
-### Usage
-
-Input and output files are both required positional arguments:
-
-```
-python fetch_stock_history.py <input> <output> [--period PERIOD] [--interval INTERVAL]
-```
+## Repository layout
 
 ```
-python fetch_stock_history.py tickers.txt output/stock_history.csv
+backend/    Flask API + Celery tasks + RL/LSTM services (see DEVELOPMENT_GUIDE.md)
+frontend/   React + Redux Toolkit + Redux-Saga app (Vite)
+paper/      IEEE-style research paper (build_paper.py regenerates the .docx)
+docs/       User's Guide and Development Guide
+docker-compose.yml   launches arangodb, redis, backend, worker, flower, frontend
+tickers.txt          S&P 500 ticker universe used for the bulk import
+fetch_stock_history.py, fetch_stock_stats.py   original standalone CSV scripts
+                                                (kept for quick ad-hoc pulls; their
+                                                logic was carried into
+                                                backend/app/services/yahoo_import.py,
+                                                which is what the app itself uses)
 ```
-
-Use a different input file (created with the default tickers if it doesn't
-exist yet):
-
-```
-python fetch_stock_history.py my_tickers.txt output/my_history.csv
-```
-
-Change the time period or interval:
-
-```
-python fetch_stock_history.py tickers.txt output/stock_history.csv --period 6mo --interval 1wk
-```
-
-### Options
-
-| Argument     | Default      | Description                                                |
-|--------------|--------------|--------------------------------------------------------------|
-| `input`      | *(required)* | Input file with one ticker per line                          |
-| `output`     | *(required)* | Combined output CSV file (parent directory created automatically) |
-| `--period`   | `1y`         | History window, e.g. `1mo`, `6mo`, `1y`, `5y`, `max`         |
-| `--interval` | `1d`         | Data granularity, e.g. `1d`, `1wk`, `1mo`                    |
-
-### Output columns
-
-| Column               | Description                          |
-|----------------------|---------------------------------------|
-| `ticker`             | Ticker symbol, e.g. `AAPL`            |
-| `company`            | Company name, e.g. `Apple Inc.`       |
-| `date`               | Trading date                          |
-| `close`              | End-of-day close, or current live price if today's session hasn't closed yet (2 decimals) |
-| `previous`           | Previous row's `close` (2 decimals; blank for the first row) |
-| `value_change`       | `close - previous` (2 decimals; can be negative) |
-| `percentage_change`  | `(close - previous) / previous * 100` (2 decimals; can be negative) |
-
----
-
-## fetch_stock_stats.py
-
-Pulls current key statistics for each ticker (price, market cap, valuation
-ratios, 52-week range, etc.) and writes them all into a single combined CSV.
-
-### Usage
-
-Input and output files are both required positional arguments:
-
-```
-python fetch_stock_stats.py <input> <output>
-```
-
-```
-python fetch_stock_stats.py tickers.txt output/stock_stats.csv
-```
-
-### Options
-
-| Argument | Default      | Description                                                |
-|----------|--------------|--------------------------------------------------------------|
-| `input`  | *(required)* | Input file with one ticker per line                          |
-| `output` | *(required)* | Combined output CSV file (parent directory created automatically) |
-
-### Output columns
-
-| Column                     | Description                          |
-|-----------------------------|---------------------------------------|
-| `ticker`                    | Ticker symbol                         |
-| `company`                   | Company name                          |
-| `sector`                    | GICS sector                           |
-| `industry`                  | GICS industry                         |
-| `current_price`             | Latest traded price                   |
-| `previous_close`            | Previous session's close              |
-| `open`                      | Today's open price                    |
-| `day_low` / `day_high`      | Today's price range                   |
-| `fifty_two_week_low/high`   | 52-week price range                   |
-| `volume`                    | Today's trading volume                |
-| `average_volume`            | Average daily trading volume          |
-| `market_cap`                | Market capitalization                 |
-| `beta`                      | Beta (volatility vs. market)          |
-| `trailing_pe` / `forward_pe`| Trailing / forward P/E ratio          |
-| `eps_trailing` / `eps_forward` | Trailing / forward EPS             |
-| `dividend_yield`            | Dividend yield                        |
-| `dividend_rate`             | Annual dividend rate                  |
-| `payout_ratio`              | Dividend payout ratio                 |
-| `book_value`                | Book value per share                  |
-| `price_to_book`             | Price-to-book ratio                   |
-| `shares_outstanding`        | Shares outstanding                    |
-| `fifty_day_average`         | 50-day moving average price           |
-| `two_hundred_day_average`   | 200-day moving average price          |
-
----
-
-## Errors
-
-If a ticker is invalid or Yahoo Finance returns no data, an error is printed
-to stderr and the script continues with the remaining tickers.
-
-`close` is the end-of-day price once the market has closed for that day; for
-the current day, if the session hasn't closed yet, `fetch_stock_history.py`
-fills it in with the current live price instead (a message is printed). If
-Yahoo's history omits today's row entirely (common while the session is
-still open), a row for today is added using the current live price. Rows
-with no valid close and no live price available are dropped, with a warning.
