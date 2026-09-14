@@ -7,14 +7,29 @@ import {
   resumeRequested,
   stopRequested,
 } from "../features/dataImport/dataImportSlice";
-import { trainRequested as predictRequested, reset as resetPredict } from "../features/predictions/predictionsSlice";
-import { trainRequested as allocateRequested, reset as resetAllocate } from "../features/rl/rlSlice";
-import { fetchRequested as fetchPoolsRequested } from "../features/pools/poolsSlice";
-import { CloseIcon, DownloadIcon, PieChartIcon, TrendChartIcon } from "./icons";
+import { reset as resetAllocate } from "../features/rl/rlSlice";
+import { CloseIcon, DatabaseIcon, DownloadIcon, StopIcon } from "./icons";
 
 function pct(progress) {
   if (!progress || !progress.total) return 0;
   return Math.min(100, Math.round((progress.completed / progress.total) * 100));
+}
+
+function fmtDuration(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function fmtEta(seconds) {
+  if (seconds == null || !isFinite(seconds) || seconds < 0) return "-";
+  const minutes = seconds / 60;
+  if (minutes < 1) return "<1 min";
+  if (minutes < 60) return `~${Math.round(minutes)} min`;
+  const hours = minutes / 60;
+  if (hours < 24) return `~${hours.toFixed(1)} hr`;
+  const days = hours / 24;
+  return `~${days.toFixed(1)} d`;
 }
 
 function JobStatus({ label, status, progress, error, onReset }) {
@@ -48,51 +63,84 @@ function JobStatus({ label, status, progress, error, onReset }) {
 function ImportStatus() {
   const dispatch = useDispatch();
   const importState = useSelector((s) => s.dataImport);
-  const { status, progress, result, error, taskId } = importState;
+  const { status, progress, result, error, taskId, startedAt } = importState;
+  const [, forceTick] = useState(0);
+
+  const running = status === "starting" || status === "running" || status === "stopping";
+
+  // Re-render once a second while running so the elapsed/ETA text stays live
+  // without needing a new progress event for every tick.
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => forceTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [running]);
 
   if (status === "idle") return null;
 
-  const running = status === "starting" || status === "running" || status === "stopping";
   const stopped = status === "stopped";
   const remaining = result?.remaining_tickers?.length ?? 0;
+  const percent = pct(progress);
+  const elapsedSeconds = startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0;
+  const etaSeconds =
+    progress?.completed ? (elapsedSeconds * (progress.total - progress.completed)) / progress.completed : null;
 
   return (
-    <div className="flex flex-1 items-center gap-3 text-xs" style={{ color: "var(--color-text-secondary)", minWidth: 200 }}>
-      <span className="font-medium" style={{ color: "var(--color-text-primary)" }}>Import:</span>
+    <div
+      className="flex flex-1 items-center gap-3 rounded-lg px-3 py-1.5"
+      style={{ background: "var(--color-bg-secondary)", border: "1px solid var(--color-divider)", minWidth: 200 }}
+    >
+      <div
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+        style={{ background: "var(--btn-accent)", color: "#ffffff" }}
+      >
+        <DatabaseIcon />
+      </div>
 
       {running && (
         <>
-          <div className="progress-bar flex-1" style={{ margin: 0 }}>
-            <div style={{ width: `${pct(progress)}%` }} />
+          <div className="shrink-0">
+            <div className="text-xs font-semibold" style={{ color: "var(--color-text-primary)" }}>
+              {status === "stopping" ? "Stopping import..." : "Importing stock data..."}
+            </div>
+            <div className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+              Current: {progress?.ticker ?? "-"}
+            </div>
           </div>
-          <span className="shrink-0">
-            {status === "stopping"
-              ? "stopping..."
-              : progress
-              ? `${progress.ticker ? `${progress.ticker} · ` : ""}${progress.completed ?? 0}/${progress.total ?? "?"} (${pct(progress)}%)`
-              : "starting..."}
+          <span className="shrink-0 text-xs font-semibold" style={{ color: "var(--color-text-primary)" }}>
+            {progress ? `${progress.completed}/${progress.total} (${percent}%)` : "starting..."}
           </span>
-          <button className="btn danger shrink-0" onClick={() => dispatch(stopRequested(taskId))} disabled={status === "stopping"}>
-            Stop
+          <div className="progress-bar flex-1" style={{ margin: 0 }}>
+            <div style={{ width: `${percent}%` }} />
+          </div>
+          <span className="shrink-0 text-xs" style={{ color: "var(--color-text-secondary)" }}>
+            Elapsed {fmtDuration(elapsedSeconds)} · ETA {fmtEta(etaSeconds)}
+          </span>
+          <button
+            className="btn danger shrink-0"
+            onClick={() => dispatch(stopRequested(taskId))}
+            disabled={status === "stopping"}
+          >
+            <StopIcon /> Stop
           </button>
         </>
       )}
 
       {status === "done" && (
-        <span style={{ color: "#16a34a" }}>
-          {result?.message ?? `done — ${result?.succeeded_count ?? 0} ok, ${result?.failed_count ?? 0} failed`}
+        <span className="flex-1 text-xs" style={{ color: "#16a34a" }}>
+          {result?.message ?? `Done — ${result?.succeeded_count ?? 0} imported, ${result?.failed_count ?? 0} failed`}
         </span>
       )}
       {stopped && (
-        <span style={{ color: "#d97706" }}>
-          stopped — {result?.succeeded_count ?? 0} ok, {remaining} remaining
+        <span className="flex-1 text-xs" style={{ color: "#d97706" }}>
+          Stopped — {result?.succeeded_count ?? 0} imported, {remaining} remaining
         </span>
       )}
-      {status === "error" && <span className="error-text">{error}</span>}
+      {status === "error" && <span className="flex-1 error-text">{error}</span>}
 
       {stopped && remaining > 0 && (
         <button className="btn shrink-0" onClick={() => dispatch(resumeRequested(taskId))}>
-          Resume
+          <DownloadIcon /> Resume
         </button>
       )}
       {(status === "done" || stopped || status === "error") && (
@@ -106,51 +154,35 @@ function ImportStatus() {
 
 export default function BottomBar() {
   const dispatch = useDispatch();
-  const [openPanel, setOpenPanel] = useState(null); // null | "import" | "predict" | "allocate"
+  const [importPanelOpen, setImportPanelOpen] = useState(false);
 
   const importState = useSelector((s) => s.dataImport);
-  const predictState = useSelector((s) => s.predictions);
   const allocateState = useSelector((s) => s.rl);
-  const pools = useSelector((s) => s.pools.items);
 
-  useEffect(() => {
-    if (openPanel === "allocate") dispatch(fetchPoolsRequested());
-  }, [openPanel, dispatch]);
-
-  const togglePanel = (name) => setOpenPanel((cur) => (cur === name ? null : name));
   const importActive = ["starting", "running", "stopping"].includes(importState.status);
 
   return (
     <div className="relative shrink-0" style={{ borderTop: "1px solid var(--color-divider)", background: "var(--color-bg-primary)" }}>
-      {openPanel && (
+      {importPanelOpen && (
         <div
           className="absolute bottom-full left-0 right-0 card"
           style={{ margin: 12, boxShadow: "0 -8px 24px rgba(0,0,0,0.15)" }}
         >
-          <button className="close-btn" onClick={() => setOpenPanel(null)} title="Close" aria-label="Close">
+          <button className="close-btn" onClick={() => setImportPanelOpen(false)} title="Close" aria-label="Close">
             <CloseIcon />
           </button>
-          {openPanel === "import" && <ImportPanel onClose={() => setOpenPanel(null)} />}
-          {openPanel === "predict" && <PredictPanel onClose={() => setOpenPanel(null)} />}
-          {openPanel === "allocate" && <AllocatePanel pools={pools} onClose={() => setOpenPanel(null)} />}
+          <ImportPanel onClose={() => setImportPanelOpen(false)} />
         </div>
       )}
 
       <div className="flex flex-wrap items-center gap-4 px-4 py-2">
-        <button className="btn" onClick={() => togglePanel("import")} title="Import market data" disabled={importActive}>
+        <button className="btn" onClick={() => setImportPanelOpen((v) => !v)} title="Import market data" disabled={importActive}>
           <DownloadIcon /> Import
-        </button>
-        <button className="btn" onClick={() => togglePanel("predict")} title="Predict stock price">
-          <TrendChartIcon /> Predict
-        </button>
-        <button className="btn" onClick={() => togglePanel("allocate")} title="Find asset allocation">
-          <PieChartIcon /> Portfolio
         </button>
 
         <ImportStatus />
 
         <div className="flex flex-wrap items-center justify-end gap-4">
-          <JobStatus label="Prediction" status={predictState.status} progress={predictState.progress} error={predictState.error} onReset={() => dispatch(resetPredict())} />
           <JobStatus label="Allocation" status={allocateState.status} progress={allocateState.progress} error={allocateState.error} onReset={() => dispatch(resetAllocate())} />
         </div>
       </div>
@@ -224,80 +256,6 @@ function ImportPanel({ onClose }) {
       <button className="btn" onClick={submit} disabled={scope === "specific" && !tickers.trim()}>
         <DownloadIcon /> Start Import
       </button>
-    </div>
-  );
-}
-
-function PredictPanel({ onClose }) {
-  const dispatch = useDispatch();
-  const [ticker, setTicker] = useState("");
-  const [epochs, setEpochs] = useState(30);
-
-  const submit = () => {
-    if (!ticker.trim()) return;
-    dispatch(predictRequested({ ticker: ticker.trim().toUpperCase(), epochs: Number(epochs) }));
-    onClose();
-  };
-
-  return (
-    <div>
-      <h3>Predict stock price</h3>
-      <p className="muted">Trains a per-ticker LSTM and forecasts the next 7 trading days.</p>
-      <div className="filters-grid">
-        <div>
-          <label>Ticker</label>
-          <input value={ticker} onChange={(e) => setTicker(e.target.value)} placeholder="e.g. AAPL" />
-        </div>
-        <div>
-          <label>Epochs</label>
-          <input type="number" value={epochs} onChange={(e) => setEpochs(e.target.value)} />
-        </div>
-      </div>
-      <button className="btn" onClick={submit}><TrendChartIcon /> Predict</button>
-    </div>
-  );
-}
-
-function AllocatePanel({ pools, onClose }) {
-  const dispatch = useDispatch();
-  const [poolId, setPoolId] = useState("");
-  const [riskAversion, setRiskAversion] = useState(1.0);
-  const [timesteps, setTimesteps] = useState(20000);
-
-  const submit = () => {
-    if (!poolId) return;
-    dispatch(allocateRequested({ pool_id: poolId, risk_aversion: Number(riskAversion), timesteps: Number(timesteps) }));
-    onClose();
-  };
-
-  return (
-    <div>
-      <h3>Find asset allocation</h3>
-      <p className="muted">Trains a PPO reinforcement-learning agent over a saved pool to recommend a low-risk/high-return allocation.</p>
-      {pools.length === 0 ? (
-        <p className="muted">No pools yet — go to Analytics, select some tickers, and save a pool first.</p>
-      ) : (
-        <div className="filters-grid">
-          <div>
-            <label>Pool</label>
-            <select value={poolId} onChange={(e) => setPoolId(e.target.value)}>
-              <option value="">Select a pool...</option>
-              {pools.map((p) => (
-                <option key={p._key} value={p._key}>{p.name} ({p.tickers.length} tickers)</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label>Risk aversion</label>
-            <input type="number" step="0.1" value={riskAversion} onChange={(e) => setRiskAversion(e.target.value)} />
-          </div>
-          <div>
-            <label>Training timesteps</label>
-            <input type="number" step="1000" value={timesteps} onChange={(e) => setTimesteps(e.target.value)} />
-          </div>
-        </div>
-      )}
-      <button className="btn" onClick={submit} disabled={pools.length === 0}><PieChartIcon /> Optimize</button>
     </div>
   );
 }

@@ -6,6 +6,7 @@ const initialState = {
   progress: null, // { ticker, completed, total, succeeded, failed }
   result: null, // { stopped, remaining_tickers, years, interval, succeeded_count, failed_count, total, ... }
   error: null,
+  startedAt: null, // ms epoch, set once a task id exists -- drives the elapsed/ETA display
 };
 
 const dataImportSlice = createSlice({
@@ -22,6 +23,7 @@ const dataImportSlice = createSlice({
     importTaskCreated(state, action) {
       state.taskId = action.payload;
       state.status = "running";
+      state.startedAt = Date.now();
     },
     progressUpdated(state, action) {
       state.progress = action.payload;
@@ -48,6 +50,7 @@ const dataImportSlice = createSlice({
       state.progress = null;
       state.result = null;
       state.error = null;
+      state.startedAt = null;
     },
   },
 });
