@@ -2,9 +2,9 @@ import { createSlice } from "@reduxjs/toolkit";
 
 const initialState = {
   taskId: null,
-  status: "idle", // idle | starting | running | done | error
+  status: "idle", // idle | starting | running | stopping | done | stopped | error
   progress: null, // { ticker, completed, total, succeeded, failed }
-  result: null,
+  result: null, // { stopped, remaining_tickers, years, interval, succeeded_count, failed_count, total, ... }
   error: null,
 };
 
@@ -30,10 +30,18 @@ const dataImportSlice = createSlice({
       state.status = "done";
       state.result = action.payload;
     },
+    importStopped(state, action) {
+      state.status = "stopped";
+      state.result = action.payload;
+    },
     importFailed(state, action) {
       state.status = "error";
       state.error = action.payload;
     },
+    stopRequested(state) {
+      state.status = "stopping";
+    },
+    resumeRequested() {},
     reset(state) {
       state.taskId = null;
       state.status = "idle";
@@ -50,7 +58,10 @@ export const {
   importTaskCreated,
   progressUpdated,
   importSucceeded,
+  importStopped,
   importFailed,
+  stopRequested,
+  resumeRequested,
   reset,
 } = dataImportSlice.actions;
 

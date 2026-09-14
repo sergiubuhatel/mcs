@@ -12,6 +12,7 @@ from .. import config
 from ..services.yahoo_import import get_existing_tickers, read_tickers
 from ..tasks.celery_app import celery_app
 from ..tasks.import_tasks import import_sp500_data
+from ..tasks.stop_flags import request_stop
 
 bp = Blueprint("data", __name__, url_prefix="/api/data")
 
@@ -49,3 +50,28 @@ def import_status(task_id: str):
     elif result.state == "FAILURE":
         payload["error"] = str(result.info)
     return jsonify(payload)
+
+
+@bp.post("/import/stop/<task_id>")
+def stop_import(task_id: str):
+    """Cooperative stop: flags the task; it exits (with a resumable result)
+    the next time it checks in, between tickers -- not instantly."""
+    request_stop(task_id)
+    return jsonify({"task_id": task_id, "stopping": True})
+
+
+@bp.post("/import/resume/<task_id>")
+def resume_import(task_id: str):
+    """Continue a previously-stopped import from where it left off."""
+    result = AsyncResult(task_id, app=celery_app)
+    prior = result.result if result.state == "SUCCESS" else None
+    remaining = (prior or {}).get("remaining_tickers") if isinstance(prior, dict) else None
+    if not remaining:
+        return jsonify({"error": "Nothing to resume for this task."}), 400
+
+    task = import_sp500_data.delay(
+        tickers=remaining,
+        years=prior.get("years", 10),
+        interval=prior.get("interval", "1d"),
+    )
+    return jsonify({"task_id": task.id, "ticker_count": len(remaining)}), 202

@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
-import { importRequested, reset as resetImport } from "../features/dataImport/dataImportSlice";
+import {
+  importRequested,
+  reset as resetImport,
+  resumeRequested,
+  stopRequested,
+} from "../features/dataImport/dataImportSlice";
 import { trainRequested as predictRequested, reset as resetPredict } from "../features/predictions/predictionsSlice";
 import { trainRequested as allocateRequested, reset as resetAllocate } from "../features/rl/rlSlice";
 import { fetchRequested as fetchPoolsRequested } from "../features/pools/poolsSlice";
@@ -23,17 +28,80 @@ function JobStatus({ label, status, progress, error, onReset }) {
           <div className="progress-bar" style={{ width: 90, margin: 0 }}>
             <div style={{ width: `${pct(progress)}%` }} />
           </div>
-          <span>
-            {progress
-              ? `${progress.ticker ? `${progress.ticker} · ` : ""}${progress.completed ?? 0}/${progress.total ?? "?"} (${pct(progress)}%)`
-              : "starting..."}
-          </span>
+          <span>{progress ? `${progress.completed ?? 0}/${progress.total ?? "?"} (${pct(progress)}%)` : "starting..."}</span>
         </>
       )}
       {status === "done" && <span style={{ color: "#16a34a" }}>done</span>}
       {status === "error" && <span className="error-text">{error}</span>}
       {(status === "done" || status === "error") && (
         <button className="btn secondary" style={{ padding: "3px 6px" }} onClick={onReset} title="Dismiss">
+          <CloseIcon />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Import gets a dedicated status widget (not the generic JobStatus above)
+// because it alone supports Stop/Resume. All of its progress display and
+// controls live here, in the bottom bar -- not duplicated in the popup panel.
+function ImportStatus() {
+  const dispatch = useDispatch();
+  const importState = useSelector((s) => s.dataImport);
+  const { status, progress, result, error, taskId } = importState;
+
+  if (status === "idle") return null;
+
+  const running = status === "starting" || status === "running" || status === "stopping";
+  const stopped = status === "stopped";
+  const remaining = result?.remaining_tickers?.length ?? 0;
+
+  return (
+    <div className="flex items-center gap-2 text-xs" style={{ color: "var(--color-text-secondary)" }}>
+      <span className="font-medium" style={{ color: "var(--color-text-primary)" }}>Import:</span>
+
+      {running && (
+        <>
+          <div className="progress-bar" style={{ width: 90, margin: 0 }}>
+            <div style={{ width: `${pct(progress)}%` }} />
+          </div>
+          <span>
+            {status === "stopping"
+              ? "stopping..."
+              : progress
+              ? `${progress.ticker ? `${progress.ticker} · ` : ""}${progress.completed ?? 0}/${progress.total ?? "?"} (${pct(progress)}%)`
+              : "starting..."}
+          </span>
+          <button
+            className="btn danger"
+            style={{ padding: "2px 8px" }}
+            onClick={() => dispatch(stopRequested(taskId))}
+            disabled={status === "stopping"}
+          >
+            Stop
+          </button>
+        </>
+      )}
+
+      {status === "done" && (
+        <span style={{ color: "#16a34a" }}>
+          {result?.message ?? `done — ${result?.succeeded_count ?? 0} ok, ${result?.failed_count ?? 0} failed`}
+        </span>
+      )}
+      {stopped && (
+        <span style={{ color: "#d97706" }}>
+          stopped — {result?.succeeded_count ?? 0} ok, {remaining} remaining
+        </span>
+      )}
+      {status === "error" && <span className="error-text">{error}</span>}
+
+      {stopped && remaining > 0 && (
+        <button className="btn" style={{ padding: "2px 8px" }} onClick={() => dispatch(resumeRequested(taskId))}>
+          Resume
+        </button>
+      )}
+      {(status === "done" || stopped || status === "error") && (
+        <button className="btn secondary" style={{ padding: "3px 6px" }} onClick={() => dispatch(resetImport())} title="Dismiss">
           <CloseIcon />
         </button>
       )}
@@ -55,6 +123,7 @@ export default function BottomBar() {
   }, [openPanel, dispatch]);
 
   const togglePanel = (name) => setOpenPanel((cur) => (cur === name ? null : name));
+  const importActive = ["starting", "running", "stopping"].includes(importState.status);
 
   return (
     <div className="relative shrink-0" style={{ borderTop: "1px solid var(--color-divider)", background: "var(--color-bg-primary)" }}>
@@ -70,7 +139,7 @@ export default function BottomBar() {
       )}
 
       <div className="flex flex-wrap items-center gap-4 px-4 py-2">
-        <button className="btn" onClick={() => togglePanel("import")} title="Import market data">
+        <button className="btn" onClick={() => togglePanel("import")} title="Import market data" disabled={importActive}>
           <DownloadIcon /> Import
         </button>
         <button className="btn" onClick={() => togglePanel("predict")} title="Predict stock price">
@@ -81,7 +150,7 @@ export default function BottomBar() {
         </button>
 
         <div className="flex flex-1 flex-wrap justify-end gap-4">
-          <JobStatus label="Import" status={importState.status} progress={importState.progress} error={importState.error} onReset={() => dispatch(resetImport())} />
+          <ImportStatus />
           <JobStatus label="Prediction" status={predictState.status} progress={predictState.progress} error={predictState.error} onReset={() => dispatch(resetPredict())} />
           <JobStatus label="Allocation" status={allocateState.status} progress={allocateState.progress} error={allocateState.error} onReset={() => dispatch(resetAllocate())} />
         </div>
@@ -92,14 +161,10 @@ export default function BottomBar() {
 
 function ImportPanel({ onClose }) {
   const dispatch = useDispatch();
-  const importState = useSelector((s) => s.dataImport);
   const [scope, setScope] = useState("all"); // "all" | "specific"
   const [tickers, setTickers] = useState("");
   const [years, setYears] = useState(10);
   const [onlyMissing, setOnlyMissing] = useState(true);
-
-  const running = importState.status === "starting" || importState.status === "running";
-  const finished = importState.status === "done" || importState.status === "error";
 
   const submit = () => {
     const list =
@@ -110,41 +175,8 @@ function ImportPanel({ onClose }) {
     // specific tickers is a deliberate refresh request and must overwrite
     // them even if they're already imported.
     dispatch(importRequested({ tickers: list, years, only_missing: scope === "all" && onlyMissing }));
+    onClose(); // progress/Stop/Resume live in the bottom bar, not here
   };
-
-  const closeAndReset = () => {
-    dispatch(resetImport());
-    onClose();
-  };
-
-  if (running || finished) {
-    const p = importState.progress;
-    const percent = p && p.total ? Math.min(100, Math.round((p.completed / p.total) * 100)) : 0;
-    return (
-      <div>
-        <h3>Import market data</h3>
-        {running && (
-          <>
-            <div className="progress-bar"><div style={{ width: `${percent}%` }} /></div>
-            <p className="muted">
-              {p
-                ? `${p.ticker ? `Fetching ${p.ticker} — ` : ""}${p.completed}/${p.total} (${percent}%) — ${p.succeeded} ok, ${p.failed} failed`
-                : "Starting — this can take a few seconds before progress appears..."}
-            </p>
-          </>
-        )}
-        {importState.status === "done" && (
-          <p className="muted">
-            {importState.result?.message
-              ? importState.result.message
-              : `Done — ${importState.result?.succeeded_count ?? 0} imported, ${importState.result?.failed_count ?? 0} failed (of ${importState.result?.total ?? 0}).`}
-          </p>
-        )}
-        {importState.status === "error" && <p className="error-text">{importState.error}</p>}
-        {finished && <button className="btn secondary" onClick={closeAndReset}>Close</button>}
-      </div>
-    );
-  }
 
   return (
     <div>

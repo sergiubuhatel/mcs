@@ -4,6 +4,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { apiClient } from "../api/client";
 import { CloseIcon } from "../layout/icons";
 import { INTERVALS, filterByInterval } from "../utils/dateRanges";
+import { tooltipProps } from "../utils/chartTheme";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -122,8 +123,8 @@ export default function PortfolioDetailPage() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={40} />
               <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10 }} />
-              <Tooltip />
-              <Line type="monotone" dataKey="value" stroke={changeColor(periodChangePct)} dot={false} />
+              <Tooltip {...tooltipProps} formatter={(value) => [Number(value).toFixed(2), "Index value"]} />
+              <Line type="monotone" dataKey="value" stroke="#2563eb" strokeWidth={2.5} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         )}

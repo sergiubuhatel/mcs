@@ -1,18 +1,5 @@
-import { useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { toggleDarkMode } from "../features/theme/themeSlice";
-
-const TITLES = {
-  "/": "Analytics",
-  "/portfolio": "Portfolio",
-  "/prediction": "Prediction",
-};
-
-function titleFor(pathname) {
-  if (TITLES[pathname]) return TITLES[pathname];
-  if (pathname.startsWith("/companies/")) return `Company · ${pathname.split("/").pop()}`;
-  return "S&P 500 Screener & RL Portfolio Builder";
-}
 
 function SunIcon() {
   return (
@@ -43,16 +30,13 @@ function MoonIcon() {
 
 export default function TopBar() {
   const dispatch = useDispatch();
-  const location = useLocation();
   const darkMode = useSelector((s) => s.theme.darkMode);
 
   return (
     <header
-      className="flex h-14 shrink-0 items-center justify-between px-4"
+      className="flex h-14 shrink-0 items-center justify-end px-4"
       style={{ borderBottom: "1px solid var(--color-divider)", background: "var(--color-bg-secondary)" }}
     >
-      <h1 className="text-base font-semibold m-0">{titleFor(location.pathname)}</h1>
-
       <button
         className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-tertiary"
         style={{ color: "var(--color-text-secondary)" }}
