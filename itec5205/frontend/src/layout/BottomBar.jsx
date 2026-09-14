@@ -57,27 +57,22 @@ function ImportStatus() {
   const remaining = result?.remaining_tickers?.length ?? 0;
 
   return (
-    <div className="flex items-center gap-2 text-xs" style={{ color: "var(--color-text-secondary)" }}>
+    <div className="flex flex-1 items-center gap-3 text-xs" style={{ color: "var(--color-text-secondary)", minWidth: 200 }}>
       <span className="font-medium" style={{ color: "var(--color-text-primary)" }}>Import:</span>
 
       {running && (
         <>
-          <div className="progress-bar" style={{ width: 90, margin: 0 }}>
+          <div className="progress-bar flex-1" style={{ margin: 0 }}>
             <div style={{ width: `${pct(progress)}%` }} />
           </div>
-          <span>
+          <span className="shrink-0">
             {status === "stopping"
               ? "stopping..."
               : progress
               ? `${progress.ticker ? `${progress.ticker} · ` : ""}${progress.completed ?? 0}/${progress.total ?? "?"} (${pct(progress)}%)`
               : "starting..."}
           </span>
-          <button
-            className="btn danger"
-            style={{ padding: "2px 8px" }}
-            onClick={() => dispatch(stopRequested(taskId))}
-            disabled={status === "stopping"}
-          >
+          <button className="btn danger shrink-0" onClick={() => dispatch(stopRequested(taskId))} disabled={status === "stopping"}>
             Stop
           </button>
         </>
@@ -96,12 +91,12 @@ function ImportStatus() {
       {status === "error" && <span className="error-text">{error}</span>}
 
       {stopped && remaining > 0 && (
-        <button className="btn" style={{ padding: "2px 8px" }} onClick={() => dispatch(resumeRequested(taskId))}>
+        <button className="btn shrink-0" onClick={() => dispatch(resumeRequested(taskId))}>
           Resume
         </button>
       )}
       {(status === "done" || stopped || status === "error") && (
-        <button className="btn secondary" style={{ padding: "3px 6px" }} onClick={() => dispatch(resetImport())} title="Dismiss">
+        <button className="btn secondary shrink-0" style={{ padding: "3px 6px" }} onClick={() => dispatch(resetImport())} title="Dismiss">
           <CloseIcon />
         </button>
       )}
@@ -132,6 +127,9 @@ export default function BottomBar() {
           className="absolute bottom-full left-0 right-0 card"
           style={{ margin: 12, boxShadow: "0 -8px 24px rgba(0,0,0,0.15)" }}
         >
+          <button className="close-btn" onClick={() => setOpenPanel(null)} title="Close" aria-label="Close">
+            <CloseIcon />
+          </button>
           {openPanel === "import" && <ImportPanel onClose={() => setOpenPanel(null)} />}
           {openPanel === "predict" && <PredictPanel onClose={() => setOpenPanel(null)} />}
           {openPanel === "allocate" && <AllocatePanel pools={pools} onClose={() => setOpenPanel(null)} />}
@@ -149,8 +147,9 @@ export default function BottomBar() {
           <PieChartIcon /> Portfolio
         </button>
 
-        <div className="flex flex-1 flex-wrap justify-end gap-4">
-          <ImportStatus />
+        <ImportStatus />
+
+        <div className="flex flex-wrap items-center justify-end gap-4">
           <JobStatus label="Prediction" status={predictState.status} progress={predictState.progress} error={predictState.error} onReset={() => dispatch(resetPredict())} />
           <JobStatus label="Allocation" status={allocateState.status} progress={allocateState.progress} error={allocateState.error} onReset={() => dispatch(resetAllocate())} />
         </div>
@@ -224,8 +223,7 @@ function ImportPanel({ onClose }) {
       )}
       <button className="btn" onClick={submit} disabled={scope === "specific" && !tickers.trim()}>
         <DownloadIcon /> Start Import
-      </button>{" "}
-      <button className="btn secondary" onClick={onClose}>Cancel</button>
+      </button>
     </div>
   );
 }
@@ -255,8 +253,7 @@ function PredictPanel({ onClose }) {
           <input type="number" value={epochs} onChange={(e) => setEpochs(e.target.value)} />
         </div>
       </div>
-      <button className="btn" onClick={submit}><TrendChartIcon /> Predict</button>{" "}
-      <button className="btn secondary" onClick={onClose}>Cancel</button>
+      <button className="btn" onClick={submit}><TrendChartIcon /> Predict</button>
     </div>
   );
 }
@@ -300,8 +297,7 @@ function AllocatePanel({ pools, onClose }) {
           </div>
         </div>
       )}
-      <button className="btn" onClick={submit} disabled={pools.length === 0}><PieChartIcon /> Optimize</button>{" "}
-      <button className="btn secondary" onClick={onClose}>Cancel</button>
+      <button className="btn" onClick={submit} disabled={pools.length === 0}><PieChartIcon /> Optimize</button>
     </div>
   );
 }
