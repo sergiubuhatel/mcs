@@ -17,6 +17,15 @@ celery_app.conf.update(
     task_track_started=True,
     result_expires=60 * 60 * 24,  # 1 day
     worker_hijack_root_logger=False,
+    # Each job type gets its own queue so a dedicated worker process can run
+    # per job type. On Windows, workers run with --pool=solo (single task at
+    # a time), so a single worker consuming the default queue would fully
+    # serialize import/RL-training/LSTM-training jobs against each other.
+    task_routes={
+        "import_sp500_data": {"queue": "import"},
+        "train_rl_portfolio": {"queue": "rl"},
+        "train_lstm_prediction": {"queue": "predict"},
+    },
 )
 
 # Make this the process-wide default/current Celery app. Without this, a

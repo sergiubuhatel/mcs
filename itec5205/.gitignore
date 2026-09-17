@@ -8,3 +8,7 @@ backend/rl_models
 backend/env
 __pycache__
 *.pyc
+literature
+paper
+related research paper
+stage1
