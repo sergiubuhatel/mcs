@@ -30,7 +30,14 @@ MAX_WORKERS = 6
 
 
 @celery_app.task(bind=True, name="import_sp500_data")
-def import_sp500_data(self, tickers: list[str], years: int = 10, interval: str = "1d"):
+def import_sp500_data(
+    self,
+    tickers: list[str],
+    years: int = 10,
+    interval: str = "1d",
+    import_history: bool = True,
+    import_statistics: bool = True,
+):
     total = len(tickers)
     succeeded = []
     failed = []
@@ -40,7 +47,13 @@ def import_sp500_data(self, tickers: list[str], years: int = 10, interval: str =
     stopping = False
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        future_to_ticker = {pool.submit(import_ticker, t, years=years, interval=interval): t for t in tickers}
+        future_to_ticker = {
+            pool.submit(
+                import_ticker, t, years=years, interval=interval,
+                import_history=import_history, import_statistics=import_statistics,
+            ): t
+            for t in tickers
+        }
 
         for future in as_completed(future_to_ticker):
             ticker = future_to_ticker[future]
@@ -76,6 +89,8 @@ def import_sp500_data(self, tickers: list[str], years: int = 10, interval: str =
             "remaining_tickers": remaining,
             "years": years,
             "interval": interval,
+            "import_history": import_history,
+            "import_statistics": import_statistics,
         }
         socketio.emit("import_progress", {"stage": "stopped", **result}, room=room)
         return result
@@ -89,6 +104,8 @@ def import_sp500_data(self, tickers: list[str], years: int = 10, interval: str =
         "remaining_tickers": [],
         "years": years,
         "interval": interval,
+        "import_history": import_history,
+        "import_statistics": import_statistics,
     }
     socketio.emit("import_progress", {"stage": "done", **result}, room=room)
     return result

@@ -196,6 +196,8 @@ function ImportPanel({ onClose }) {
   const [tickers, setTickers] = useState("");
   const [years, setYears] = useState(10);
   const [onlyMissing, setOnlyMissing] = useState(true);
+  const [importHistory, setImportHistory] = useState(true);
+  const [importStatistics, setImportStatistics] = useState(true);
 
   const submit = () => {
     const list =
@@ -205,7 +207,13 @@ function ImportPanel({ onClose }) {
     // "Only missing" only makes sense for the full-universe scope; typing
     // specific tickers is a deliberate refresh request and must overwrite
     // them even if they're already imported.
-    dispatch(importRequested({ tickers: list, years, only_missing: scope === "all" && onlyMissing }));
+    dispatch(importRequested({
+      tickers: list,
+      years,
+      only_missing: scope === "all" && onlyMissing,
+      import_history: importHistory,
+      import_statistics: importStatistics,
+    }));
     onClose(); // progress/Stop/Resume live in the bottom bar, not here
   };
 
@@ -245,15 +253,34 @@ function ImportPanel({ onClose }) {
           </select>
         </div>
       </div>
+      <div style={{ display: "flex", gap: 16, margin: "8px 0" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" }}>
+          <input type="checkbox" checked={importHistory} onChange={(e) => setImportHistory(e.target.checked)} />
+          Import history
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" }}>
+          <input type="checkbox" checked={importStatistics} onChange={(e) => setImportStatistics(e.target.checked)} />
+          Import statistics
+        </label>
+      </div>
       {scope === "all" ? (
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", margin: "8px 0" }}>
-          <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={onlyMissing}
+            disabled={!importHistory}
+            onChange={(e) => setOnlyMissing(e.target.checked)}
+          />
           Only import what's missing (skip tickers that are already fully up to date)
         </label>
       ) : (
         <p className="muted" style={{ margin: "8px 0" }}>Specific tickers are always re-fetched and will overwrite any existing data for them.</p>
       )}
-      <button className="btn" onClick={submit} disabled={scope === "specific" && !tickers.trim()}>
+      <button
+        className="btn"
+        onClick={submit}
+        disabled={(scope === "specific" && !tickers.trim()) || (!importHistory && !importStatistics)}
+      >
         <DownloadIcon /> Start Import
       </button>
     </div>

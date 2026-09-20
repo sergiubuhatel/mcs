@@ -99,7 +99,7 @@ export default function CompanyTable() {
                     return `${chg > 0 ? "+" : ""}${chg.toFixed(2)}%`;
                   })()}
                 </td>
-                <td>{fmtLarge(row.market_cap)}</td>
+                <td>{fmtLarge(row.market_cap != null ? row.market_cap * 1e6 : null)}</td>
                 <td>{fmtNum(row.trailing_pe)}</td>
                 <td>{fmtPct(row.roe)}</td>
                 <td>{fmtPct(row.roa)}</td>

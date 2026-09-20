@@ -60,6 +60,26 @@ STAT_FIELDS = {
     "average_volume": "averageVolume",
     "market_cap": "marketCap",
     "beta": "beta",
+    # Fundamental screening fields (valuation / quality / growth / financial
+    # health) -- all available on the same `info` dict already fetched per
+    # ticker, no extra Yahoo round trip needed. Suffixed `_ttm`/`_mrq` where
+    # Yahoo's own label carries one, to avoid colliding with the differently
+    # -sourced (annual-statement-computed) fields of the same concept in
+    # `financial_ratios` (e.g. `roe`, `operating_margin`).
+    "peg_ratio": "pegRatio",
+    "ev_to_ebitda": "enterpriseToEbitda",
+    "profit_margin_ttm": "profitMargins",
+    "operating_margin_ttm": "operatingMargins",
+    "roa_ttm": "returnOnAssets",
+    "roe_ttm": "returnOnEquity",
+    "revenue_growth_yoy_q": "revenueGrowth",
+    # Yahoo's "Quarterly Earnings Growth (yoy)" is `earningsQuarterlyGrowth`,
+    # not `earningsGrowth` (a different, non-quarterly metric) -- verified
+    # against a live pull.
+    "earnings_growth_yoy_q": "earningsQuarterlyGrowth",
+    "debt_to_equity_mrq": "debtToEquity",
+    "current_ratio_mrq": "currentRatio",
+    "free_cash_flow": "freeCashflow",
     "trailing_pe": "trailingPE",
     "forward_pe": "forwardPE",
     "eps_trailing": "trailingEps",
@@ -216,6 +236,11 @@ def fetch_ticker_stats(ticker: str, info: dict) -> dict:
     row = {"ticker": ticker}
     for column, field in STAT_FIELDS.items():
         row[column] = info.get(field)
+    # Stored in millions (not raw dollars) -- keeps the number small/readable
+    # for a mega-cap universe; every reader (screener filter, table, RL
+    # top-N sort) must agree on this unit.
+    if row.get("market_cap") is not None:
+        row["market_cap"] = row["market_cap"] / 1_000_000
     row["updated_at"] = datetime.now(timezone.utc).isoformat()
     return row
 
@@ -271,9 +296,20 @@ def fetch_financial_ratios(ticker: str, yf_ticker: yf.Ticker) -> dict:
     }
 
 
-def import_ticker(ticker: str, years: int = 2, interval: str = "1d") -> dict:
-    """Fetch history + stats + financial ratios for one ticker and upsert
-    them into ArangoDB. Returns a small summary dict for progress reporting."""
+def import_ticker(
+    ticker: str,
+    years: int = 2,
+    interval: str = "1d",
+    import_history: bool = True,
+    import_statistics: bool = True,
+) -> dict:
+    """Fetch history and/or stats + financial ratios for one ticker and
+    upsert them into ArangoDB, per the `import_history`/`import_statistics`
+    flags. Returns a small summary dict for progress reporting.
+
+    Company metadata (name/sector/industry) always gets upserted regardless
+    of which flags are set -- it comes from the same `info` fetch already
+    needed to validate the ticker, at no extra Yahoo round trip."""
     yf_ticker = yf.Ticker(ticker)
     info = yf_ticker.info or {}
     if info.get("regularMarketPrice") is None and info.get("currentPrice") is None:
@@ -303,19 +339,22 @@ def import_ticker(ticker: str, years: int = 2, interval: str = "1d") -> dict:
         overwrite=True,
     )
 
-    latest_date = get_latest_price_date(ticker)
-    history_rows = fetch_ticker_history(ticker, years=years, interval=interval, since=latest_date)
-    prices_col = db.collection("stock_prices")
-    for row in history_rows:
-        row["_key"] = f"{ticker}_{row['date']}"
-        prices_col.insert(row, overwrite=True)
+    history_rows = []
+    if import_history:
+        latest_date = get_latest_price_date(ticker)
+        history_rows = fetch_ticker_history(ticker, years=years, interval=interval, since=latest_date)
+        prices_col = db.collection("stock_prices")
+        for row in history_rows:
+            row["_key"] = f"{ticker}_{row['date']}"
+            prices_col.insert(row, overwrite=True)
 
-    stats_row = fetch_ticker_stats(ticker, info)
-    stats_row["_key"] = ticker
-    db.collection("stock_stats").insert(stats_row, overwrite=True)
+    if import_statistics:
+        stats_row = fetch_ticker_stats(ticker, info)
+        stats_row["_key"] = ticker
+        db.collection("stock_stats").insert(stats_row, overwrite=True)
 
-    ratios_row = fetch_financial_ratios(ticker, yf_ticker)
-    ratios_row["_key"] = ticker
-    db.collection("financial_ratios").insert(ratios_row, overwrite=True)
+        ratios_row = fetch_financial_ratios(ticker, yf_ticker)
+        ratios_row["_key"] = ticker
+        db.collection("financial_ratios").insert(ratios_row, overwrite=True)
 
     return {"ticker": ticker, "company": company_name, "history_rows": len(history_rows)}

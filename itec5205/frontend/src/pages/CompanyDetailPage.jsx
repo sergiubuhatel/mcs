@@ -84,7 +84,7 @@ export default function CompanyDetailPage() {
               {dayChangePct !== null && ` (${dayChangePct > 0 ? "+" : ""}${dayChangePct.toFixed(2)}%)`}
             </div>
           </div>
-          <div><strong>Market Cap</strong><div>{fmtLarge(stats.market_cap)}</div></div>
+          <div><strong>Market Cap</strong><div>{fmtLarge(stats.market_cap != null ? stats.market_cap * 1e6 : null)}</div></div>
           <div><strong>Trailing P/E</strong><div>{fmtNum(stats.trailing_pe)}</div></div>
           <div><strong>Beta</strong><div>{fmtNum(stats.beta)}</div></div>
           <div><strong>ROE</strong><div>{fmtPct(ratios.roe)}</div></div>

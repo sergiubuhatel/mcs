@@ -28,6 +28,20 @@ SORTABLE_FIELDS = {
     "revenue_growth_yoy": "ratios.revenue_growth_yoy",
     "name": "company.name",
     "sector": "company.sector",
+    # Fundamental screening set (valuation / quality / growth / financial
+    # health), sourced live from `info` (see yahoo_import.STAT_FIELDS)
+    # rather than computed from annual statements.
+    "peg_ratio": "stats.peg_ratio",
+    "ev_to_ebitda": "stats.ev_to_ebitda",
+    "profit_margin_ttm": "stats.profit_margin_ttm",
+    "operating_margin_ttm": "stats.operating_margin_ttm",
+    "roa_ttm": "stats.roa_ttm",
+    "roe_ttm": "stats.roe_ttm",
+    "revenue_growth_yoy_q": "stats.revenue_growth_yoy_q",
+    "earnings_growth_yoy_q": "stats.earnings_growth_yoy_q",
+    "debt_to_equity_mrq": "stats.debt_to_equity_mrq",
+    "current_ratio_mrq": "stats.current_ratio_mrq",
+    "free_cash_flow": "stats.free_cash_flow",
 }
 
 # Fields that aren't a single stored attribute but a computed expression --
@@ -51,6 +65,18 @@ FILTERABLE_RANGES = {
     "operating_margin": "ratios.operating_margin",
     "net_margin": "ratios.net_margin",
     "revenue_growth_yoy": "ratios.revenue_growth_yoy",
+    "forward_pe": "stats.forward_pe",
+    "peg_ratio": "stats.peg_ratio",
+    "ev_to_ebitda": "stats.ev_to_ebitda",
+    "profit_margin_ttm": "stats.profit_margin_ttm",
+    "operating_margin_ttm": "stats.operating_margin_ttm",
+    "roa_ttm": "stats.roa_ttm",
+    "roe_ttm": "stats.roe_ttm",
+    "revenue_growth_yoy_q": "stats.revenue_growth_yoy_q",
+    "earnings_growth_yoy_q": "stats.earnings_growth_yoy_q",
+    "debt_to_equity_mrq": "stats.debt_to_equity_mrq",
+    "current_ratio_mrq": "stats.current_ratio_mrq",
+    "free_cash_flow": "stats.free_cash_flow",
 }
 
 
@@ -131,7 +157,18 @@ def search_companies(
                 gross_margin: ratios.gross_margin,
                 operating_margin: ratios.operating_margin,
                 net_margin: ratios.net_margin,
-                revenue_growth_yoy: ratios.revenue_growth_yoy
+                revenue_growth_yoy: ratios.revenue_growth_yoy,
+                peg_ratio: stats.peg_ratio,
+                ev_to_ebitda: stats.ev_to_ebitda,
+                profit_margin_ttm: stats.profit_margin_ttm,
+                operating_margin_ttm: stats.operating_margin_ttm,
+                roa_ttm: stats.roa_ttm,
+                roe_ttm: stats.roe_ttm,
+                revenue_growth_yoy_q: stats.revenue_growth_yoy_q,
+                earnings_growth_yoy_q: stats.earnings_growth_yoy_q,
+                debt_to_equity_mrq: stats.debt_to_equity_mrq,
+                current_ratio_mrq: stats.current_ratio_mrq,
+                free_cash_flow: stats.free_cash_flow
             }}
     """
     count_aql = f"""

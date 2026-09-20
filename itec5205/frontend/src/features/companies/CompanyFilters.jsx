@@ -4,7 +4,7 @@ import { fetchIndustriesRequested, fetchRequested, fetchSectorsRequested, setFil
 import { SearchIcon } from "../../layout/icons";
 
 const RANGE_FIELDS = [
-  { key: "market_cap", label: "Market Cap ($)" },
+  { key: "market_cap", label: "Market Cap ($M)" },
   { key: "trailing_pe", label: "Trailing P/E" },
   { key: "roe", label: "ROE" },
   { key: "roa", label: "ROA" },
@@ -13,6 +13,18 @@ const RANGE_FIELDS = [
   { key: "gross_margin", label: "Gross Margin" },
   { key: "net_margin", label: "Net Margin" },
   { key: "dividend_yield", label: "Dividend Yield" },
+  { key: "forward_pe", label: "Forward P/E" },
+  { key: "peg_ratio", label: "PEG Ratio (5yr expected)" },
+  { key: "ev_to_ebitda", label: "EV/EBITDA" },
+  { key: "profit_margin_ttm", label: "Profit Margin (ttm)" },
+  { key: "operating_margin_ttm", label: "Operating Margin (ttm)" },
+  { key: "roa_ttm", label: "ROA (ttm)" },
+  { key: "roe_ttm", label: "ROE (ttm)" },
+  { key: "revenue_growth_yoy_q", label: "Quarterly Revenue Growth (yoy)" },
+  { key: "earnings_growth_yoy_q", label: "Quarterly Earnings Growth (yoy)" },
+  { key: "debt_to_equity_mrq", label: "Debt/Equity (mrq)" },
+  { key: "current_ratio_mrq", label: "Current Ratio (mrq)" },
+  { key: "free_cash_flow", label: "Free Cash Flow ($)" },
 ];
 
 export default function CompanyFilters() {

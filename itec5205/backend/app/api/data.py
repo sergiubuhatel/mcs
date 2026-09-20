@@ -25,7 +25,13 @@ def trigger_import():
         tickers = read_tickers(config.TICKERS_FILE)
     tickers = [t.upper() for t in tickers]
 
-    if body.get("only_missing"):
+    import_history = bool(body.get("import_history", True))
+    import_statistics = bool(body.get("import_statistics", True))
+
+    # "Only missing" is defined by price-history gaps, which is meaningless
+    # for a statistics-only run (a live snapshot field has no notion of a
+    # missing day) -- only apply it when history is actually being pulled.
+    if body.get("only_missing") and import_history:
         up_to_date = get_up_to_date_tickers()
         tickers = [t for t in tickers if t not in up_to_date]
         if not tickers:
@@ -35,6 +41,8 @@ def trigger_import():
         tickers=tickers,
         years=int(body.get("years", 10)),
         interval=body.get("interval", "1d"),
+        import_history=import_history,
+        import_statistics=import_statistics,
     )
     return jsonify({"task_id": task.id, "ticker_count": len(tickers)}), 202
 
@@ -73,5 +81,7 @@ def resume_import(task_id: str):
         tickers=remaining,
         years=prior.get("years", 10),
         interval=prior.get("interval", "1d"),
+        import_history=prior.get("import_history", True),
+        import_statistics=prior.get("import_statistics", True),
     )
     return jsonify({"task_id": task.id, "ticker_count": len(remaining)}), 202
