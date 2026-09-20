@@ -1,6 +1,7 @@
+import { useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchRequested, setFilters, toggleSelected } from "./companiesSlice";
+import { fetchRequested, setFilters, toggleSelectAll, toggleSelected } from "./companiesSlice";
 
 const COLUMNS = [
   { key: "ticker", label: "Ticker", sortable: true },
@@ -10,11 +11,11 @@ const COLUMNS = [
   { key: "day_change", label: "Change", sortable: true },
   { key: "market_cap", label: "Mkt Cap", sortable: true, fmt: (v) => fmtLarge(v) },
   { key: "trailing_pe", label: "P/E", sortable: true, fmt: fmtNum },
+  { key: "revenue_growth_yoy", label: "Qtr Revenue Growth", sortable: true, fmt: fmtPct },
+  { key: "earnings_growth_yoy_q", label: "Qtr Earnings Growth", sortable: true, fmt: fmtPct },
   { key: "roe", label: "ROE", sortable: true, fmt: fmtPct },
   { key: "roa", label: "ROA", sortable: true, fmt: fmtPct },
   { key: "debt_to_equity", label: "D/E", sortable: true, fmt: fmtNum },
-  { key: "gross_margin", label: "Gross Margin", sortable: true, fmt: fmtPct },
-  { key: "net_margin", label: "Net Margin", sortable: true, fmt: fmtPct },
 ];
 
 function fmtNum(v) {
@@ -44,6 +45,7 @@ export default function CompanyTable() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { results, total, filters, selected, loading, error } = useSelector((s) => s.companies);
+  const selectAllRef = useRef(null);
 
   const onSort = (key) => {
     const sortDir = filters.sortBy === key && filters.sortDir === "desc" ? "asc" : "desc";
@@ -52,6 +54,13 @@ export default function CompanyTable() {
   };
 
   const selectedCount = Object.keys(selected).length;
+  const pageTickers = results.map((r) => r.ticker);
+  const pageSelectedCount = pageTickers.filter((t) => selected[t]).length;
+  const allPageSelected = pageTickers.length > 0 && pageSelectedCount === pageTickers.length;
+
+  if (selectAllRef.current) {
+    selectAllRef.current.indeterminate = pageSelectedCount > 0 && !allPageSelected;
+  }
 
   return (
     <div className="card">
@@ -64,7 +73,16 @@ export default function CompanyTable() {
         <table>
           <thead>
             <tr>
-              <th></th>
+              <th>
+                <input
+                  ref={selectAllRef}
+                  type="checkbox"
+                  checked={allPageSelected}
+                  disabled={pageTickers.length === 0}
+                  onChange={() => dispatch(toggleSelectAll(pageTickers))}
+                  title="Select all on this page"
+                />
+              </th>
               {COLUMNS.map((c) => (
                 <th
                   key={c.key}
@@ -101,11 +119,11 @@ export default function CompanyTable() {
                 </td>
                 <td>{fmtLarge(row.market_cap != null ? row.market_cap * 1e6 : null)}</td>
                 <td>{fmtNum(row.trailing_pe)}</td>
+                <td>{fmtPct(row.revenue_growth_yoy)}</td>
+                <td>{fmtPct(row.earnings_growth_yoy_q)}</td>
                 <td>{fmtPct(row.roe)}</td>
                 <td>{fmtPct(row.roa)}</td>
                 <td>{fmtNum(row.debt_to_equity)}</td>
-                <td>{fmtPct(row.gross_margin)}</td>
-                <td>{fmtPct(row.net_margin)}</td>
               </tr>
             ))}
           </tbody>

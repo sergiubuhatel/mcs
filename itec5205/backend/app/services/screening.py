@@ -1,6 +1,5 @@
 """Search/filter/sort companies by valuation, profitability, and debt
-indicators, backed by a single AQL query joining companies + stock_stats +
-financial_ratios.
+indicators, backed by a single AQL query joining companies + stock_stats.
 """
 
 from ..db.arango_client import get_db
@@ -9,6 +8,12 @@ from ..db.arango_client import get_db
 # Only whitelisted values are ever interpolated into the AQL string, so this
 # stays injection-safe even though sort direction/field can't be bind params
 # (AQL doesn't allow ASC/DESC or attribute names to be bind parameters).
+#
+# roe/roa/debt_to_equity/current_ratio/gross_margin/operating_margin/
+# net_margin/revenue_growth_yoy used to be computed from annual financial
+# statements (the now-retired `financial_ratios` collection, 2 extra Yahoo
+# calls per ticker). They're sourced from live ttm/mrq `info` fields now
+# (see yahoo_import.STAT_FIELDS), same as everything else here.
 SORTABLE_FIELDS = {
     "ticker": "company._key",
     "market_cap": "stats.market_cap",
@@ -18,29 +23,19 @@ SORTABLE_FIELDS = {
     "price_to_book": "stats.price_to_book",
     "beta": "stats.beta",
     "current_price": "stats.current_price",
-    "roe": "ratios.roe",
-    "roa": "ratios.roa",
-    "debt_to_equity": "ratios.debt_to_equity",
-    "current_ratio": "ratios.current_ratio",
-    "gross_margin": "ratios.gross_margin",
-    "operating_margin": "ratios.operating_margin",
-    "net_margin": "ratios.net_margin",
-    "revenue_growth_yoy": "ratios.revenue_growth_yoy",
+    "roe": "stats.roe_ttm",
+    "roa": "stats.roa_ttm",
+    "debt_to_equity": "stats.debt_to_equity_mrq",
+    "current_ratio": "stats.current_ratio_mrq",
+    "gross_margin": "stats.gross_margin_ttm",
+    "operating_margin": "stats.operating_margin_ttm",
+    "net_margin": "stats.profit_margin_ttm",
+    "revenue_growth_yoy": "stats.revenue_growth_yoy_q",
     "name": "company.name",
     "sector": "company.sector",
-    # Fundamental screening set (valuation / quality / growth / financial
-    # health), sourced live from `info` (see yahoo_import.STAT_FIELDS)
-    # rather than computed from annual statements.
     "peg_ratio": "stats.peg_ratio",
     "ev_to_ebitda": "stats.ev_to_ebitda",
-    "profit_margin_ttm": "stats.profit_margin_ttm",
-    "operating_margin_ttm": "stats.operating_margin_ttm",
-    "roa_ttm": "stats.roa_ttm",
-    "roe_ttm": "stats.roe_ttm",
-    "revenue_growth_yoy_q": "stats.revenue_growth_yoy_q",
     "earnings_growth_yoy_q": "stats.earnings_growth_yoy_q",
-    "debt_to_equity_mrq": "stats.debt_to_equity_mrq",
-    "current_ratio_mrq": "stats.current_ratio_mrq",
     "free_cash_flow": "stats.free_cash_flow",
 }
 
@@ -57,25 +52,18 @@ FILTERABLE_RANGES = {
     "price_to_book": "stats.price_to_book",
     "dividend_yield": "stats.dividend_yield",
     "beta": "stats.beta",
-    "roe": "ratios.roe",
-    "roa": "ratios.roa",
-    "debt_to_equity": "ratios.debt_to_equity",
-    "current_ratio": "ratios.current_ratio",
-    "gross_margin": "ratios.gross_margin",
-    "operating_margin": "ratios.operating_margin",
-    "net_margin": "ratios.net_margin",
-    "revenue_growth_yoy": "ratios.revenue_growth_yoy",
+    "roe": "stats.roe_ttm",
+    "roa": "stats.roa_ttm",
+    "debt_to_equity": "stats.debt_to_equity_mrq",
+    "current_ratio": "stats.current_ratio_mrq",
+    "gross_margin": "stats.gross_margin_ttm",
+    "operating_margin": "stats.operating_margin_ttm",
+    "net_margin": "stats.profit_margin_ttm",
+    "revenue_growth_yoy": "stats.revenue_growth_yoy_q",
     "forward_pe": "stats.forward_pe",
     "peg_ratio": "stats.peg_ratio",
     "ev_to_ebitda": "stats.ev_to_ebitda",
-    "profit_margin_ttm": "stats.profit_margin_ttm",
-    "operating_margin_ttm": "stats.operating_margin_ttm",
-    "roa_ttm": "stats.roa_ttm",
-    "roe_ttm": "stats.roe_ttm",
-    "revenue_growth_yoy_q": "stats.revenue_growth_yoy_q",
     "earnings_growth_yoy_q": "stats.earnings_growth_yoy_q",
-    "debt_to_equity_mrq": "stats.debt_to_equity_mrq",
-    "current_ratio_mrq": "stats.current_ratio_mrq",
     "free_cash_flow": "stats.free_cash_flow",
 }
 
@@ -131,7 +119,6 @@ def search_companies(
     aql = f"""
         FOR company IN companies
             LET stats = DOCUMENT('stock_stats', company._key)
-            LET ratios = DOCUMENT('financial_ratios', company._key)
             FILTER {filter_expr}
             SORT {sort_field} {sort_dir}
             LIMIT @offset, @limit
@@ -150,31 +137,23 @@ def search_companies(
                 price_to_book: stats.price_to_book,
                 fifty_two_week_low: stats.fifty_two_week_low,
                 fifty_two_week_high: stats.fifty_two_week_high,
-                roe: ratios.roe,
-                roa: ratios.roa,
-                debt_to_equity: ratios.debt_to_equity,
-                current_ratio: ratios.current_ratio,
-                gross_margin: ratios.gross_margin,
-                operating_margin: ratios.operating_margin,
-                net_margin: ratios.net_margin,
-                revenue_growth_yoy: ratios.revenue_growth_yoy,
+                roe: stats.roe_ttm,
+                roa: stats.roa_ttm,
+                debt_to_equity: stats.debt_to_equity_mrq,
+                current_ratio: stats.current_ratio_mrq,
+                gross_margin: stats.gross_margin_ttm,
+                operating_margin: stats.operating_margin_ttm,
+                net_margin: stats.profit_margin_ttm,
+                revenue_growth_yoy: stats.revenue_growth_yoy_q,
                 peg_ratio: stats.peg_ratio,
                 ev_to_ebitda: stats.ev_to_ebitda,
-                profit_margin_ttm: stats.profit_margin_ttm,
-                operating_margin_ttm: stats.operating_margin_ttm,
-                roa_ttm: stats.roa_ttm,
-                roe_ttm: stats.roe_ttm,
-                revenue_growth_yoy_q: stats.revenue_growth_yoy_q,
                 earnings_growth_yoy_q: stats.earnings_growth_yoy_q,
-                debt_to_equity_mrq: stats.debt_to_equity_mrq,
-                current_ratio_mrq: stats.current_ratio_mrq,
                 free_cash_flow: stats.free_cash_flow
             }}
     """
     count_aql = f"""
         FOR company IN companies
             LET stats = DOCUMENT('stock_stats', company._key)
-            LET ratios = DOCUMENT('financial_ratios', company._key)
             FILTER {filter_expr}
             COLLECT WITH COUNT INTO total
             RETURN total
@@ -195,7 +174,6 @@ def get_company_detail(ticker: str) -> dict | None:
 
     company = db.collection("companies").get(ticker)
     stats = db.collection("stock_stats").get(ticker)
-    ratios = db.collection("financial_ratios").get(ticker)
 
     cursor = db.aql.execute(
         """
@@ -212,7 +190,6 @@ def get_company_detail(ticker: str) -> dict | None:
         "ticker": ticker,
         "company": {k: v for k, v in (company or {}).items() if not k.startswith("_")},
         "stats": {k: v for k, v in (stats or {}).items() if not k.startswith("_")},
-        "ratios": {k: v for k, v in (ratios or {}).items() if not k.startswith("_")},
         "history": history,
     }
 

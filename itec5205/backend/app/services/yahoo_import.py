@@ -62,12 +62,13 @@ STAT_FIELDS = {
     "beta": "beta",
     # Fundamental screening fields (valuation / quality / growth / financial
     # health) -- all available on the same `info` dict already fetched per
-    # ticker, no extra Yahoo round trip needed. Suffixed `_ttm`/`_mrq` where
-    # Yahoo's own label carries one, to avoid colliding with the differently
-    # -sourced (annual-statement-computed) fields of the same concept in
-    # `financial_ratios` (e.g. `roe`, `operating_margin`).
+    # ticker, no extra Yahoo round trip needed. This is now the sole source
+    # for these ratios (the `financial_ratios` collection, which computed
+    # the same concepts from annual statements via 2 extra Yahoo calls per
+    # ticker, was retired in favor of these live ttm/mrq figures).
     "peg_ratio": "pegRatio",
     "ev_to_ebitda": "enterpriseToEbitda",
+    "gross_margin_ttm": "grossMargins",
     "profit_margin_ttm": "profitMargins",
     "operating_margin_ttm": "operatingMargins",
     "roa_ttm": "returnOnAssets",
@@ -93,24 +94,6 @@ STAT_FIELDS = {
     "fifty_day_average": "fiftyDayAverage",
     "two_hundred_day_average": "twoHundredDayAverage",
 }
-
-# Row labels used by yfinance's financial statements, verified against a
-# live pull (some labels have varied across yfinance versions, so each is
-# looked up defensively via ``_row``).
-INCOME_ROWS = {
-    "revenue": "Total Revenue",
-    "gross_profit": "Gross Profit",
-    "operating_income": "Operating Income",
-    "net_income": "Net Income",
-}
-BALANCE_ROWS = {
-    "total_assets": "Total Assets",
-    "total_debt": "Total Debt",
-    "stockholders_equity": "Stockholders Equity",
-    "current_assets": "Current Assets",
-    "current_liabilities": "Current Liabilities",
-}
-
 
 def read_tickers(path) -> list[str]:
     tickers = []
@@ -155,20 +138,6 @@ def get_latest_price_date(ticker: str) -> str | None:
     )
     results = list(cursor)
     return results[0] if results else None
-
-
-def _row(df: pd.DataFrame, label: str, col=0):
-    """Best-effort lookup of a labeled row/column in a yfinance statement
-    DataFrame. Returns None if the row is missing or the value isn't numeric."""
-    if df is None or df.empty or label not in df.index:
-        return None
-    try:
-        value = df.loc[label].iloc[col]
-    except (IndexError, KeyError):
-        return None
-    if pd.isna(value):
-        return None
-    return float(value)
 
 
 def fetch_ticker_history(
@@ -245,57 +214,6 @@ def fetch_ticker_stats(ticker: str, info: dict) -> dict:
     return row
 
 
-def fetch_financial_ratios(ticker: str, yf_ticker: yf.Ticker) -> dict:
-    """Compute profitability/debt/liquidity ratios from the latest annual
-    financial statements. Any input the statement doesn't provide is left as
-    None rather than raising, since yfinance's coverage varies by ticker."""
-    financials = yf_ticker.financials
-    balance_sheet = yf_ticker.balance_sheet
-
-    revenue = _row(financials, INCOME_ROWS["revenue"])
-    gross_profit = _row(financials, INCOME_ROWS["gross_profit"])
-    operating_income = _row(financials, INCOME_ROWS["operating_income"])
-    net_income = _row(financials, INCOME_ROWS["net_income"])
-    prev_revenue = _row(financials, INCOME_ROWS["revenue"], col=1)
-
-    total_assets = _row(balance_sheet, BALANCE_ROWS["total_assets"])
-    total_debt = _row(balance_sheet, BALANCE_ROWS["total_debt"])
-    equity = _row(balance_sheet, BALANCE_ROWS["stockholders_equity"])
-    current_assets = _row(balance_sheet, BALANCE_ROWS["current_assets"])
-    current_liabilities = _row(balance_sheet, BALANCE_ROWS["current_liabilities"])
-
-    period_end = None
-    if financials is not None and not financials.empty:
-        period_end = financials.columns[0].strftime("%Y-%m-%d")
-
-    def _safe_div(a, b):
-        if a is None or b in (None, 0):
-            return None
-        return round(a / b, 4)
-
-    return {
-        "ticker": ticker,
-        "period_end": period_end,
-        "revenue": revenue,
-        "net_income": net_income,
-        "total_assets": total_assets,
-        "total_debt": total_debt,
-        "total_equity": equity,
-        "gross_margin": _safe_div(gross_profit, revenue),
-        "operating_margin": _safe_div(operating_income, revenue),
-        "net_margin": _safe_div(net_income, revenue),
-        "roe": _safe_div(net_income, equity),
-        "roa": _safe_div(net_income, total_assets),
-        "debt_to_equity": _safe_div(total_debt, equity),
-        "current_ratio": _safe_div(current_assets, current_liabilities),
-        "revenue_growth_yoy": _safe_div(
-            None if revenue is None or prev_revenue is None else (revenue - prev_revenue),
-            prev_revenue,
-        ),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-
-
 def import_ticker(
     ticker: str,
     years: int = 2,
@@ -303,9 +221,10 @@ def import_ticker(
     import_history: bool = True,
     import_statistics: bool = True,
 ) -> dict:
-    """Fetch history and/or stats + financial ratios for one ticker and
-    upsert them into ArangoDB, per the `import_history`/`import_statistics`
-    flags. Returns a small summary dict for progress reporting.
+    """Fetch history and/or stats (incl. fundamental ratios, all sourced
+    from `info` -- see `STAT_FIELDS`) for one ticker and upsert them into
+    ArangoDB, per the `import_history`/`import_statistics` flags. Returns a
+    small summary dict for progress reporting.
 
     Company metadata (name/sector/industry) always gets upserted regardless
     of which flags are set -- it comes from the same `info` fetch already
@@ -352,9 +271,5 @@ def import_ticker(
         stats_row = fetch_ticker_stats(ticker, info)
         stats_row["_key"] = ticker
         db.collection("stock_stats").insert(stats_row, overwrite=True)
-
-        ratios_row = fetch_financial_ratios(ticker, yf_ticker)
-        ratios_row["_key"] = ticker
-        db.collection("financial_ratios").insert(ratios_row, overwrite=True)
 
     return {"ticker": ticker, "company": company_name, "history_rows": len(history_rows)}

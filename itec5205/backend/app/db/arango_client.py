@@ -31,10 +31,8 @@ COLLECTIONS = {
         {"type": "persistent", "fields": ["market_cap"], "unique": False},
         {"type": "persistent", "fields": ["trailing_pe"], "unique": False},
         {"type": "persistent", "fields": ["sector"], "unique": False},
-    ],
-    "financial_ratios": [
-        {"type": "persistent", "fields": ["roe"], "unique": False},
-        {"type": "persistent", "fields": ["debt_to_equity"], "unique": False},
+        {"type": "persistent", "fields": ["roe_ttm"], "unique": False},
+        {"type": "persistent", "fields": ["debt_to_equity_mrq"], "unique": False},
     ],
     # A named subset of tickers a user saved off a screener search, to use
     # as the candidate universe fed into RL training (search -> pool -> RL).

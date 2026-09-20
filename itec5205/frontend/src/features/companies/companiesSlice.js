@@ -56,6 +56,18 @@ const companiesSlice = createSlice({
       if (state.selected[ticker]) delete state.selected[ticker];
       else state.selected[ticker] = true;
     },
+    // Selects every ticker in `action.payload` (the currently-visible page
+    // of results) if any of them isn't already selected; deselects all of
+    // them if they're all already selected -- standard "select all" toggle.
+    toggleSelectAll(state, action) {
+      const tickers = action.payload;
+      const allSelected = tickers.length > 0 && tickers.every((t) => state.selected[t]);
+      if (allSelected) {
+        for (const t of tickers) delete state.selected[t];
+      } else {
+        for (const t of tickers) state.selected[t] = true;
+      }
+    },
     clearSelected(state) {
       state.selected = {};
     },
@@ -73,6 +85,7 @@ export const {
   fetchIndustriesRequested,
   fetchIndustriesSucceeded,
   toggleSelected,
+  toggleSelectAll,
   clearSelected,
 } = companiesSlice.actions;
 

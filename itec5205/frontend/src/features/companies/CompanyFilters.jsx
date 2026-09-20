@@ -16,14 +16,13 @@ const RANGE_FIELDS = [
   { key: "forward_pe", label: "Forward P/E" },
   { key: "peg_ratio", label: "PEG Ratio (5yr expected)" },
   { key: "ev_to_ebitda", label: "EV/EBITDA" },
-  { key: "profit_margin_ttm", label: "Profit Margin (ttm)" },
-  { key: "operating_margin_ttm", label: "Operating Margin (ttm)" },
-  { key: "roa_ttm", label: "ROA (ttm)" },
-  { key: "roe_ttm", label: "ROE (ttm)" },
-  { key: "revenue_growth_yoy_q", label: "Quarterly Revenue Growth (yoy)" },
-  { key: "earnings_growth_yoy_q", label: "Quarterly Earnings Growth (yoy)" },
-  { key: "debt_to_equity_mrq", label: "Debt/Equity (mrq)" },
-  { key: "current_ratio_mrq", label: "Current Ratio (mrq)" },
+  { key: "operating_margin", label: "Operating Margin (ttm)" },
+  // percent: true -> the user types a plain percentage (e.g. 20 for 20%);
+  // the underlying stored/filtered value is the decimal fraction (0.20)
+  // yfinance itself returns, so the saga divides by 100 right before this
+  // hits the API (see PERCENT_RANGE_FIELDS in companiesSaga.js).
+  { key: "revenue_growth_yoy", label: "Quarterly Revenue Growth (yoy) %", percent: true },
+  { key: "earnings_growth_yoy_q", label: "Quarterly Earnings Growth (yoy) %", percent: true },
   { key: "free_cash_flow", label: "Free Cash Flow ($)" },
 ];
 
@@ -84,14 +83,16 @@ export default function CompanyFilters() {
       </div>
 
       <div className="filters-grid">
-        {RANGE_FIELDS.map(({ key, label }) => {
+        {RANGE_FIELDS.map(({ key, label, percent }) => {
           const [min, max] = filters.ranges[key] || ["", ""];
+          const minPlaceholder = percent ? "min % (e.g. 10)" : "min";
+          const maxPlaceholder = percent ? "max % (e.g. 25)" : "max";
           return (
             <div key={key}>
               <label>{label}</label>
               <div style={{ display: "flex", gap: 4 }}>
-                <input placeholder="min" value={min} onChange={(e) => onRangeChange(key, "min", e.target.value)} />
-                <input placeholder="max" value={max} onChange={(e) => onRangeChange(key, "max", e.target.value)} />
+                <input placeholder={minPlaceholder} value={min} onChange={(e) => onRangeChange(key, "min", e.target.value)} />
+                <input placeholder={maxPlaceholder} value={max} onChange={(e) => onRangeChange(key, "max", e.target.value)} />
               </div>
             </div>
           );

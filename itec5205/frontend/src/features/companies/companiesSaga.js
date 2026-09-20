@@ -11,6 +11,11 @@ import {
   fetchSucceeded,
 } from "./companiesSlice";
 
+// Fields where the UI takes a plain percentage (e.g. 20 for 20%) but the
+// stored/filtered value is the decimal fraction (0.20) yfinance returns --
+// kept in sync with the `percent: true` entries in CompanyFilters.jsx.
+const PERCENT_RANGE_FIELDS = new Set(["revenue_growth_yoy", "earnings_growth_yoy_q"]);
+
 function buildParams(filters) {
   const params = {
     sector: filters.sector || undefined,
@@ -22,8 +27,9 @@ function buildParams(filters) {
     offset: filters.offset,
   };
   for (const [key, [min, max]] of Object.entries(filters.ranges || {})) {
-    if (min !== "" && min !== undefined && min !== null) params[`${key}_min`] = min;
-    if (max !== "" && max !== undefined && max !== null) params[`${key}_max`] = max;
+    const scale = PERCENT_RANGE_FIELDS.has(key) ? 100 : 1;
+    if (min !== "" && min !== undefined && min !== null) params[`${key}_min`] = Number(min) / scale;
+    if (max !== "" && max !== undefined && max !== null) params[`${key}_max`] = Number(max) / scale;
   }
   return params;
 }

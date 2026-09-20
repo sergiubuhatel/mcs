@@ -64,7 +64,7 @@ export default function CompanyDetailPage() {
       </div>
     );
 
-  const { company, stats, ratios, history } = detail;
+  const { company, stats, history } = detail;
   const dayChangePct =
     stats.current_price != null && stats.previous_close
       ? ((stats.current_price - stats.previous_close) / stats.previous_close) * 100
@@ -87,13 +87,12 @@ export default function CompanyDetailPage() {
           <div><strong>Market Cap</strong><div>{fmtLarge(stats.market_cap != null ? stats.market_cap * 1e6 : null)}</div></div>
           <div><strong>Trailing P/E</strong><div>{fmtNum(stats.trailing_pe)}</div></div>
           <div><strong>Beta</strong><div>{fmtNum(stats.beta)}</div></div>
-          <div><strong>ROE</strong><div>{fmtPct(ratios.roe)}</div></div>
-          <div><strong>ROA</strong><div>{fmtPct(ratios.roa)}</div></div>
-          <div><strong>Debt/Equity</strong><div>{fmtNum(ratios.debt_to_equity)}</div></div>
-          <div><strong>Current Ratio</strong><div>{fmtNum(ratios.current_ratio)}</div></div>
-          <div><strong>Gross Margin</strong><div>{fmtPct(ratios.gross_margin)}</div></div>
-          <div><strong>Net Margin</strong><div>{fmtPct(ratios.net_margin)}</div></div>
-          <div><strong>Revenue Growth YoY</strong><div>{fmtPct(ratios.revenue_growth_yoy)}</div></div>
+          <div><strong>ROE</strong><div>{fmtPct(stats.roe_ttm)}</div></div>
+          <div><strong>ROA</strong><div>{fmtPct(stats.roa_ttm)}</div></div>
+          <div><strong>Debt/Equity</strong><div>{fmtNum(stats.debt_to_equity_mrq)}</div></div>
+          <div><strong>Current Ratio</strong><div>{fmtNum(stats.current_ratio_mrq)}</div></div>
+          <div><strong>Quarterly Revenue Growth</strong><div>{fmtPct(stats.revenue_growth_yoy_q)}</div></div>
+          <div><strong>Quarterly Earnings Growth</strong><div>{fmtPct(stats.earnings_growth_yoy_q)}</div></div>
         </div>
       </div>
 
