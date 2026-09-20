@@ -248,7 +248,7 @@ function ImportPanel({ onClose }) {
       {scope === "all" ? (
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", margin: "8px 0" }}>
           <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} />
-          Only update what hasn't been imported yet (skip tickers already in the database)
+          Only import what's missing (skip tickers that are already fully up to date)
         </label>
       ) : (
         <p className="muted" style={{ margin: "8px 0" }}>Specific tickers are always re-fetched and will overwrite any existing data for them.</p>

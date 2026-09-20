@@ -10,6 +10,7 @@ flower
 yfinance
 pandas
 numpy
+tzdata
 gymnasium
 stable-baselines3
 torch

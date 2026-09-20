@@ -10,6 +10,7 @@ writes everything to Arango instead of CSV.
 
 import re
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import yfinance as yf
@@ -17,6 +18,22 @@ import yfinance as yf
 from ..db.arango_client import get_db
 
 _KEY_SAFE = re.compile(r"[^A-Za-z0-9_\-:.@()+,=;$!*'%]")
+
+# NYSE/Nasdaq regular session close, in the exchange's own timezone -- used
+# to decide whether "today" already has a final close or is still live.
+_MARKET_TZ = ZoneInfo("America/New_York")
+_MARKET_CLOSE_HOUR = 16
+
+
+def _last_closed_session_date() -> date:
+    """Most recent calendar date whose regular session has already
+    finished. Before today's close this is yesterday; a weekend/holiday in
+    between is harmless since yfinance never returns a row for a non-
+    trading day anyway."""
+    now_et = datetime.now(_MARKET_TZ)
+    if now_et.hour < _MARKET_CLOSE_HOUR:
+        return now_et.date() - timedelta(days=1)
+    return now_et.date()
 
 
 def _slugify_key(value: str) -> str:
@@ -85,12 +102,39 @@ def read_tickers(path) -> list[str]:
     return tickers
 
 
-def get_existing_tickers() -> set[str]:
-    """Tickers that already have a `companies` document, i.e. have been
-    imported at least once. Used to support "only update what's missing"."""
+def get_up_to_date_tickers() -> set[str]:
+    """Tickers whose `stock_prices` already reach the most recent closed
+    session -- i.e. have no missing price days to catch up on. Backs the
+    "only update what's missing" import option: skip a ticker only when
+    it's truly current, not merely present (a ticker last imported weeks
+    ago is 'in the database' but still stale, and must still be caught
+    up)."""
     db = get_db()
-    cursor = db.aql.execute("FOR c IN companies RETURN c._key")
+    cutoff = _last_closed_session_date().isoformat()
+    cursor = db.aql.execute(
+        """
+        FOR p IN stock_prices
+          COLLECT ticker = p.ticker AGGREGATE latest = MAX(p.date)
+          FILTER latest >= @cutoff
+          RETURN ticker
+        """,
+        bind_vars={"cutoff": cutoff},
+    )
     return set(cursor)
+
+
+def get_latest_price_date(ticker: str) -> str | None:
+    """Most recent date already stored in `stock_prices` for this ticker
+    (YYYY-MM-DD), or None if it has never been imported. Drives the
+    incremental catch-up in `import_ticker` -- only sessions after this
+    date get re-fetched instead of re-pulling the full lookback every time."""
+    db = get_db()
+    cursor = db.aql.execute(
+        "FOR p IN stock_prices FILTER p.ticker == @ticker SORT p.date DESC LIMIT 1 RETURN p.date",
+        bind_vars={"ticker": ticker},
+    )
+    results = list(cursor)
+    return results[0] if results else None
 
 
 def _row(df: pd.DataFrame, label: str, col=0):
@@ -107,43 +151,52 @@ def _row(df: pd.DataFrame, label: str, col=0):
     return float(value)
 
 
-def fetch_ticker_history(ticker: str, info: dict, years: int = 2, interval: str = "1d") -> list[dict]:
-    """Same behavior as the original fetch_stock_history.py: end-of-day close,
-    falling back to the live price for a session that hasn't closed yet.
+def fetch_ticker_history(
+    ticker: str, years: int = 2, interval: str = "1d", since: str | None = None
+) -> list[dict]:
+    """End-of-day close only -- a session that hasn't finished yet (checked
+    against NYSE hours in America/New_York, see `_last_closed_session_date`)
+    is left out entirely rather than filled with a live quote. It's simply
+    picked up on the next import once it has actually closed.
 
-    Uses an explicit `start` date (today minus `years`) rather than
+    `since`, when given, is the last date already stored for this ticker
+    (from `get_latest_price_date`): only that date onward is re-fetched --
+    re-including `since` itself as the anchor for `previous`/`value_change`,
+    but never re-emitting it -- instead of re-pulling the full `years`
+    lookback on every import. Uses an explicit `start` date rather than
     yfinance's `period` enum, which only recognizes a fixed set of values
     (1y/2y/5y/10y/max) -- an explicit date supports any lookback, including
     ones like 15 or 20 years that period="..." can't express.
     """
     yf_ticker = yf.Ticker(ticker)
-    start = (date.today() - timedelta(days=365 * years)).isoformat()
+    start = since if since else (date.today() - timedelta(days=365 * years)).isoformat()
     history = yf_ticker.history(start=start, interval=interval)
+
     if history.empty:
+        if since:
+            return []  # already fully caught up
         raise ValueError(f"No price history returned for ticker '{ticker}'")
 
-    current_price = info.get("currentPrice") or info.get("regularMarketPrice")
+    cutoff = _last_closed_session_date()
 
     close = pd.to_numeric(history["Close"], errors="coerce")
-    missing = close.isna()
-    if missing.any() and current_price is not None:
-        close = close.copy()
-        close[missing] = current_price
-
     df = pd.DataFrame({
         "date": history.index.tz_localize(None),
         "close": close.round(2).values,
     })
     df = df.dropna(subset=["close"])
-
-    today = pd.Timestamp.now().normalize()
-    if current_price is not None and not (df["date"] == today).any():
-        df = pd.concat([df, pd.DataFrame([{"date": today, "close": round(current_price, 2)}])], ignore_index=True)
+    df = df[df["date"].dt.date <= cutoff]
+    if df.empty:
+        return []
 
     df = df.sort_values("date").reset_index(drop=True)
     df["previous"] = df["close"].shift(1).round(2)
     df["value_change"] = (df["close"] - df["previous"]).round(2)
     df["percentage_change"] = ((df["close"] - df["previous"]) / df["previous"] * 100).round(2)
+
+    if since:
+        since_date = pd.Timestamp(since).date()
+        df = df[df["date"].dt.date > since_date]
 
     rows = []
     for record in df.to_dict(orient="records"):
@@ -250,7 +303,8 @@ def import_ticker(ticker: str, years: int = 2, interval: str = "1d") -> dict:
         overwrite=True,
     )
 
-    history_rows = fetch_ticker_history(ticker, info, years=years, interval=interval)
+    latest_date = get_latest_price_date(ticker)
+    history_rows = fetch_ticker_history(ticker, years=years, interval=interval, since=latest_date)
     prices_col = db.collection("stock_prices")
     for row in history_rows:
         row["_key"] = f"{ticker}_{row['date']}"
