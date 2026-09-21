@@ -106,10 +106,27 @@ def list_portfolios() -> list[dict]:
     return list(db.collection("portfolios").all())
 
 
+def _with_company_names(holdings: list[dict]) -> list[dict]:
+    """Attach each holding's company name (from `companies`) for display --
+    stored holdings only ever carry ticker/weight."""
+    db = get_db()
+    tickers = [h["ticker"] for h in holdings]
+    cursor = db.aql.execute(
+        "FOR c IN companies FILTER c._key IN @tickers RETURN {ticker: c._key, name: c.name}",
+        bind_vars={"tickers": tickers},
+    )
+    names = {row["ticker"]: row["name"] for row in cursor}
+    return [{**h, "name": names.get(h["ticker"])} for h in holdings]
+
+
 def get_portfolio(portfolio_id: str) -> dict | None:
     db = get_db()
     col = db.collection("portfolios")
-    return col.get(portfolio_id) if col.has(portfolio_id) else None
+    if not col.has(portfolio_id):
+        return None
+    doc = col.get(portfolio_id)
+    doc["holdings"] = _with_company_names(doc["holdings"])
+    return doc
 
 
 def delete_portfolio(portfolio_id: str) -> bool:

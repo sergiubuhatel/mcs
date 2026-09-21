@@ -33,6 +33,9 @@ def train():
         timesteps=int(body.get("timesteps", 50_000)),
         window=int(body.get("window", 30)),
         portfolio_name=body.get("portfolio_name"),
+        mode=body.get("mode", "full"),
+        subset_size=int(body.get("subset_size", 10)),
+        lookback_days=int(body.get("lookback_days", 252)),
     )
     return jsonify({"task_id": task.id}), 202
 

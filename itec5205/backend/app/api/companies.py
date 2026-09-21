@@ -33,7 +33,7 @@ def list_companies():
         ranges=ranges,
         sort_by=args.get("sort_by", "market_cap"),
         sort_dir=args.get("sort_dir", "desc"),
-        limit=min(int(args.get("limit", 50)), 500),
+        limit=min(int(args.get("limit", 50)), 600),
         offset=int(args.get("offset", 0)),
     )
     return jsonify(result)

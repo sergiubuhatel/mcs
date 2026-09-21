@@ -77,7 +77,7 @@ export default function PortfolioDetailPage() {
           {" · "}Sharpe: <strong>{portfolio.sharpe_ratio ?? "-"}</strong>
         </p>
         <table className="holdings-table">
-          <thead><tr><th>Ticker</th><th>Weight</th></tr></thead>
+          <thead><tr><th>Ticker</th><th>Company</th><th>Weight</th></tr></thead>
           <tbody>
             {portfolio.holdings
               .slice()
@@ -85,6 +85,7 @@ export default function PortfolioDetailPage() {
               .map((h) => (
                 <tr key={h.ticker}>
                   <td style={{ textAlign: "left" }}>{h.ticker}</td>
+                  <td style={{ textAlign: "left" }}>{h.name || "-"}</td>
                   <td className="weight">{(h.weight * 100).toFixed(2)}%</td>
                 </tr>
               ))}

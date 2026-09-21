@@ -43,7 +43,13 @@ function JobStatus({ label, status, progress, error, onReset }) {
           <div className="progress-bar" style={{ width: 90, margin: 0 }}>
             <div style={{ width: `${pct(progress)}%` }} />
           </div>
-          <span>{progress ? `${progress.completed ?? 0}/${progress.total ?? "?"} (${pct(progress)}%)` : "starting..."}</span>
+          <span>
+            {progress
+              // Clamp: PPO's fixed-size training batches can overshoot the
+              // requested total slightly, so raw `completed` can exceed `total`.
+              ? `${Math.min(progress.completed ?? 0, progress.total ?? Infinity)}/${progress.total ?? "?"} (${pct(progress)}%)`
+              : "starting..."}
+          </span>
         </>
       )}
       {status === "done" && <span style={{ color: "#16a34a" }}>done</span>}

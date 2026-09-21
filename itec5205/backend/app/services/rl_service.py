@@ -64,6 +64,87 @@ def default_universe(n: int = 30) -> list[str]:
     return list(cursor)
 
 
+def rank_by_trend_consistency(tickers: list[str], lookback_days: int = 252) -> list[dict]:
+    """Score each ticker by how closely its *past one year* of price action
+    hugs a straight upward line -- fit an OLS trend line to cumulative
+    log-return (i.e. log price) over the lookback window (defaults to 252
+    trading days, ~1 year), then rank by the Kestner K-ratio:
+    trend slope divided by the standard error of that slope. A steep line
+    with tightly-clustered residuals scores highest; a choppy path that's
+    still net positive scores low, because its residuals are large relative
+    to the slope. A ticker whose fitted trend isn't upward at all (slope <=
+    0) is excluded outright -- "low risk" here specifically means "almost a
+    straight line up", not just "ends higher than it started".
+
+    Returns every qualifying ticker, best first; the caller decides how
+    many to keep. Raises ValueError if none of `tickers` has enough price
+    history for the requested window."""
+    returns_df = returns_matrix(tickers, lookback_days=lookback_days)
+    # Require most of the requested window to actually be present (a few
+    # missing days from holidays/gaps is fine) -- unlike the fixed
+    # `MIN_HISTORY_DAYS` bar `train_and_recommend` uses for its much longer
+    # default lookback, this must scale down for a short window (e.g. a
+    # 3-month/63-day trend check), or nothing would ever pass a fixed
+    # 120-day bar.
+    min_days = max(3, int(lookback_days * 0.9))
+    returns_df = returns_df.dropna(axis=1, thresh=min_days)
+    if returns_df.empty:
+        raise ValueError("Not enough tickers with sufficient price history to rank")
+
+    scored = []
+    for ticker in returns_df.columns:
+        series = returns_df[ticker].dropna()
+        n = len(series)
+        if n < 3:
+            continue
+
+        log_price = np.log1p(series).cumsum().values  # cumulative log-return path
+        t = np.arange(n, dtype=float)
+
+        t_mean = t.mean()
+        y_mean = log_price.mean()
+        ss_t = np.sum((t - t_mean) ** 2)
+        if ss_t == 0:
+            continue
+
+        slope = float(np.sum((t - t_mean) * (log_price - y_mean)) / ss_t)
+        if slope <= 0:
+            continue  # not trending up at all -- excluded, not merely penalized
+
+        fitted = y_mean + slope * (t - t_mean)
+        residuals = log_price - fitted
+        ss_res = float(np.sum(residuals ** 2))
+        ss_tot = float(np.sum((log_price - y_mean) ** 2))
+        r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+
+        residual_std = (ss_res / (n - 2)) ** 0.5
+        slope_std_err = residual_std / (ss_t ** 0.5)
+        # A near-perfect line has ~zero residual scatter, i.e. slope_std_err
+        # -> 0 -- treat that as an extremely high (not infinite/unserializable) score.
+        k_ratio = slope / slope_std_err if slope_std_err > 0 else slope * 1e6
+
+        scored.append({
+            "ticker": ticker,
+            "k_ratio": round(k_ratio, 2),
+            "trend_fit_r2": round(r_squared, 4),
+            "implied_annual_return": round(float(np.expm1(slope * 252)), 4),
+        })
+
+    scored.sort(key=lambda r: r["k_ratio"], reverse=True)
+    return scored
+
+
+def select_subset_by_trend_consistency(tickers: list[str], subset_size: int, lookback_days: int = 252) -> list[dict]:
+    """The top `subset_size` tickers from `rank_by_trend_consistency`,
+    clamped to at least 2 (the minimum `train_and_recommend` needs) and at
+    most however many actually had an upward, scorable trend."""
+    ranked = rank_by_trend_consistency(tickers, lookback_days=lookback_days)
+    if len(ranked) < 2:
+        raise ValueError("Fewer than 2 tickers in this universe have an upward price trend to select from")
+    size = max(2, min(subset_size, len(ranked)))
+    return ranked[:size]
+
+
 def train_and_recommend(
     universe: list[str] | None = None,
     risk_aversion: float = 1.0,

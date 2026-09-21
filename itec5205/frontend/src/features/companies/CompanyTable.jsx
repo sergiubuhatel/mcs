@@ -53,6 +53,16 @@ export default function CompanyTable() {
     dispatch(fetchRequested());
   };
 
+  const goToOffset = (offset) => {
+    dispatch(setFilters({ offset }));
+    dispatch(fetchRequested());
+  };
+
+  const onLimitChange = (e) => {
+    dispatch(setFilters({ limit: Number(e.target.value), offset: 0 }));
+    dispatch(fetchRequested());
+  };
+
   const selectedCount = Object.keys(selected).length;
   const pageTickers = results.map((r) => r.ticker);
   const pageSelectedCount = pageTickers.filter((t) => selected[t]).length;
@@ -128,6 +138,39 @@ export default function CompanyTable() {
             ))}
           </tbody>
         </table>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, flexWrap: "wrap", gap: 8 }}>
+        <span className="muted">
+          {total === 0
+            ? "No results"
+            : `Showing ${filters.offset + 1}–${Math.min(filters.offset + filters.limit, total)} of ${total}`}
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <label className="muted" style={{ fontSize: "0.85rem" }}>
+            Rows per page{" "}
+            <select value={filters.limit} onChange={onLimitChange}>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={250}>250</option>
+              <option value={600}>600 (all)</option>
+            </select>
+          </label>
+          <button
+            className="btn secondary"
+            disabled={filters.offset === 0}
+            onClick={() => goToOffset(Math.max(0, filters.offset - filters.limit))}
+          >
+            &larr; Prev
+          </button>
+          <button
+            className="btn secondary"
+            disabled={filters.offset + filters.limit >= total}
+            onClick={() => goToOffset(filters.offset + filters.limit)}
+          >
+            Next &rarr;
+          </button>
+        </div>
       </div>
     </div>
   );
