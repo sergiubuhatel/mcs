@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiClient } from "../api/client";
 import { CloseIcon } from "../layout/icons";
@@ -9,10 +9,31 @@ import { tooltipProps } from "../utils/chartTheme";
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
 }
+function fmtNum(v) {
+  return v === null || v === undefined ? "-" : Number(v).toFixed(2);
+}
+function fmtLarge(v) {
+  if (v === null || v === undefined) return "-";
+  const n = Number(v);
+  if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  return `$${n.toFixed(0)}`;
+}
 function changeColor(value) {
   if (value === null || value === undefined || value === 0) return "var(--color-text-primary)";
   return value > 0 ? "#16a34a" : "#dc2626";
 }
+
+const HOLDINGS_COLUMNS = [
+  { key: "ticker", label: "Ticker" },
+  { key: "name", label: "Company" },
+  { key: "market_cap", label: "Market Cap" },
+  { key: "forward_pe", label: "Forward P/E" },
+  { key: "revenue_growth_yoy_q", label: "Revenue Growth" },
+  { key: "earnings_growth_yoy_q", label: "Earnings Growth" },
+  { key: "weight", label: "Weight" },
+];
 
 export default function PortfolioDetailPage() {
   const { id } = useParams();
@@ -21,6 +42,16 @@ export default function PortfolioDetailPage() {
   const [series, setSeries] = useState(null);
   const [error, setError] = useState(null);
   const [range, setRange] = useState("1Y");
+  const [sortBy, setSortBy] = useState("weight");
+  const [sortDir, setSortDir] = useState("desc");
+
+  const onSortClick = (key) => {
+    if (key === sortBy) setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    else {
+      setSortBy(key);
+      setSortDir("desc");
+    }
+  };
 
   useEffect(() => {
     setPortfolio(null);
@@ -38,7 +69,7 @@ export default function PortfolioDetailPage() {
   }, [id]);
 
   const CloseButton = (
-    <button className="close-btn" onClick={() => navigate("/portfolio")} title="Back to portfolios" aria-label="Back to portfolios">
+    <button className="close-btn" onClick={() => navigate(-1)} title="Back" aria-label="Back">
       <CloseIcon />
     </button>
   );
@@ -77,15 +108,37 @@ export default function PortfolioDetailPage() {
           {" · "}Sharpe: <strong>{portfolio.sharpe_ratio ?? "-"}</strong>
         </p>
         <table className="holdings-table">
-          <thead><tr><th>Ticker</th><th>Company</th><th>Weight</th></tr></thead>
+          <thead>
+            <tr>
+              {HOLDINGS_COLUMNS.map((c) => (
+                <th key={c.key} className={sortBy === c.key ? "sorted" : ""} onClick={() => onSortClick(c.key)} style={{ cursor: "pointer" }}>
+                  {c.label}{sortBy === c.key ? (sortDir === "desc" ? " ↓" : " ↑") : ""}
+                </th>
+              ))}
+            </tr>
+          </thead>
           <tbody>
             {portfolio.holdings
               .slice()
-              .sort((a, b) => b.weight - a.weight)
+              .sort((a, b) => {
+                const va = a[sortBy];
+                const vb = b[sortBy];
+                if (va == null && vb == null) return 0;
+                if (va == null) return 1;
+                if (vb == null) return -1;
+                const cmp = typeof va === "string" ? va.localeCompare(vb) : va - vb;
+                return sortDir === "desc" ? -cmp : cmp;
+              })
               .map((h) => (
-                <tr key={h.ticker}>
-                  <td style={{ textAlign: "left" }}>{h.ticker}</td>
+                <tr key={h.ticker} onClick={() => navigate(`/companies/${h.ticker}`)} style={{ cursor: "pointer" }}>
+                  <td style={{ textAlign: "left" }}>
+                    <Link to={`/companies/${h.ticker}`} onClick={(e) => e.stopPropagation()}>{h.ticker}</Link>
+                  </td>
                   <td style={{ textAlign: "left" }}>{h.name || "-"}</td>
+                  <td>{fmtLarge(h.market_cap != null ? h.market_cap * 1e6 : null)}</td>
+                  <td>{fmtNum(h.forward_pe)}</td>
+                  <td>{fmtPct(h.revenue_growth_yoy_q)}</td>
+                  <td>{fmtPct(h.earnings_growth_yoy_q)}</td>
                   <td className="weight">{(h.weight * 100).toFixed(2)}%</td>
                 </tr>
               ))}

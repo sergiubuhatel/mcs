@@ -29,7 +29,25 @@ export default function Sidebar({ collapsed, onToggleCollapsed }) {
         className={`flex items-center px-3 py-4 ${collapsed ? "justify-center" : "justify-between"}`}
         style={{ borderBottom: "1px solid var(--color-divider)" }}
       >
-        {!collapsed && <CarletonLogo height={28} style={{ color: "var(--color-text-primary)" }} />}
+        {!collapsed && (
+          <div className="flex items-center" style={{ gap: 8, minWidth: 0 }}>
+            <CarletonLogo height={26} style={{ color: "var(--color-text-primary)" }} />
+            <span
+              style={{
+                color: "var(--color-text-primary)",
+                fontWeight: 600,
+                fontSize: "0.85rem",
+                lineHeight: 1.15,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title="Carleton University"
+            >
+              Carleton University
+            </span>
+          </div>
+        )}
         <button
           onClick={onToggleCollapsed}
           className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md hover:bg-tertiary"

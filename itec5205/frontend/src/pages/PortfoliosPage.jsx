@@ -76,7 +76,9 @@ export default function PortfoliosPage() {
                     <tbody>
                       {p.holdings.map((h) => (
                         <tr key={h.ticker}>
-                          <td style={{ textAlign: "left" }}>{h.ticker}</td>
+                          <td style={{ textAlign: "left" }}>
+                            <Link to={`/companies/${h.ticker}`} onClick={(e) => e.stopPropagation()}>{h.ticker}</Link>
+                          </td>
                           <td className="weight">{(h.weight * 100).toFixed(2)}%</td>
                         </tr>
                       ))}

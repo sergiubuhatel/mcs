@@ -44,7 +44,7 @@ export default function CompanyDetailPage() {
   }, [ticker]);
 
   const CloseButton = (
-    <button className="close-btn" onClick={() => navigate("/")} title="Back to company list" aria-label="Back to company list">
+    <button className="close-btn" onClick={() => navigate(-1)} title="Back" aria-label="Back">
       <CloseIcon />
     </button>
   );

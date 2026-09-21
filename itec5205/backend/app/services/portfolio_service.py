@@ -106,17 +106,30 @@ def list_portfolios() -> list[dict]:
     return list(db.collection("portfolios").all())
 
 
-def _with_company_names(holdings: list[dict]) -> list[dict]:
-    """Attach each holding's company name (from `companies`) for display --
-    stored holdings only ever carry ticker/weight."""
+def _with_company_details(holdings: list[dict]) -> list[dict]:
+    """Attach each holding's company name + key stats (from `companies` /
+    `stock_stats`) for display -- stored holdings only ever carry
+    ticker/weight."""
     db = get_db()
     tickers = [h["ticker"] for h in holdings]
     cursor = db.aql.execute(
-        "FOR c IN companies FILTER c._key IN @tickers RETURN {ticker: c._key, name: c.name}",
+        """
+        FOR c IN companies
+            FILTER c._key IN @tickers
+            LET stats = DOCUMENT('stock_stats', c._key)
+            RETURN {
+                ticker: c._key,
+                name: c.name,
+                market_cap: stats.market_cap,
+                forward_pe: stats.forward_pe,
+                revenue_growth_yoy_q: stats.revenue_growth_yoy_q,
+                earnings_growth_yoy_q: stats.earnings_growth_yoy_q
+            }
+        """,
         bind_vars={"tickers": tickers},
     )
-    names = {row["ticker"]: row["name"] for row in cursor}
-    return [{**h, "name": names.get(h["ticker"])} for h in holdings]
+    details = {row["ticker"]: row for row in cursor}
+    return [{**h, **{k: v for k, v in details.get(h["ticker"], {}).items() if k != "ticker"}} for h in holdings]
 
 
 def get_portfolio(portfolio_id: str) -> dict | None:
@@ -125,7 +138,7 @@ def get_portfolio(portfolio_id: str) -> dict | None:
     if not col.has(portfolio_id):
         return None
     doc = col.get(portfolio_id)
-    doc["holdings"] = _with_company_names(doc["holdings"])
+    doc["holdings"] = _with_company_details(doc["holdings"])
     return doc
 
 
