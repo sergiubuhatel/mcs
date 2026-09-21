@@ -6,6 +6,7 @@
 export const INTERVALS = [
   { key: "1M", months: 1 },
   { key: "3M", months: 3 },
+  { key: "4M", months: 4 },
   { key: "6M", months: 6 },
   { key: "1Y", years: 1 },
   { key: "5Y", years: 5 },
