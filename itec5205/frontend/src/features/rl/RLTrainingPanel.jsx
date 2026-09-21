@@ -55,7 +55,11 @@ export default function RLTrainingPanel({ pool }) {
       {training && (
         <div>
           <div className="progress-bar"><div style={{ width: `${pct}%` }} /></div>
-          <p className="muted">{progress ? `${progress.completed} / ${progress.total} (${progress.stage || "training"})` : "Starting..."}</p>
+          <p className="muted">
+            {progress && progress.completed != null && progress.total != null
+              ? `${progress.completed} / ${progress.total} (${progress.stage || "training"})`
+              : "Starting..."}
+          </p>
         </div>
       )}
 

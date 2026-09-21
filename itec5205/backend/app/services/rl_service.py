@@ -22,22 +22,29 @@ MIN_HISTORY_DAYS = 120
 
 class SocketIOProgressCallback(BaseCallback):
     """Pushes training progress to any browser client that joined
-    ``room`` (the Celery task id), roughly every 5% of total_timesteps."""
+    ``room`` (the Celery task id), roughly every 5% of total_timesteps.
 
-    def __init__(self, room: str, total_timesteps: int, event: str = "rl_progress"):
+    Also mirrors the same progress into the Celery task's own state via
+    ``task.update_state`` when a bound task is given -- the frontend's poll
+    fallback (`/api/rl/status`, racing alongside the socket listener the
+    same way the import/prediction flows do) reads that state directly, and
+    without this it would keep re-reading the one-time, completed/total
+    -less snapshot `train_rl_portfolio` sets before training starts."""
+
+    def __init__(self, room: str, total_timesteps: int, event: str = "rl_progress", task=None):
         super().__init__()
         self.room = room
         self.total_timesteps = total_timesteps
         self.event = event
+        self.task = task
         self._step_interval = max(1, total_timesteps // 20)
 
     def _on_step(self) -> bool:
         if self.num_timesteps % self._step_interval == 0 or self.num_timesteps >= self.total_timesteps:
-            socketio.emit(
-                self.event,
-                {"stage": "training", "completed": self.num_timesteps, "total": self.total_timesteps},
-                room=self.room,
-            )
+            progress = {"stage": "training", "completed": self.num_timesteps, "total": self.total_timesteps}
+            socketio.emit(self.event, progress, room=self.room)
+            if self.task is not None:
+                self.task.update_state(state="PROGRESS", meta=progress)
         return True
 
 
@@ -63,6 +70,7 @@ def train_and_recommend(
     timesteps: int = 50_000,
     window: int = 30,
     progress_room: str | None = None,
+    progress_task=None,
 ) -> dict:
     tickers = universe or default_universe()
     if len(tickers) < 2:
@@ -85,7 +93,7 @@ def train_and_recommend(
     env = PortfolioEnv(returns, window=window, risk_aversion=risk_aversion)
     model = PPO("MlpPolicy", env, verbose=0)
 
-    callback = SocketIOProgressCallback(progress_room, timesteps) if progress_room else None
+    callback = SocketIOProgressCallback(progress_room, timesteps, task=progress_task) if progress_room else None
     model.learn(total_timesteps=timesteps, callback=callback)
 
     # Apply the learned policy to the most recent window to get today's recommendation.

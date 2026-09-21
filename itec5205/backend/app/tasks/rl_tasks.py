@@ -26,7 +26,8 @@ def train_rl_portfolio(
     socketio.emit("rl_progress", {"stage": "starting", "completed": 0, "total": timesteps}, room=room)
 
     result = train_and_recommend(
-        universe=universe, risk_aversion=risk_aversion, timesteps=timesteps, window=window, progress_room=room
+        universe=universe, risk_aversion=risk_aversion, timesteps=timesteps, window=window,
+        progress_room=room, progress_task=self,
     )
 
     name = portfolio_name or f"RL Portfolio {result['run_id'][:8]}"
