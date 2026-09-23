@@ -4,6 +4,7 @@ import { deleteRequested, fetchRequested, updateRequested } from "../features/po
 import { reset as resetRl } from "../features/rl/rlSlice";
 import RLTrainingPanel from "../features/rl/RLTrainingPanel";
 import ActionMenu from "../components/ActionMenu";
+import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 
 export default function PoolsPage() {
   const dispatch = useDispatch();
@@ -12,6 +13,7 @@ export default function PoolsPage() {
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
   const [editTickers, setEditTickers] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     dispatch(fetchRequested());
@@ -39,6 +41,11 @@ export default function PoolsPage() {
       .filter(Boolean);
     dispatch(updateRequested({ id, name: editName.trim(), tickers }));
     setEditingId(null);
+  };
+
+  const confirmDelete = () => {
+    dispatch(deleteRequested(deleteTarget._key));
+    setDeleteTarget(null);
   };
 
   return (
@@ -102,7 +109,7 @@ export default function PoolsPage() {
                         <button className="btn secondary" onClick={cancelEdit}>Cancel</button>
                       </div>
                     ) : (
-                      <ActionMenu onEdit={() => startEdit(p)} onDelete={() => dispatch(deleteRequested(p._key))} />
+                      <ActionMenu onEdit={() => startEdit(p)} onDelete={() => setDeleteTarget(p)} />
                     )}
                   </td>
                 </tr>
@@ -113,6 +120,14 @@ export default function PoolsPage() {
       </div>
 
       {activePool && <RLTrainingPanel key={activePool._key} pool={activePool} />}
+
+      <ConfirmDeleteModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        itemName={deleteTarget?.name}
+        title="Delete pool"
+      />
     </div>
   );
 }
