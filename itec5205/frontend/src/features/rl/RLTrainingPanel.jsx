@@ -26,7 +26,7 @@ export default function RLTrainingPanel({ pool }) {
         timesteps: Number(timesteps),
         portfolio_name: `RL: ${pool.name}`,
         mode,
-        subset_size: Number(subsetSize),
+        subset_size: Math.max(2, Math.min(499, Number(subsetSize) || 2)),
         lookback_days: Number(lookbackDays),
       })
     );
@@ -67,9 +67,20 @@ export default function RLTrainingPanel({ pool }) {
               type="number"
               step="1"
               min="2"
-              max={pool.tickers.length}
+              max={Math.min(499, pool.tickers.length)}
               value={subsetSize}
-              onChange={(e) => setSubsetSize(e.target.value)}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === "") {
+                  setSubsetSize(raw);
+                  return;
+                }
+                const clamped = Math.max(2, Math.min(499, pool.tickers.length, Number(raw)));
+                setSubsetSize(clamped);
+              }}
+              onBlur={(e) => {
+                if (e.target.value === "") setSubsetSize(2);
+              }}
               disabled={training}
             />
           </div>
