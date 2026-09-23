@@ -39,6 +39,16 @@ const portfoliosSlice = createSlice({
     deleteSucceeded(state, action) {
       state.items = state.items.filter((p) => p._key !== action.payload);
     },
+    updateRequested(state) {
+      state.error = null;
+    },
+    updateSucceeded(state, action) {
+      const idx = state.items.findIndex((p) => p._key === action.payload._key);
+      if (idx !== -1) state.items[idx] = { ...state.items[idx], ...action.payload };
+    },
+    updateFailed(state, action) {
+      state.error = action.payload;
+    },
   },
 });
 
@@ -52,6 +62,9 @@ export const {
   createFailed,
   deleteRequested,
   deleteSucceeded,
+  updateRequested,
+  updateSucceeded,
+  updateFailed,
 } = portfoliosSlice.actions;
 
 export default portfoliosSlice.reducer;

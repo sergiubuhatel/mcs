@@ -142,6 +142,15 @@ def get_portfolio(portfolio_id: str) -> dict | None:
     return doc
 
 
+def update_portfolio(portfolio_id: str, name: str) -> dict | None:
+    db = get_db()
+    col = db.collection("portfolios")
+    if not col.has(portfolio_id):
+        return None
+    col.update({"_key": portfolio_id, "name": name})
+    return col.get(portfolio_id)
+
+
 def delete_portfolio(portfolio_id: str) -> bool:
     db = get_db()
     col = db.collection("portfolios")

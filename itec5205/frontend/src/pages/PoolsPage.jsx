@@ -1,86 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { deleteRequested, fetchRequested, updateRequested } from "../features/pools/poolsSlice";
 import { reset as resetRl } from "../features/rl/rlSlice";
 import RLTrainingPanel from "../features/rl/RLTrainingPanel";
-import { MoreVerticalIcon } from "../layout/icons";
-
-function ActionMenu({ onEdit, onDelete }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onClickOutside = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [open]);
-
-  return (
-    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
-      <button
-        className="btn secondary"
-        onClick={() => setOpen((o) => !o)}
-        title="Actions"
-        aria-label="Actions"
-        style={{ padding: "4px 8px" }}
-      >
-        <MoreVerticalIcon />
-      </button>
-      {open && (
-        <div
-          style={{
-            position: "absolute",
-            right: 0,
-            top: "calc(100% + 4px)",
-            zIndex: 10,
-            minWidth: 120,
-            background: "var(--color-bg-secondary)",
-            border: "1px solid var(--color-divider)",
-            borderRadius: 6,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-            overflow: "hidden",
-          }}
-        >
-          <button
-            className="menu-item"
-            style={menuItemStyle}
-            onClick={() => {
-              setOpen(false);
-              onEdit();
-            }}
-          >
-            Edit
-          </button>
-          <button
-            className="menu-item"
-            style={{ ...menuItemStyle, color: "#dc2626" }}
-            onClick={() => {
-              setOpen(false);
-              onDelete();
-            }}
-          >
-            Delete
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-const menuItemStyle = {
-  display: "block",
-  width: "100%",
-  textAlign: "left",
-  padding: "8px 12px",
-  background: "transparent",
-  border: "none",
-  cursor: "pointer",
-  fontSize: "0.85rem",
-  color: "var(--color-text-primary)",
-};
+import ActionMenu from "../components/ActionMenu";
 
 export default function PoolsPage() {
   const dispatch = useDispatch();
@@ -130,8 +53,8 @@ export default function PoolsPage() {
         {items.length === 0 && !loading && <p className="muted">No pools yet — go to the Screener, select some tickers, and save a pool.</p>}
         <table style={{ tableLayout: "fixed", width: "100%" }}>
           <colgroup>
+            <col style={{ width: 400 }} />
             <col />
-            <col style={{ width: 220 }} />
             <col style={{ width: 110 }} />
             <col style={{ width: 70 }} />
           </colgroup>
@@ -141,11 +64,17 @@ export default function PoolsPage() {
               const isEditing = editingId === p._key;
               return (
                 <tr key={p._key}>
-                  <td style={{ textAlign: "left" }}>
+                  <td style={{ textAlign: "left", maxWidth: 0 }}>
                     {isEditing ? (
                       <input value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: "100%" }} />
                     ) : (
-                      <a onClick={() => selectPool(p._key)} style={{ cursor: "pointer" }}>{p.name}</a>
+                      <a
+                        onClick={() => selectPool(p._key)}
+                        title={p.name}
+                        style={{ cursor: "pointer", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      >
+                        {p.name}
+                      </a>
                     )}
                   </td>
                   <td style={{ textAlign: "left", maxWidth: 0 }}>

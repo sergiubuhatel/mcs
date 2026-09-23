@@ -10,6 +10,9 @@ import {
   fetchRequested,
   fetchStarted,
   fetchSucceeded,
+  updateFailed,
+  updateRequested,
+  updateSucceeded,
 } from "./portfoliosSlice";
 
 function* handleFetch() {
@@ -40,8 +43,19 @@ function* handleDelete(action) {
   }
 }
 
+function* handleUpdate(action) {
+  try {
+    const { id, ...changes } = action.payload;
+    const { data } = yield call(apiClient.put, `/api/portfolios/${id}`, changes);
+    yield put(updateSucceeded(data));
+  } catch (err) {
+    yield put(updateFailed(err.response?.data?.error || err.message));
+  }
+}
+
 export default function* portfoliosSaga() {
   yield takeLatest(fetchRequested.type, handleFetch);
   yield takeLatest(createRequested.type, handleCreate);
   yield takeLatest(deleteRequested.type, handleDelete);
+  yield takeLatest(updateRequested.type, handleUpdate);
 }

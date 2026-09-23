@@ -8,6 +8,7 @@ from ..services.portfolio_service import (
     delete_portfolio,
     get_portfolio,
     list_portfolios,
+    update_portfolio,
 )
 
 bp = Blueprint("portfolios", __name__, url_prefix="/api/portfolios")
@@ -48,6 +49,18 @@ def performance(portfolio_id: str):
     days = int(request.args.get("days", 500))
     series = compute_performance_series(portfolio["holdings"], lookback_days=days)
     return jsonify({"portfolio_id": portfolio_id, "series": series})
+
+
+@bp.put("/<portfolio_id>")
+def update(portfolio_id: str):
+    body = request.get_json(force=True) or {}
+    name = body.get("name")
+    if not name:
+        return jsonify({"error": "'name' is required"}), 400
+    portfolio = update_portfolio(portfolio_id, name=name)
+    if portfolio is None:
+        return jsonify({"error": "Portfolio not found"}), 404
+    return jsonify(portfolio)
 
 
 @bp.delete("/<portfolio_id>")

@@ -11,7 +11,7 @@ const NAV_ITEMS = [
       { to: "/prediction", label: "Prediction" },
     ],
   },
-  { to: "/portfolio", label: "Portfolio" },
+  { to: "/portfolio", label: "Portfolios" },
 ];
 
 function BarsIcon() {

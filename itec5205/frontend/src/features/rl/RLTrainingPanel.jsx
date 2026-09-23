@@ -24,7 +24,7 @@ export default function RLTrainingPanel({ pool }) {
         pool_id: pool._key,
         risk_aversion: Number(riskAversion),
         timesteps: Number(timesteps),
-        portfolio_name: `RL: ${pool.name}`,
+        portfolio_name: pool.name,
         mode,
         subset_size: Math.max(2, Math.min(499, Number(subsetSize) || 2)),
         lookback_days: Number(lookbackDays),
