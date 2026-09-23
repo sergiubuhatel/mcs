@@ -1,10 +1,17 @@
-import { NavLink } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import CarletonLogo from "./CarletonLogo";
 
 const NAV_ITEMS = [
-  { to: "/", label: "Analytics", end: true },
+  { to: "/", label: "Fundamental Analysis", end: true },
+  {
+    label: "Technical Analysis",
+    children: [
+      { to: "/pools", label: "Pool" },
+      { to: "/prediction", label: "Prediction" },
+    ],
+  },
   { to: "/portfolio", label: "Portfolio" },
-  { to: "/prediction", label: "Prediction" },
 ];
 
 function BarsIcon() {
@@ -15,7 +22,38 @@ function BarsIcon() {
   );
 }
 
+function ChevronIcon({ open }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s", flexShrink: 0 }}
+    >
+      <path d="M6 3L11 8L6 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const linkClassName = (collapsed) => ({ isActive }) =>
+  `rounded-md border-l-2 px-3 py-2 text-sm font-medium hover:bg-tertiary ${collapsed ? "text-center" : ""} ${isActive ? "" : "border-transparent"}`;
+
+const linkStyle = ({ isActive }) => ({
+  color: "var(--color-text-primary)",
+  background: isActive ? "var(--color-bg-tertiary)" : "transparent",
+  borderLeftColor: isActive ? "var(--color-text-accent)" : "transparent",
+});
+
 export default function Sidebar({ collapsed, onToggleCollapsed }) {
+  const location = useLocation();
+  const [openGroups, setOpenGroups] = useState(() =>
+    Object.fromEntries(NAV_ITEMS.filter((item) => item.children).map((item) => [item.label, true]))
+  );
+
+  const toggleGroup = (label) => setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }));
+
   return (
     <aside
       className="flex h-full flex-col border-r shrink-0 transition-[width]"
@@ -58,31 +96,62 @@ export default function Sidebar({ collapsed, onToggleCollapsed }) {
         </button>
       </div>
 
-      {!collapsed && (
-        <div className="px-4 pt-3 pb-1 text-[0.7rem] uppercase tracking-wide" style={{ color: "var(--color-text-secondary)" }}>
-          S&amp;P 500 Screener
-        </div>
-      )}
-
       <nav className="flex flex-col gap-1 px-2 py-2">
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) =>
-              `rounded-md border-l-2 px-3 py-2 text-sm font-medium hover:bg-tertiary ${collapsed ? "text-center" : ""} ${isActive ? "" : "border-transparent"}`
-            }
-            style={({ isActive }) => ({
-              color: "var(--color-text-primary)",
-              background: isActive ? "var(--color-bg-tertiary)" : "transparent",
-              borderLeftColor: isActive ? "var(--color-text-accent)" : "transparent",
-            })}
-            title={item.label}
-          >
-            {collapsed ? item.label.slice(0, 1) : item.label}
-          </NavLink>
-        ))}
+        {NAV_ITEMS.map((item) => {
+          if (item.children) {
+            const isGroupActive = item.children.some((c) => c.to === location.pathname);
+            const isOpen = collapsed ? true : !!openGroups[item.label];
+            return (
+              <div key={item.label}>
+                <button
+                  type="button"
+                  onClick={() => !collapsed && toggleGroup(item.label)}
+                  className={`flex w-full items-center rounded-md border-l-2 px-3 py-2 text-sm font-medium hover:bg-tertiary ${
+                    collapsed ? "justify-center text-center" : "justify-between"
+                  }`}
+                  style={{
+                    color: "var(--color-text-primary)",
+                    background: isGroupActive ? "var(--color-bg-tertiary)" : "transparent",
+                    borderLeftColor: isGroupActive ? "var(--color-text-accent)" : "transparent",
+                  }}
+                  title={item.label}
+                >
+                  <span>{collapsed ? item.label.slice(0, 1) : item.label}</span>
+                  {!collapsed && <ChevronIcon open={isOpen} />}
+                </button>
+                {isOpen && (
+                  <div className={collapsed ? "" : "ml-3 mt-1 flex flex-col gap-1 border-l pl-2"} style={{ borderColor: "var(--color-divider)" }}>
+                    {item.children.map((child) => (
+                      <NavLink
+                        key={child.to}
+                        to={child.to}
+                        end={child.end}
+                        className={linkClassName(collapsed)}
+                        style={linkStyle}
+                        title={child.label}
+                      >
+                        {collapsed ? child.label.slice(0, 1) : child.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={linkClassName(collapsed)}
+              style={linkStyle}
+              title={item.label}
+            >
+              {collapsed ? item.label.slice(0, 1) : item.label}
+            </NavLink>
+          );
+        })}
       </nav>
     </aside>
   );

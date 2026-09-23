@@ -7,7 +7,8 @@ import TopBar from "./layout/TopBar";
 import BottomBar from "./layout/BottomBar";
 
 import ScreenerPage from "./pages/ScreenerPage";
-import PortfolioPage from "./pages/PortfolioPage";
+import PoolsPage from "./pages/PoolsPage";
+import PortfoliosPage from "./pages/PortfoliosPage";
 import PredictionPage from "./pages/PredictionPage";
 import CompanyDetailPage from "./pages/CompanyDetailPage";
 import PortfolioDetailPage from "./pages/PortfolioDetailPage";
@@ -30,7 +31,8 @@ export default function App() {
         <main className="min-h-0 flex-1 overflow-auto p-4">
           <Routes>
             <Route path="/" element={<ScreenerPage />} />
-            <Route path="/portfolio" element={<PortfolioPage />} />
+            <Route path="/pools" element={<PoolsPage />} />
+            <Route path="/portfolio" element={<PortfoliosPage />} />
             <Route path="/prediction" element={<PredictionPage />} />
             <Route path="/companies/:ticker" element={<CompanyDetailPage />} />
             <Route path="/portfolios/:id" element={<PortfolioDetailPage />} />
