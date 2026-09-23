@@ -36,6 +36,24 @@ def get_pool(pool_id: str) -> dict | None:
     return col.get(pool_id) if col.has(pool_id) else None
 
 
+def update_pool(pool_id: str, name: str | None = None, tickers: list[str] | None = None) -> dict | None:
+    db = get_db()
+    col = db.collection("pools")
+    if not col.has(pool_id):
+        return None
+    if tickers is not None and not tickers:
+        raise ValueError("A pool needs at least one ticker")
+
+    patch = {}
+    if name is not None:
+        patch["name"] = name
+    if tickers is not None:
+        patch["tickers"] = [t.upper() for t in tickers]
+    if patch:
+        col.update({"_key": pool_id, **patch})
+    return col.get(pool_id)
+
+
 def delete_pool(pool_id: str) -> bool:
     db = get_db()
     col = db.collection("pools")

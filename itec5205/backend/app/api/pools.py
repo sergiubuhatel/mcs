@@ -2,7 +2,7 @@
 
 from flask import Blueprint, jsonify, request
 
-from ..services.pool_service import create_pool, delete_pool, get_pool, list_pools
+from ..services.pool_service import create_pool, delete_pool, get_pool, list_pools, update_pool
 
 bp = Blueprint("pools", __name__, url_prefix="/api/pools")
 
@@ -32,6 +32,22 @@ def create():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify(pool), 201
+
+
+@bp.put("/<pool_id>")
+def update(pool_id: str):
+    body = request.get_json(force=True) or {}
+    name = body.get("name")
+    tickers = body.get("tickers")
+    if name is None and tickers is None:
+        return jsonify({"error": "Nothing to update -- pass 'name' and/or 'tickers'"}), 400
+    try:
+        pool = update_pool(pool_id, name=name, tickers=tickers)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if pool is None:
+        return jsonify({"error": "Pool not found"}), 404
+    return jsonify(pool)
 
 
 @bp.delete("/<pool_id>")
