@@ -1,4 +1,5 @@
 import { call, put, takeLatest } from "redux-saga/effects";
+import { toast } from "react-toastify";
 import { apiClient } from "../../api/client";
 import {
   createFailed,
@@ -29,6 +30,7 @@ function* handleCreate(action) {
   try {
     const { data } = yield call(apiClient.post, "/api/pools", action.payload);
     yield put(createSucceeded(data));
+    toast.success("Pool saved");
   } catch (err) {
     yield put(createFailed(err.response?.data?.error || err.message));
   }
@@ -48,6 +50,7 @@ function* handleUpdate(action) {
     const { id, ...changes } = action.payload;
     const { data } = yield call(apiClient.put, `/api/pools/${id}`, changes);
     yield put(updateSucceeded(data));
+    toast.success("Pool saved");
   } catch (err) {
     yield put(updateFailed(err.response?.data?.error || err.message));
   }

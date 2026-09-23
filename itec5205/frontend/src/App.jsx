@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Route, Routes } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 import Sidebar from "./layout/Sidebar";
 import TopBar from "./layout/TopBar";
@@ -41,6 +43,8 @@ export default function App() {
 
         <BottomBar />
       </div>
+
+      <ToastContainer position="bottom-right" autoClose={3000} theme={darkMode ? "dark" : "light"} />
     </div>
   );
 }

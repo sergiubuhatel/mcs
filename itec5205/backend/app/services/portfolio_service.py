@@ -121,6 +121,7 @@ def _with_company_details(holdings: list[dict]) -> list[dict]:
                 ticker: c._key,
                 name: c.name,
                 market_cap: stats.market_cap,
+                trailing_pe: stats.trailing_pe,
                 forward_pe: stats.forward_pe,
                 revenue_growth_yoy_q: stats.revenue_growth_yoy_q,
                 earnings_growth_yoy_q: stats.earnings_growth_yoy_q

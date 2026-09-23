@@ -19,6 +19,8 @@ export default function PoolsPage() {
     dispatch(fetchRequested());
   }, [dispatch]);
 
+  const sortedItems = [...items].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
   const activePool = items.find((p) => p._key === activePoolId);
 
   const selectPool = (id) => {
@@ -67,7 +69,7 @@ export default function PoolsPage() {
           </colgroup>
           <thead><tr><th>Name</th><th>Tickers</th><th>Created</th><th>Action</th></tr></thead>
           <tbody>
-            {items.map((p) => {
+            {sortedItems.map((p) => {
               const isEditing = editingId === p._key;
               return (
                 <tr key={p._key}>

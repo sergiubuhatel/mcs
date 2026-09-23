@@ -5,13 +5,16 @@ import { deleteRequested, fetchRequested, updateRequested } from "../features/po
 import ManualPortfolioForm from "../features/portfolios/ManualPortfolioForm";
 import ActionMenu from "../components/ActionMenu";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
+import Modal from "../components/Modal";
+import { PlusIcon, SaveIcon } from "../layout/icons";
 
 export default function PortfoliosPage() {
   const dispatch = useDispatch();
-  const { items, loading } = useSelector((s) => s.portfolios);
+  const { items, loading, creating } = useSelector((s) => s.portfolios);
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [buildOpen, setBuildOpen] = useState(false);
 
   useEffect(() => {
     dispatch(fetchRequested());
@@ -34,11 +37,22 @@ export default function PortfoliosPage() {
     setDeleteTarget(null);
   };
 
+  const sortedItems = [...items].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
   return (
     <div>
-      <ManualPortfolioForm />
-
       <div className="card">
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <button
+            className="close-btn"
+            style={{ position: "static" }}
+            onClick={() => setBuildOpen(true)}
+            title="Build a manual portfolio"
+            aria-label="Build a manual portfolio"
+          >
+            <PlusIcon width={18} height={18} />
+          </button>
+        </div>
         {loading && <p className="muted">Loading...</p>}
         {items.length === 0 && !loading && <p className="muted">No portfolios yet.</p>}
         <table style={{ tableLayout: "fixed", width: "100%" }}>
@@ -48,9 +62,9 @@ export default function PortfoliosPage() {
             <col style={{ width: 110 }} />
             <col style={{ width: 70 }} />
           </colgroup>
-          <thead><tr><th>Name</th><th>Holdings</th><th>Created</th><th>Action</th></tr></thead>
+          <thead><tr><th>Name</th><th>Tickers</th><th>Created</th><th>Action</th></tr></thead>
           <tbody>
-            {items.map((p) => {
+            {sortedItems.map((p) => {
               const isEditing = editingId === p._key;
               const tickers = p.holdings.map((h) => h.ticker).join(", ");
               return (
@@ -103,6 +117,27 @@ export default function PortfoliosPage() {
         itemName={deleteTarget?.name}
         title="Delete portfolio"
       />
+
+      <Modal
+        isOpen={buildOpen}
+        onClose={() => setBuildOpen(false)}
+        title="Build a manual portfolio"
+        headerActions={
+          <button
+            className="close-btn"
+            style={{ position: "static", opacity: creating ? 0.5 : 1, cursor: creating ? "not-allowed" : "pointer" }}
+            type="submit"
+            form="manual-portfolio-form"
+            disabled={creating}
+            title="Save"
+            aria-label="Save"
+          >
+            <SaveIcon width={18} height={18} />
+          </button>
+        }
+      >
+        <ManualPortfolioForm onDone={() => setBuildOpen(false)} />
+      </Modal>
     </div>
   );
 }

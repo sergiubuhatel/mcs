@@ -115,4 +115,19 @@ tr:hover td { background: var(--color-bg-hover); }
 .progress-bar { height: 8px; background: var(--color-bg-tertiary); border-radius: 4px; overflow: hidden; margin: 8px 0; }
 .progress-bar > div { height: 100%; background: var(--color-text-accent); transition: width 0.2s; }
 
+/* react-toastify -- same border/background theming approach threat2_trunk
+   uses for its toasts, mapped onto this app's own --color-* variables. */
+.Toastify__toast-theme--dark {
+  border: 1px solid var(--color-divider);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+}
+.Toastify__toast-theme--dark .Toastify__close-button { color: var(--color-text-primary); opacity: 0.8; }
+.Toastify__toast-theme--dark .Toastify__close-button:hover { opacity: 1; }
+.Toastify__toast-theme--light {
+  border: 1px solid var(--color-divider);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+}
+
 .holdings-table td.weight { font-weight: 600; }

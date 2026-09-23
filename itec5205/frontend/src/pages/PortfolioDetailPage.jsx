@@ -29,6 +29,7 @@ const HOLDINGS_COLUMNS = [
   { key: "ticker", label: "Ticker" },
   { key: "name", label: "Company" },
   { key: "market_cap", label: "Market Cap" },
+  { key: "trailing_pe", label: "Trailing P/E" },
   { key: "forward_pe", label: "Forward P/E" },
   { key: "revenue_growth_yoy_q", label: "Revenue Growth" },
   { key: "earnings_growth_yoy_q", label: "Earnings Growth" },
@@ -136,6 +137,7 @@ export default function PortfolioDetailPage() {
                   </td>
                   <td style={{ textAlign: "left" }}>{h.name || "-"}</td>
                   <td>{fmtLarge(h.market_cap != null ? h.market_cap * 1e6 : null)}</td>
+                  <td>{fmtNum(h.trailing_pe)}</td>
                   <td>{fmtNum(h.forward_pe)}</td>
                   <td>{fmtPct(h.revenue_growth_yoy_q)}</td>
                   <td>{fmtPct(h.earnings_growth_yoy_q)}</td>

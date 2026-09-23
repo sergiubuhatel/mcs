@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { createRequested } from "./portfoliosSlice";
-import { PlusIcon, SaveIcon, TrashIcon } from "../../layout/icons";
+import { TrashIcon } from "../../layout/icons";
 
-export default function ManualPortfolioForm() {
+export default function ManualPortfolioForm({ onDone }) {
   const dispatch = useDispatch();
   const { creating, error } = useSelector((s) => s.portfolios);
   const [name, setName] = useState("");
@@ -24,11 +24,11 @@ export default function ManualPortfolioForm() {
     dispatch(createRequested({ name: name.trim(), holdings, method: "manual" }));
     setName("");
     setRows([{ ticker: "", weight: "" }]);
+    onDone?.();
   };
 
   return (
-    <form className="card" onSubmit={submit}>
-      <h3>Build a manual portfolio</h3>
+    <form id="manual-portfolio-form" onSubmit={submit}>
       <div className="filters-grid">
         <div>
           <label>Portfolio name</label>
@@ -38,13 +38,14 @@ export default function ManualPortfolioForm() {
       {rows.map((row, i) => (
         <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
           <input placeholder="Ticker" value={row.ticker} onChange={(e) => updateRow(i, "ticker", e.target.value)} style={{ width: 100 }} />
-          <input placeholder="Weight" type="number" step="0.01" value={row.weight} onChange={(e) => updateRow(i, "weight", e.target.value)} style={{ width: 100 }} />
-          <button type="button" className="btn secondary" onClick={() => removeRow(i)}>Remove</button>
+          <input placeholder="Weight %" type="number" step="0.01" value={row.weight} onChange={(e) => updateRow(i, "weight", e.target.value)} style={{ width: 100 }} />
+          <button type="button" className="btn secondary" onClick={() => removeRow(i)}>
+            <TrashIcon /> Remove
+          </button>
         </div>
       ))}
-      <button type="button" className="btn secondary" onClick={addRow}>+ Add ticker</button>{" "}
-      <button className="btn" type="submit" disabled={creating}>Save portfolio</button>
-      <p className="muted">Weights don't need to sum to 1 — they're normalized automatically.</p>
+      <button type="button" className="btn secondary" onClick={addRow}>+ Add ticker</button>
+      <p className="muted">Enter weights as percentages (e.g. 25 for 25%) — they don't need to sum to 100, they're normalized automatically.</p>
       {error && <p className="error-text">{error}</p>}
     </form>
   );
