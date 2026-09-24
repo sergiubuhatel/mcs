@@ -201,6 +201,15 @@ export function ListIcon(props) {
   );
 }
 
+export function ColumnsIcon(props) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <rect x="3.5" y="4" width="17" height="16" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M9.5 4v16M14.5 4v16" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 export function CloseIcon(props) {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>

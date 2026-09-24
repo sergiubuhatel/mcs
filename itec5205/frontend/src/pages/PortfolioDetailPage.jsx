@@ -5,6 +5,8 @@ import { apiClient } from "../api/client";
 import { CloseIcon } from "../layout/icons";
 import { INTERVALS, filterByInterval } from "../utils/dateRanges";
 import { tooltipProps } from "../utils/chartTheme";
+import { useColumnConfig } from "../utils/useColumnConfig";
+import ColumnPicker from "../components/ColumnPicker";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -46,17 +48,40 @@ function computeVolatilityFromSeries(rangeSeries) {
 }
 
 const HOLDINGS_COLUMNS = [
-  { key: "ticker", label: "Ticker" },
-  { key: "name", label: "Company" },
-  { key: "day_change", label: "Change (1D)" },
-  { key: "stock_growth_1y", label: "Change (1Y)" },
-  { key: "volatility", label: "Volatility (1Y)" },
-  { key: "market_cap", label: "Market Cap" },
-  { key: "trailing_pe", label: "Trailing P/E" },
-  { key: "forward_pe", label: "Forward P/E" },
-  { key: "revenue_growth_yoy_q", label: "Revenue Growth" },
-  { key: "earnings_growth_yoy_q", label: "Earnings Growth" },
-  { key: "weight", label: "Weight" },
+  {
+    key: "ticker",
+    label: "Ticker",
+    locked: true,
+    render: (h) => <Link to={`/companies/${h.ticker}`} onClick={(e) => e.stopPropagation()}>{h.ticker}</Link>,
+  },
+  { key: "name", label: "Company", render: (h) => h.name || "-" },
+  {
+    key: "day_change",
+    label: "Change (1D)",
+    render: (h) => (
+      <span style={{ color: changeColor(h.day_change), fontWeight: 600 }}>
+        {h.day_change != null && h.day_change > 0 ? "+" : ""}
+        {fmtPct(h.day_change)}
+      </span>
+    ),
+  },
+  {
+    key: "stock_growth_1y",
+    label: "Change (1Y)",
+    render: (h) => (
+      <span style={{ color: changeColor(h.stock_growth_1y), fontWeight: 600 }}>
+        {h.stock_growth_1y != null && h.stock_growth_1y > 0 ? "+" : ""}
+        {fmtPct(h.stock_growth_1y)}
+      </span>
+    ),
+  },
+  { key: "volatility", label: "Volatility (1Y)", render: (h) => fmtPct(h.volatility) },
+  { key: "market_cap", label: "Market Cap", render: (h) => fmtLarge(h.market_cap != null ? h.market_cap * 1e6 : null) },
+  { key: "trailing_pe", label: "Trailing P/E", render: (h) => fmtNum(h.trailing_pe) },
+  { key: "forward_pe", label: "Forward P/E", render: (h) => fmtNum(h.forward_pe) },
+  { key: "revenue_growth_yoy_q", label: "Revenue Growth", render: (h) => fmtPct(h.revenue_growth_yoy_q) },
+  { key: "earnings_growth_yoy_q", label: "Earnings Growth", render: (h) => fmtPct(h.earnings_growth_yoy_q) },
+  { key: "weight", label: "Weight", className: "weight", render: (h) => `${(h.weight * 100).toFixed(2)}%` },
 ];
 
 export default function PortfolioDetailPage() {
@@ -68,6 +93,7 @@ export default function PortfolioDetailPage() {
   const [range, setRange] = useState("1Y");
   const [sortBy, setSortBy] = useState("weight");
   const [sortDir, setSortDir] = useState("desc");
+  const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("portfolioHoldings", HOLDINGS_COLUMNS);
 
   const onSortClick = (key) => {
     if (key === sortBy) setSortDir((d) => (d === "desc" ? "asc" : "desc"));
@@ -130,10 +156,13 @@ export default function PortfolioDetailPage() {
           {" · "}Volatility: <strong>{fmtPct(portfolio.expected_volatility)}</strong>
           {" · "}Sharpe: <strong>{portfolio.sharpe_ratio ?? "-"}</strong>
         </p>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
+        </div>
         <table className="holdings-table">
           <thead>
             <tr>
-              {HOLDINGS_COLUMNS.map((c) => (
+              {visibleColumns.map((c) => (
                 <th key={c.key} className={sortBy === c.key ? "sorted" : ""} onClick={() => onSortClick(c.key)} style={{ cursor: "pointer" }}>
                   {c.label}
                   <span style={{ visibility: sortBy === c.key ? "visible" : "hidden" }}>
@@ -157,25 +186,11 @@ export default function PortfolioDetailPage() {
               })
               .map((h) => (
                 <tr key={h.ticker} onClick={() => navigate(`/companies/${h.ticker}`)} style={{ cursor: "pointer" }}>
-                  <td style={{ textAlign: "left" }}>
-                    <Link to={`/companies/${h.ticker}`} onClick={(e) => e.stopPropagation()}>{h.ticker}</Link>
-                  </td>
-                  <td style={{ textAlign: "left" }}>{h.name || "-"}</td>
-                  <td style={{ color: changeColor(h.day_change), fontWeight: 600 }}>
-                    {h.day_change != null && h.day_change > 0 ? "+" : ""}
-                    {fmtPct(h.day_change)}
-                  </td>
-                  <td style={{ color: changeColor(h.stock_growth_1y), fontWeight: 600 }}>
-                    {h.stock_growth_1y != null && h.stock_growth_1y > 0 ? "+" : ""}
-                    {fmtPct(h.stock_growth_1y)}
-                  </td>
-                  <td>{fmtPct(h.volatility)}</td>
-                  <td>{fmtLarge(h.market_cap != null ? h.market_cap * 1e6 : null)}</td>
-                  <td>{fmtNum(h.trailing_pe)}</td>
-                  <td>{fmtNum(h.forward_pe)}</td>
-                  <td>{fmtPct(h.revenue_growth_yoy_q)}</td>
-                  <td>{fmtPct(h.earnings_growth_yoy_q)}</td>
-                  <td className="weight">{(h.weight * 100).toFixed(2)}%</td>
+                  {visibleColumns.map((c) => (
+                    <td key={c.key} className={c.className} style={c.key === "ticker" || c.key === "name" ? { textAlign: "left" } : undefined}>
+                      {c.render(h)}
+                    </td>
+                  ))}
                 </tr>
               ))}
           </tbody>

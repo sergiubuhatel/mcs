@@ -7,7 +7,45 @@ import ActionMenu from "../components/ActionMenu";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import Modal from "../components/Modal";
 import LoadingSpinner from "../components/LoadingSpinner";
+import ColumnPicker from "../components/ColumnPicker";
+import { useColumnConfig } from "../utils/useColumnConfig";
 import { PlusIcon, SaveIcon } from "../layout/icons";
+
+const PORTFOLIO_COLUMNS = [
+  {
+    key: "name",
+    label: "Name",
+    locked: true,
+    width: 400,
+    render: (p, ctx) =>
+      ctx.isEditing ? (
+        <input value={ctx.editName} onChange={(e) => ctx.setEditName(e.target.value)} style={{ width: "100%" }} />
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+          <Link
+            to={`/portfolios/${p._key}`}
+            title={p.name}
+            style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}
+          >
+            {p.name}
+          </Link>
+        </div>
+      ),
+  },
+  {
+    key: "tickers",
+    label: "Tickers",
+    render: (p) => {
+      const tickers = p.holdings.map((h) => h.ticker).join(", ");
+      return (
+        <span title={tickers} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {tickers}
+        </span>
+      );
+    },
+  },
+  { key: "created_at", label: "Created", width: 110, render: (p) => new Date(p.created_at).toLocaleDateString() },
+];
 
 export default function PortfoliosPage() {
   const dispatch = useDispatch();
@@ -50,10 +88,13 @@ export default function PortfoliosPage() {
 
   const sortedItems = [...items].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
+  const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("portfoliosGrid", PORTFOLIO_COLUMNS);
+
   return (
     <div>
       <div className="card">
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
           <button
             className="close-btn"
             style={{ position: "static" }}
@@ -68,42 +109,30 @@ export default function PortfoliosPage() {
         {items.length === 0 && !loading && <p className="muted">No portfolios yet.</p>}
         <table style={{ tableLayout: "fixed", width: "100%" }}>
           <colgroup>
-            <col style={{ width: 400 }} />
-            <col />
-            <col style={{ width: 110 }} />
+            {visibleColumns.map((c) => (
+              <col key={c.key} style={c.width ? { width: c.width } : undefined} />
+            ))}
             <col style={{ width: 70 }} />
           </colgroup>
-          <thead><tr><th>Name</th><th>Tickers</th><th>Created</th><th>Action</th></tr></thead>
+          <thead>
+            <tr>
+              {visibleColumns.map((c) => (
+                <th key={c.key}>{c.label}</th>
+              ))}
+              <th>Action</th>
+            </tr>
+          </thead>
           <tbody>
             {sortedItems.map((p) => {
               const isEditing = editingId === p._key;
-              const tickers = p.holdings.map((h) => h.ticker).join(", ");
+              const ctx = { isEditing, editName, setEditName };
               return (
                 <tr key={p._key}>
-                  <td style={{ textAlign: "left", maxWidth: 0 }}>
-                    {isEditing ? (
-                      <input value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: "100%" }} />
-                    ) : (
-                      <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
-                        <Link
-                          to={`/portfolios/${p._key}`}
-                          title={p.name}
-                          style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}
-                        >
-                          {p.name}
-                        </Link>
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ textAlign: "left", maxWidth: 0 }}>
-                    <span
-                      title={tickers}
-                      style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                    >
-                      {tickers}
-                    </span>
-                  </td>
-                  <td>{new Date(p.created_at).toLocaleDateString()}</td>
+                  {visibleColumns.map((c) => (
+                    <td key={c.key} style={c.key !== "created_at" ? { textAlign: "left", maxWidth: 0 } : undefined}>
+                      {c.render(p, ctx)}
+                    </td>
+                  ))}
                   <td>
                     {isEditing ? (
                       <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>

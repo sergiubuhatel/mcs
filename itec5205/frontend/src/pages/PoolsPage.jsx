@@ -6,6 +6,47 @@ import RLTrainingPanel from "../features/rl/RLTrainingPanel";
 import ActionMenu from "../components/ActionMenu";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import LoadingSpinner from "../components/LoadingSpinner";
+import ColumnPicker from "../components/ColumnPicker";
+import { useColumnConfig } from "../utils/useColumnConfig";
+
+const POOL_COLUMNS = [
+  {
+    key: "name",
+    label: "Name",
+    locked: true,
+    width: 400,
+    render: (p, ctx) =>
+      ctx.isEditing ? (
+        <input value={ctx.editName} onChange={(e) => ctx.setEditName(e.target.value)} style={{ width: "100%" }} />
+      ) : (
+        <a
+          onClick={() => ctx.selectPool(p._key)}
+          title={p.name}
+          style={{ cursor: "pointer", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        >
+          {p.name}
+        </a>
+      ),
+  },
+  {
+    key: "tickers",
+    label: "Tickers",
+    render: (p, ctx) =>
+      ctx.isEditing && ctx.editMode === "full" ? (
+        <input
+          value={ctx.editTickers}
+          onChange={(e) => ctx.setEditTickers(e.target.value)}
+          style={{ width: "100%" }}
+          placeholder="Comma-separated tickers"
+        />
+      ) : (
+        <span title={p.tickers.join(", ")} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {p.tickers.join(", ")}
+        </span>
+      ),
+  },
+  { key: "created_at", label: "Created", width: 110, render: (p) => new Date(p.created_at).toLocaleDateString() },
+];
 
 export default function PoolsPage() {
   const dispatch = useDispatch();
@@ -66,60 +107,49 @@ export default function PoolsPage() {
     dispatch(createRequested({ name: `${p.name} (copy)`, tickers: p.tickers, filters: p.filters }));
   };
 
+  const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("poolsGrid", POOL_COLUMNS);
+
   return (
     <div>
       <div className="card">
-        <h2>Candidate investment pools</h2>
-        <p className="muted">
-          Saved from the Screener page. Pick a pool below to run reinforcement learning over it and get a
-          recommended low-risk / high-return allocation.
-        </p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div>
+            <h2>Candidate investment pools</h2>
+            <p className="muted">
+              Saved from the Screener page. Pick a pool below to run reinforcement learning over it and get a
+              recommended low-risk / high-return allocation.
+            </p>
+          </div>
+          <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
+        </div>
         {loading && <LoadingSpinner />}
         {items.length === 0 && !loading && <p className="muted">No pools yet — go to the Screener, select some tickers, and save a pool.</p>}
         <table style={{ tableLayout: "fixed", width: "100%" }}>
           <colgroup>
-            <col style={{ width: 400 }} />
-            <col />
-            <col style={{ width: 110 }} />
+            {visibleColumns.map((c) => (
+              <col key={c.key} style={c.width ? { width: c.width } : undefined} />
+            ))}
             <col style={{ width: 70 }} />
           </colgroup>
-          <thead><tr><th>Name</th><th>Tickers</th><th>Created</th><th>Action</th></tr></thead>
+          <thead>
+            <tr>
+              {visibleColumns.map((c) => (
+                <th key={c.key}>{c.label}</th>
+              ))}
+              <th>Action</th>
+            </tr>
+          </thead>
           <tbody>
             {sortedItems.map((p) => {
               const isEditing = editingId === p._key;
+              const ctx = { isEditing, editMode, editName, setEditName, editTickers, setEditTickers, selectPool };
               return (
                 <tr key={p._key}>
-                  <td style={{ textAlign: "left", maxWidth: 0 }}>
-                    {isEditing ? (
-                      <input value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: "100%" }} />
-                    ) : (
-                      <a
-                        onClick={() => selectPool(p._key)}
-                        title={p.name}
-                        style={{ cursor: "pointer", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                      >
-                        {p.name}
-                      </a>
-                    )}
-                  </td>
-                  <td style={{ textAlign: "left", maxWidth: 0 }}>
-                    {isEditing && editMode === "full" ? (
-                      <input
-                        value={editTickers}
-                        onChange={(e) => setEditTickers(e.target.value)}
-                        style={{ width: "100%" }}
-                        placeholder="Comma-separated tickers"
-                      />
-                    ) : (
-                      <span
-                        title={p.tickers.join(", ")}
-                        style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                      >
-                        {p.tickers.join(", ")}
-                      </span>
-                    )}
-                  </td>
-                  <td>{new Date(p.created_at).toLocaleDateString()}</td>
+                  {visibleColumns.map((c) => (
+                    <td key={c.key} style={c.key !== "created_at" ? { textAlign: "left", maxWidth: 0 } : undefined}>
+                      {c.render(p, ctx)}
+                    </td>
+                  ))}
                   <td>
                     {isEditing ? (
                       <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>

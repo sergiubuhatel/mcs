@@ -4,23 +4,8 @@ import { useDispatch, useSelector } from "react-redux";
 import { fetchRequested, setFilters, toggleSelectAll, toggleSelected } from "./companiesSlice";
 import { ListIcon, SpinnerIcon } from "../../layout/icons";
 import { sectorColor } from "../../utils/sectorColors";
-
-const COLUMNS = [
-  { key: "ticker", label: "Ticker", sortable: true },
-  { key: "name", label: "Company", sortable: true, left: true },
-  { key: "sector", label: "Sector", sortable: true, left: true },
-  { key: "current_price", label: "Price", sortable: true },
-  { key: "day_change", label: "Change (1D)", sortable: true },
-  { key: "stock_growth_1y", label: "Change (1Y)", sortable: true },
-  { key: "volatility", label: "Volatility (1Y)", sortable: true, fmt: fmtPct },
-  { key: "market_cap", label: "Mkt Cap", sortable: true, fmt: (v) => fmtLarge(v) },
-  { key: "trailing_pe", label: "P/E", sortable: true, fmt: fmtNum },
-  { key: "revenue_growth_yoy", label: "Rev Growth", sortable: true, fmt: fmtPct },
-  { key: "earnings_growth_yoy_q", label: "EPS Growth", sortable: true, fmt: fmtPct },
-  { key: "roe", label: "ROE", sortable: true, fmt: fmtPct },
-  { key: "roa", label: "ROA", sortable: true, fmt: fmtPct },
-  { key: "debt_to_equity", label: "D/E", sortable: true, fmt: fmtNum },
-];
+import { useColumnConfig } from "../../utils/useColumnConfig";
+import ColumnPicker from "../../components/ColumnPicker";
 
 function fmtNum(v) {
   return v === null || v === undefined ? "-" : Number(v).toFixed(2);
@@ -56,6 +41,79 @@ export default function CompanyTable() {
   const { results, total, filters, selected, loading, error } = useSelector((s) => s.companies);
   const selectAllRef = useRef(null);
 
+  const COLUMNS = [
+    { key: "ticker", label: "Ticker", sortable: true, locked: true, width: 70, render: (row) => <Link to={`/companies/${row.ticker}`} onClick={(e) => e.stopPropagation()}>{row.ticker}</Link> },
+    {
+      key: "name",
+      label: "Company",
+      sortable: true,
+      left: true,
+      width: undefined,
+      render: (row) => (
+        <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>
+          {row.name}
+        </span>
+      ),
+    },
+    {
+      key: "sector",
+      label: "Sector",
+      sortable: true,
+      left: true,
+      width: 150,
+      render: (row) =>
+        row.sector ? (
+          <span className="pill" style={{ background: `${sectorColor(row.sector)}26`, color: sectorColor(row.sector) }}>
+            {row.sector}
+          </span>
+        ) : (
+          "-"
+        ),
+    },
+    {
+      key: "current_price",
+      label: "Price",
+      sortable: true,
+      width: 85,
+      render: (row) => (
+        <span style={{ color: changeColor(dayChangePct(row)), fontWeight: 600 }}>
+          {row.current_price != null ? `$${Number(row.current_price).toFixed(2)}` : "-"}
+        </span>
+      ),
+    },
+    {
+      key: "day_change",
+      label: "Change (1D)",
+      sortable: true,
+      width: 95,
+      render: (row) => {
+        const chg = dayChangePct(row);
+        return (
+          <span style={{ color: changeColor(chg), fontWeight: 600 }}>
+            {chg === null ? "-" : `${chg > 0 ? "+" : ""}${chg.toFixed(2)}%`}
+          </span>
+        );
+      },
+    },
+    {
+      key: "stock_growth_1y",
+      label: "Change (1Y)",
+      sortable: true,
+      width: 95,
+      render: (row) => <span style={{ color: changeColor(row.stock_growth_1y), fontWeight: 600 }}>{fmtSignedPct(row.stock_growth_1y)}</span>,
+    },
+    { key: "volatility", label: "Volatility (1Y)", sortable: true, width: 95, render: (row) => fmtPct(row.volatility) },
+    { key: "market_cap", label: "Mkt Cap", sortable: true, width: 90, render: (row) => fmtLarge(row.market_cap != null ? row.market_cap * 1e6 : null) },
+    { key: "trailing_pe", label: "P/E", sortable: true, width: 70, render: (row) => fmtNum(row.trailing_pe) },
+    { key: "revenue_growth_yoy", label: "Rev Growth", sortable: true, width: 95, render: (row) => fmtPct(row.revenue_growth_yoy) },
+    { key: "earnings_growth_yoy_q", label: "EPS Growth", sortable: true, width: 95, render: (row) => fmtPct(row.earnings_growth_yoy_q) },
+    { key: "roe", label: "ROE", sortable: true, width: 70, render: (row) => fmtPct(row.roe) },
+    { key: "roa", label: "ROA", sortable: true, width: 70, render: (row) => fmtPct(row.roa) },
+    { key: "debt_to_equity", label: "D/E", sortable: true, width: 70, render: (row) => fmtNum(row.debt_to_equity) },
+  ];
+
+  const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("companyTable", COLUMNS);
+
   const onSort = (key) => {
     const sortDir = filters.sortBy === key && filters.sortDir === "desc" ? "asc" : "desc";
     dispatch(setFilters({ sortBy: key, sortDir }));
@@ -83,7 +141,7 @@ export default function CompanyTable() {
 
   return (
     <div className="card">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div className="icon-badge" style={{ background: "rgba(59,130,246,0.15)", color: "#3b82f6" }}>
             <ListIcon />
@@ -92,27 +150,19 @@ export default function CompanyTable() {
             Results {loading ? <SpinnerIcon className="spin" style={{ color: "var(--color-text-accent)" }} /> : `(${total})`}
           </h3>
         </div>
-        <span className="muted">{selectedCount} selected for pool</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span className="muted">{selectedCount} selected for pool</span>
+          <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
+        </div>
       </div>
       {error && <p className="error-text">{error}</p>}
       <div style={{ overflowX: "auto" }}>
         <table style={{ tableLayout: "fixed", width: "100%" }}>
           <colgroup>
             <col style={{ width: 34 }} />
-            <col style={{ width: 70 }} />
-            <col />
-            <col style={{ width: 150 }} />
-            <col style={{ width: 85 }} />
-            <col style={{ width: 95 }} />
-            <col style={{ width: 95 }} />
-            <col style={{ width: 95 }} />
-            <col style={{ width: 90 }} />
-            <col style={{ width: 70 }} />
-            <col style={{ width: 95 }} />
-            <col style={{ width: 95 }} />
-            <col style={{ width: 70 }} />
-            <col style={{ width: 70 }} />
-            <col style={{ width: 70 }} />
+            {visibleColumns.map((c) => (
+              <col key={c.key} style={c.width ? { width: c.width } : undefined} />
+            ))}
           </colgroup>
           <thead>
             <tr>
@@ -126,7 +176,7 @@ export default function CompanyTable() {
                   title="Select all on this page"
                 />
               </th>
-              {COLUMNS.map((c) => (
+              {visibleColumns.map((c) => (
                 <th
                   key={c.key}
                   className={filters.sortBy === c.key ? "sorted" : ""}
@@ -153,38 +203,14 @@ export default function CompanyTable() {
                 <td onClick={(e) => e.stopPropagation()}>
                   <input type="checkbox" checked={!!selected[row.ticker]} onChange={() => dispatch(toggleSelected(row.ticker))} />
                 </td>
-                <td><Link to={`/companies/${row.ticker}`} onClick={(e) => e.stopPropagation()}>{row.ticker}</Link></td>
-                <td style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>
-                  {row.name}
-                </td>
-                <td style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {row.sector ? (
-                    <span className="pill" style={{ background: `${sectorColor(row.sector)}26`, color: sectorColor(row.sector) }}>
-                      {row.sector}
-                    </span>
-                  ) : (
-                    "-"
-                  )}
-                </td>
-                <td style={{ color: changeColor(dayChangePct(row)), fontWeight: 600 }}>
-                  {row.current_price != null ? `$${Number(row.current_price).toFixed(2)}` : "-"}
-                </td>
-                <td style={{ color: changeColor(dayChangePct(row)), fontWeight: 600 }}>
-                  {(() => {
-                    const chg = dayChangePct(row);
-                    if (chg === null) return "-";
-                    return `${chg > 0 ? "+" : ""}${chg.toFixed(2)}%`;
-                  })()}
-                </td>
-                <td style={{ color: changeColor(row.stock_growth_1y), fontWeight: 600 }}>{fmtSignedPct(row.stock_growth_1y)}</td>
-                <td>{fmtPct(row.volatility)}</td>
-                <td>{fmtLarge(row.market_cap != null ? row.market_cap * 1e6 : null)}</td>
-                <td>{fmtNum(row.trailing_pe)}</td>
-                <td>{fmtPct(row.revenue_growth_yoy)}</td>
-                <td>{fmtPct(row.earnings_growth_yoy_q)}</td>
-                <td>{fmtPct(row.roe)}</td>
-                <td>{fmtPct(row.roa)}</td>
-                <td>{fmtNum(row.debt_to_equity)}</td>
+                {visibleColumns.map((c) => (
+                  <td
+                    key={c.key}
+                    style={c.left ? { textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } : undefined}
+                  >
+                    {c.render(row)}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
