@@ -37,8 +37,22 @@ export default function TopBar() {
       className="flex h-14 shrink-0 items-center justify-between px-4"
       style={{ borderBottom: "1px solid var(--color-divider)", background: "var(--color-bg-secondary)" }}
     >
-      <span style={{ color: "var(--color-text-primary)", fontWeight: 600, fontSize: "0.95rem" }}>
-        Investment Decision Support
+      <span
+        style={{
+          color: "var(--color-text-primary)",
+          fontWeight: 600,
+          fontSize: "0.95rem",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0,
+        }}
+        title="Investment Decision Support (A Data-Driven Framework for S&P 500 Stock Screening, Portfolio Allocation, and Price Prediction)"
+      >
+        Investment Decision Support{" "}
+        <span style={{ fontWeight: 400, color: "var(--color-text-secondary)", fontSize: "0.82rem" }}>
+          (A Data-Driven Framework for S&amp;P 500 Stock Screening, Portfolio Allocation, and Price Prediction)
+        </span>
       </span>
       <button
         className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-tertiary"
