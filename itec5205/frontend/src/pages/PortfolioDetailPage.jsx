@@ -25,6 +25,26 @@ function changeColor(value) {
   return value > 0 ? "#16a34a" : "#dc2626";
 }
 
+const TRADING_DAYS_PER_YEAR = 252;
+
+// Annualized stdev of daily returns derived from the indexed performance
+// series (value-to-value, since this series carries a cumulative index
+// rather than a raw percentage_change field), over whatever range is
+// currently selected on the chart.
+function computeVolatilityFromSeries(rangeSeries) {
+  const dailyReturns = [];
+  for (let i = 1; i < rangeSeries.length; i++) {
+    const prev = rangeSeries[i - 1].value;
+    const curr = rangeSeries[i].value;
+    if (prev) dailyReturns.push(curr / prev - 1);
+  }
+  if (dailyReturns.length < 2) return null;
+
+  const mean = dailyReturns.reduce((sum, v) => sum + v, 0) / dailyReturns.length;
+  const variance = dailyReturns.reduce((sum, v) => sum + (v - mean) ** 2, 0) / (dailyReturns.length - 1);
+  return Math.sqrt(variance) * Math.sqrt(TRADING_DAYS_PER_YEAR);
+}
+
 const HOLDINGS_COLUMNS = [
   { key: "ticker", label: "Ticker" },
   { key: "name", label: "Company" },
@@ -98,6 +118,7 @@ export default function PortfolioDetailPage() {
     rangeSeries.length >= 2 && rangeSeries[0].value
       ? ((rangeSeries[rangeSeries.length - 1].value - rangeSeries[0].value) / rangeSeries[0].value) * 100
       : null;
+  const periodVolatility = computeVolatilityFromSeries(rangeSeries);
 
   return (
     <div>
@@ -169,6 +190,9 @@ export default function PortfolioDetailPage() {
               <span style={{ color: changeColor(periodChangePct), fontWeight: 600 }}>
                 {periodChangePct > 0 ? "+" : ""}{periodChangePct.toFixed(2)}% ({range})
               </span>
+            )}
+            {periodVolatility !== null && (
+              <span className="muted">Volatility ({range}): <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(periodVolatility)}</strong></span>
             )}
           </div>
           <div style={{ display: "flex", gap: 4 }}>
