@@ -169,12 +169,26 @@ export default function CompanyFilters() {
                   return (
                     <div key={key}>
                       <label>{label} (${UNIT_LABELS[units[key]]})</label>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <input placeholder="min" value={rawMin} onChange={(e) => onUnitRangeChange(key, "min", e.target.value)} />
-                        <input placeholder="max" value={rawMax} onChange={(e) => onUnitRangeChange(key, "max", e.target.value)} />
-                        <select value={units[key]} onChange={(e) => onUnitChange(key, e.target.value)} style={{ width: 78, flexShrink: 0 }}>
-                          {Object.keys(UNIT_LABELS).map((u) => (
-                            <option key={u} value={u}>{u}</option>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        <input
+                          placeholder="min"
+                          value={rawMin}
+                          onChange={(e) => onUnitRangeChange(key, "min", e.target.value)}
+                          style={{ flex: "1 1 0", minWidth: 0 }}
+                        />
+                        <input
+                          placeholder="max"
+                          value={rawMax}
+                          onChange={(e) => onUnitRangeChange(key, "max", e.target.value)}
+                          style={{ flex: "1 1 0", minWidth: 0 }}
+                        />
+                        <select
+                          value={units[key]}
+                          onChange={(e) => onUnitChange(key, e.target.value)}
+                          style={{ flex: "1 1 100%", minWidth: 0 }}
+                        >
+                          {Object.entries(UNIT_LABELS).map(([u, l]) => (
+                            <option key={u} value={u}>{l}</option>
                           ))}
                         </select>
                       </div>
