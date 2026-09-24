@@ -5,9 +5,9 @@
 // enough to get clipped competing with the sidebar's collapse button for
 // space. Paired with plain HTML text in Sidebar.jsx instead of an inlined
 // wordmark, so the text can never SVG-clip -- it just wraps/truncates like
-// any other text. Two paths stay `currentColor` (its black outline/detail)
-// so they still invert for dark mode; the crest's white/red fills are fixed
-// brand colors that read fine on either background.
+// any other text. All fills (including the crest's black outline/detail,
+// hardcoded rather than `currentColor`) are fixed brand colors, so the crest
+// looks identical in light and dark mode instead of inverting.
 export default function CarletonCrest({ style, height = 28, ...props }) {
   const width = (height * 37) / 42;
   return (
@@ -30,7 +30,7 @@ export default function CarletonCrest({ style, height = 28, ...props }) {
       />
       <path
         d="M119.317 29.2906C122.199 34.5028 126.831 37.4557 132.184 39.7845C132.502 39.9228 132.848 39.93 133.165 39.7845C134.734 39.057 136.478 38.3323 137.949 37.436C138.801 36.9165 139.603 36.3661 140.355 35.7854C138.05 34.1414 134.544 32.7062 129.214 32.2749C124.136 31.864 121.115 30.6109 119.317 29.2906ZM130.935 28.6028C124.188 29.8972 120.144 28.0417 117.798 25.9001C117.917 26.2418 118.043 26.5814 118.18 26.918C120.101 29.0041 123.505 30.6885 129.546 30.2058C136.998 29.6102 141.409 30.7533 144.02 32.2411C144.677 31.4349 145.265 30.5876 145.782 29.6989C142.926 28.1305 138.321 27.1861 130.935 28.6028Z"
-        fill="currentColor"
+        fill="#2d3748"
       />
       <path
         d="M147.873 24.5666C148.28 22.9796 148.518 21.2967 148.581 19.516C148.669 17.0428 148.698 14.5676 148.709 12.092L142.305 18.998L145.073 6.91804L141.386 8.86973L138.622 1.3501L135.857 8.86973L132.17 6.91804L134.939 18.998L128.398 11.9448L127.974 15.0247L122.611 13.4606L125.086 19.3103L122.815 19.93L130.478 25.6528C139.198 22.2892 144.669 23.2669 147.873 24.5666Z"
@@ -38,7 +38,7 @@ export default function CarletonCrest({ style, height = 28, ...props }) {
       />
       <path
         d="M146.262 5.36977L143.776 16.2176L148.713 10.8925C148.72 8.473 148.716 6.05328 148.739 3.63462C148.745 3.19452 148.64 2.94842 148.177 2.7903C145.233 1.78063 142.239 0.996264 139.182 0.519121L141.828 7.71691L146.262 5.36977ZM129.568 25.9867L120.994 19.5844L123.976 18.7712L121.196 12.2018L127.297 13.9813L127.828 10.1351L133.469 16.2176L130.982 5.36977L135.416 7.71691L138.119 0.365917C137.377 0.268105 136.63 0.187941 135.881 0.128458C129.531 -0.374393 123.379 0.622427 117.382 2.7078C116.802 2.91079 116.603 3.1694 116.61 3.78549C116.644 6.50659 116.642 11.9525 116.642 11.9525C116.642 14.406 116.617 16.8595 116.647 19.313C116.668 20.8942 116.862 22.4333 117.219 23.9286C119.392 26.1963 123.221 28.1805 129.568 25.9867Z"
-        fill="currentColor"
+        fill="#2d3748"
       />
     </svg>
   );

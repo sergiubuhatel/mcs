@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import CarletonLogo from "./CarletonLogo";
+import { BookmarkPlusIcon, CandlestickIcon, PieChartIcon, SearchIcon, TrendChartIcon } from "./icons";
 
 const NAV_ITEMS = [
-  { to: "/", label: "Fundamental Analysis", end: true },
+  { to: "/", label: "Fundamental Analysis", end: true, icon: SearchIcon },
   {
     label: "Technical Analysis",
+    icon: CandlestickIcon,
     children: [
-      { to: "/pools", label: "Pool" },
-      { to: "/prediction", label: "Prediction" },
+      { to: "/pools", label: "Pool", icon: BookmarkPlusIcon },
+      { to: "/prediction", label: "Prediction", icon: TrendChartIcon },
     ],
   },
-  { to: "/portfolio", label: "Portfolios" },
+  { to: "/portfolio", label: "Portfolios", icon: PieChartIcon },
 ];
 
 function BarsIcon() {
@@ -69,7 +71,7 @@ export default function Sidebar({ collapsed, onToggleCollapsed }) {
       >
         {!collapsed && (
           <div className="flex items-center" style={{ gap: 8, minWidth: 0 }}>
-            <CarletonLogo height={26} style={{ color: "var(--color-text-primary)" }} />
+            <CarletonLogo height={26} />
             <span
               style={{
                 color: "var(--color-text-primary)",
@@ -116,11 +118,14 @@ export default function Sidebar({ collapsed, onToggleCollapsed }) {
                   }}
                   title={item.label}
                 >
-                  <span>{collapsed ? item.label.slice(0, 1) : item.label}</span>
+                  <span className="flex items-center" style={{ gap: 8 }}>
+                    <item.icon style={{ flexShrink: 0 }} />
+                    {!collapsed && item.label}
+                  </span>
                   {!collapsed && <ChevronIcon open={isOpen} />}
                 </button>
                 {isOpen && (
-                  <div className={collapsed ? "" : "ml-3 mt-1 flex flex-col gap-1 border-l pl-2"} style={{ borderColor: "var(--color-divider)" }}>
+                  <div className={collapsed ? "ml-2 mt-1 flex flex-col gap-1" : "ml-3 mt-1 flex flex-col gap-1 border-l pl-2"} style={{ borderColor: "var(--color-divider)" }}>
                     {item.children.map((child) => (
                       <NavLink
                         key={child.to}
@@ -130,7 +135,10 @@ export default function Sidebar({ collapsed, onToggleCollapsed }) {
                         style={linkStyle}
                         title={child.label}
                       >
-                        {collapsed ? child.label.slice(0, 1) : child.label}
+                        <span className="flex items-center" style={{ gap: 8, width: "100%", justifyContent: collapsed ? "center" : "flex-start" }}>
+                          <child.icon style={{ flexShrink: 0 }} />
+                          {!collapsed && child.label}
+                        </span>
                       </NavLink>
                     ))}
                   </div>
@@ -148,7 +156,10 @@ export default function Sidebar({ collapsed, onToggleCollapsed }) {
               style={linkStyle}
               title={item.label}
             >
-              {collapsed ? item.label.slice(0, 1) : item.label}
+              <span className="flex items-center" style={{ gap: 8, width: "100%", justifyContent: collapsed ? "center" : "flex-start" }}>
+                <item.icon style={{ flexShrink: 0 }} />
+                {!collapsed && item.label}
+              </span>
             </NavLink>
           );
         })}

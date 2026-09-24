@@ -164,6 +164,16 @@ export function RenameIcon(props) {
   );
 }
 
+export function CandlestickIcon(props) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path d="M6 3v4M6 15v6M18 3v9M18 18v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <rect x="4" y="7" width="4" height="8" rx="1" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="16" y="12" width="4" height="6" rx="1" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 export function CloseIcon(props) {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
