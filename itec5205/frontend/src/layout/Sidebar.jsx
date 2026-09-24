@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import CarletonLogo from "./CarletonLogo";
 import { BookmarkPlusIcon, CandlestickIcon, PieChartIcon, SearchIcon, TrendChartIcon } from "./icons";
+import { APP_VERSION, APP_VERSION_DATE } from "../version";
 
 const NAV_ITEMS = [
   { to: "/", label: "Fundamental Analysis", end: true, icon: SearchIcon },
@@ -164,6 +165,19 @@ export default function Sidebar({ collapsed, onToggleCollapsed }) {
           );
         })}
       </nav>
+      {!collapsed && (
+        <div
+          className="mt-auto text-center"
+          style={{
+            fontSize: "0.72rem",
+            color: "var(--color-text-secondary)",
+            padding: "8px 0",
+            borderTop: "1px solid var(--color-divider)",
+          }}
+        >
+          Version {APP_VERSION}, {APP_VERSION_DATE}
+        </div>
+      )}
     </aside>
   );
 }
