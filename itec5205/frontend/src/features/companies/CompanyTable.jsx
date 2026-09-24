@@ -158,7 +158,13 @@ export default function CompanyTable() {
                   {row.name}
                 </td>
                 <td style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  <span className="pill">{row.sector || "-"}</span>
+                  {row.sector ? (
+                    <span className="pill" style={{ background: `${sectorColor(row.sector)}26`, color: sectorColor(row.sector) }}>
+                      {row.sector}
+                    </span>
+                  ) : (
+                    "-"
+                  )}
                 </td>
                 <td style={{ color: changeColor(dayChangePct(row)), fontWeight: 600 }}>
                   {row.current_price != null ? `$${Number(row.current_price).toFixed(2)}` : "-"}

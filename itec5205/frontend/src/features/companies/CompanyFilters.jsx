@@ -1,7 +1,16 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchIndustriesRequested, fetchRequested, fetchSectorsRequested, setFilters } from "./companiesSlice";
 import { BarChartIcon, DatabaseIcon, GrowthIcon, SearchIcon, TrendChartIcon } from "../../layout/icons";
+
+// How many stored units (market_cap is stored in $M, free_cash_flow in raw
+// $) one typed unit is worth -- lets the user type "500" and pick Billion
+// instead of typing out 500000/500000000000.
+const UNIT_MULTIPLIERS = {
+  market_cap: { M: 1, B: 1_000, T: 1_000_000 },
+  free_cash_flow: { M: 1e6, B: 1e9, T: 1e12 },
+};
+const UNIT_LABELS = { M: "Million", B: "Billion", T: "Trillion" };
 
 // Same fields as before, just grouped for display -- no field was added,
 // removed, or renamed.
@@ -11,7 +20,7 @@ const FILTER_GROUPS = [
     icon: BarChartIcon,
     color: "#3b82f6",
     fields: [
-      { key: "market_cap", label: "Market Cap ($M)" },
+      { key: "market_cap", label: "Market Cap", unit: true },
       { key: "trailing_pe", label: "Trailing P/E" },
       { key: "forward_pe", label: "Forward P/E" },
       { key: "peg_ratio", label: "PEG Ratio (5yr expected)" },
@@ -51,7 +60,7 @@ const FILTER_GROUPS = [
       { key: "revenue_growth_yoy", label: "Quarterly Revenue Growth (yoy) %", percent: true },
       { key: "earnings_growth_yoy_q", label: "Quarterly Earnings Growth (yoy) %", percent: true },
       { key: "dividend_yield", label: "Dividend Yield" },
-      { key: "free_cash_flow", label: "Free Cash Flow ($)" },
+      { key: "free_cash_flow", label: "Free Cash Flow", unit: true },
     ],
   },
 ];
@@ -59,6 +68,8 @@ const FILTER_GROUPS = [
 export default function CompanyFilters() {
   const dispatch = useDispatch();
   const { filters, sectors, industries } = useSelector((s) => s.companies);
+  const [units, setUnits] = useState({ market_cap: "B", free_cash_flow: "B" });
+  const [rawUnitValues, setRawUnitValues] = useState({ market_cap: ["", ""], free_cash_flow: ["", ""] });
 
   useEffect(() => {
     dispatch(fetchSectorsRequested());
@@ -82,6 +93,24 @@ export default function CompanyFilters() {
     const current = filters.ranges[key] || ["", ""];
     const next = side === "min" ? [value, current[1]] : [current[0], value];
     dispatch(setFilters({ ranges: { ...filters.ranges, [key]: next } }));
+  };
+
+  const dispatchUnitRange = (key, [rawMin, rawMax], unit) => {
+    const mult = UNIT_MULTIPLIERS[key][unit];
+    const convert = (v) => (v === "" ? "" : Number(v) * mult);
+    dispatch(setFilters({ ranges: { ...filters.ranges, [key]: [convert(rawMin), convert(rawMax)] } }));
+  };
+
+  const onUnitRangeChange = (key, side, value) => {
+    const current = rawUnitValues[key] || ["", ""];
+    const next = side === "min" ? [value, current[1]] : [current[0], value];
+    setRawUnitValues((r) => ({ ...r, [key]: next }));
+    dispatchUnitRange(key, next, units[key]);
+  };
+
+  const onUnitChange = (key, unit) => {
+    setUnits((u) => ({ ...u, [key]: unit }));
+    dispatchUnitRange(key, rawUnitValues[key] || ["", ""], unit);
   };
 
   return (
@@ -134,7 +163,24 @@ export default function CompanyFilters() {
               {title}
             </h4>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {fields.map(({ key, label, percent }) => {
+              {fields.map(({ key, label, percent, unit }) => {
+                if (unit) {
+                  const [rawMin, rawMax] = rawUnitValues[key] || ["", ""];
+                  return (
+                    <div key={key}>
+                      <label>{label} (${UNIT_LABELS[units[key]]})</label>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <input placeholder="min" value={rawMin} onChange={(e) => onUnitRangeChange(key, "min", e.target.value)} />
+                        <input placeholder="max" value={rawMax} onChange={(e) => onUnitRangeChange(key, "max", e.target.value)} />
+                        <select value={units[key]} onChange={(e) => onUnitChange(key, e.target.value)} style={{ width: 78, flexShrink: 0 }}>
+                          {Object.keys(UNIT_LABELS).map((u) => (
+                            <option key={u} value={u}>{u}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  );
+                }
                 const [min, max] = filters.ranges[key] || ["", ""];
                 const minPlaceholder = percent ? "min % (e.g. 10)" : "min";
                 const maxPlaceholder = percent ? "max % (e.g. 25)" : "max";
