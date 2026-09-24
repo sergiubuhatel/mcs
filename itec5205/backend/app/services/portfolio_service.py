@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from ..db.arango_client import get_db
+from .price_metrics import price_history_metrics
 
 TRADING_DAYS_PER_YEAR = 252
 
@@ -124,13 +125,32 @@ def _with_company_details(holdings: list[dict]) -> list[dict]:
                 trailing_pe: stats.trailing_pe,
                 forward_pe: stats.forward_pe,
                 revenue_growth_yoy_q: stats.revenue_growth_yoy_q,
-                earnings_growth_yoy_q: stats.earnings_growth_yoy_q
+                earnings_growth_yoy_q: stats.earnings_growth_yoy_q,
+                current_price: stats.current_price,
+                previous_close: stats.previous_close
             }
         """,
         bind_vars={"tickers": tickers},
     )
     details = {row["ticker"]: row for row in cursor}
-    return [{**h, **{k: v for k, v in details.get(h["ticker"], {}).items() if k != "ticker"}} for h in holdings]
+    price_metrics = price_history_metrics(tickers)
+
+    def day_change(detail: dict) -> float | None:
+        current, previous = detail.get("current_price"), detail.get("previous_close")
+        if current is None or not previous:
+            return None
+        return round((current - previous) / previous, 4)
+
+    return [
+        {
+            **h,
+            **{k: v for k, v in details.get(h["ticker"], {}).items() if k != "ticker"},
+            "stock_growth_1y": price_metrics.get(h["ticker"], {}).get("growth_1y"),
+            "volatility": price_metrics.get(h["ticker"], {}).get("volatility_1y"),
+            "day_change": day_change(details.get(h["ticker"], {})),
+        }
+        for h in holdings
+    ]
 
 
 def get_portfolio(portfolio_id: str) -> dict | None:

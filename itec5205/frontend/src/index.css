@@ -115,6 +115,11 @@ tr:hover td { background: var(--color-bg-hover); }
 .progress-bar { height: 8px; background: var(--color-bg-tertiary); border-radius: 4px; overflow: hidden; margin: 8px 0; }
 .progress-bar > div { height: 100%; background: var(--color-text-accent); transition: width 0.2s; }
 
+/* Spinner rotation -- same idea as threat2_trunk's FontAwesome `spin` prop,
+   done as plain CSS since this app's icons are dependency-free inline SVG. */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.8s linear infinite; }
+
 /* react-toastify -- same border/background theming approach threat2_trunk
    uses for its toasts, mapped onto this app's own --color-* variables. */
 .Toastify__toast-theme--dark {

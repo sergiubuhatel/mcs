@@ -28,6 +28,9 @@ function changeColor(value) {
 const HOLDINGS_COLUMNS = [
   { key: "ticker", label: "Ticker" },
   { key: "name", label: "Company" },
+  { key: "day_change", label: "Change (1D)" },
+  { key: "stock_growth_1y", label: "Change (1Y)" },
+  { key: "volatility", label: "Volatility (1Y)" },
   { key: "market_cap", label: "Market Cap" },
   { key: "trailing_pe", label: "Trailing P/E" },
   { key: "forward_pe", label: "Forward P/E" },
@@ -113,7 +116,10 @@ export default function PortfolioDetailPage() {
             <tr>
               {HOLDINGS_COLUMNS.map((c) => (
                 <th key={c.key} className={sortBy === c.key ? "sorted" : ""} onClick={() => onSortClick(c.key)} style={{ cursor: "pointer" }}>
-                  {c.label}{sortBy === c.key ? (sortDir === "desc" ? " ↓" : " ↑") : ""}
+                  {c.label}
+                  <span style={{ visibility: sortBy === c.key ? "visible" : "hidden" }}>
+                    {" "}{sortDir === "desc" ? "↓" : "↑"}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -136,6 +142,15 @@ export default function PortfolioDetailPage() {
                     <Link to={`/companies/${h.ticker}`} onClick={(e) => e.stopPropagation()}>{h.ticker}</Link>
                   </td>
                   <td style={{ textAlign: "left" }}>{h.name || "-"}</td>
+                  <td style={{ color: changeColor(h.day_change), fontWeight: 600 }}>
+                    {h.day_change != null && h.day_change > 0 ? "+" : ""}
+                    {fmtPct(h.day_change)}
+                  </td>
+                  <td style={{ color: changeColor(h.stock_growth_1y), fontWeight: 600 }}>
+                    {h.stock_growth_1y != null && h.stock_growth_1y > 0 ? "+" : ""}
+                    {fmtPct(h.stock_growth_1y)}
+                  </td>
+                  <td>{fmtPct(h.volatility)}</td>
                   <td>{fmtLarge(h.market_cap != null ? h.market_cap * 1e6 : null)}</td>
                   <td>{fmtNum(h.trailing_pe)}</td>
                   <td>{fmtNum(h.forward_pe)}</td>

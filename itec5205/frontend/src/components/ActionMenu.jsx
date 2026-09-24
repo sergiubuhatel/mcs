@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { MoreVerticalIcon } from "../layout/icons";
+import { CopyIcon, EditIcon, MoreVerticalIcon, RenameIcon, TrashIcon } from "../layout/icons";
 
 const menuItemStyle = {
-  display: "block",
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
   width: "100%",
   textAlign: "left",
   padding: "8px 12px",
@@ -13,7 +15,7 @@ const menuItemStyle = {
   color: "var(--color-text-primary)",
 };
 
-export default function ActionMenu({ onEdit, onDelete }) {
+export default function ActionMenu({ onRename, onEdit, onDuplicate, onDelete }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -52,15 +54,39 @@ export default function ActionMenu({ onEdit, onDelete }) {
             overflow: "hidden",
           }}
         >
-          <button
-            style={menuItemStyle}
-            onClick={() => {
-              setOpen(false);
-              onEdit();
-            }}
-          >
-            Edit
-          </button>
+          {onRename && (
+            <button
+              style={menuItemStyle}
+              onClick={() => {
+                setOpen(false);
+                onRename();
+              }}
+            >
+              <RenameIcon /> Rename
+            </button>
+          )}
+          {onEdit && (
+            <button
+              style={menuItemStyle}
+              onClick={() => {
+                setOpen(false);
+                onEdit();
+              }}
+            >
+              <EditIcon /> Edit
+            </button>
+          )}
+          {onDuplicate && (
+            <button
+              style={menuItemStyle}
+              onClick={() => {
+                setOpen(false);
+                onDuplicate();
+              }}
+            >
+              <CopyIcon /> Duplicate
+            </button>
+          )}
           <button
             style={{ ...menuItemStyle, color: "#dc2626" }}
             onClick={() => {
@@ -68,7 +94,7 @@ export default function ActionMenu({ onEdit, onDelete }) {
               onDelete();
             }}
           >
-            Delete
+            <TrashIcon /> Delete
           </button>
         </div>
       )}

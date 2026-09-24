@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { deleteRequested, fetchRequested, updateRequested } from "../features/pools/poolsSlice";
+import { createRequested, deleteRequested, fetchRequested, updateRequested } from "../features/pools/poolsSlice";
 import { reset as resetRl } from "../features/rl/rlSlice";
 import RLTrainingPanel from "../features/rl/RLTrainingPanel";
 import ActionMenu from "../components/ActionMenu";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
+import LoadingSpinner from "../components/LoadingSpinner";
 
 export default function PoolsPage() {
   const dispatch = useDispatch();
   const { items, loading } = useSelector((s) => s.pools);
   const [activePoolId, setActivePoolId] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [editMode, setEditMode] = useState("full"); // "full" | "rename"
   const [editName, setEditName] = useState("");
   const [editTickers, setEditTickers] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -30,24 +32,38 @@ export default function PoolsPage() {
 
   const startEdit = (p) => {
     setEditingId(p._key);
+    setEditMode("full");
     setEditName(p.name);
     setEditTickers(p.tickers.join(", "));
+  };
+
+  const startRename = (p) => {
+    setEditingId(p._key);
+    setEditMode("rename");
+    setEditName(p.name);
   };
 
   const cancelEdit = () => setEditingId(null);
 
   const saveEdit = (id) => {
-    const tickers = editTickers
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
-    dispatch(updateRequested({ id, name: editName.trim(), tickers }));
+    const changes = { id, name: editName.trim() };
+    if (editMode === "full") {
+      changes.tickers = editTickers
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+    }
+    dispatch(updateRequested(changes));
     setEditingId(null);
   };
 
   const confirmDelete = () => {
     dispatch(deleteRequested(deleteTarget._key));
     setDeleteTarget(null);
+  };
+
+  const duplicatePool = (p) => {
+    dispatch(createRequested({ name: `${p.name} (copy)`, tickers: p.tickers, filters: p.filters }));
   };
 
   return (
@@ -58,7 +74,7 @@ export default function PoolsPage() {
           Saved from the Screener page. Pick a pool below to run reinforcement learning over it and get a
           recommended low-risk / high-return allocation.
         </p>
-        {loading && <p className="muted">Loading...</p>}
+        {loading && <LoadingSpinner />}
         {items.length === 0 && !loading && <p className="muted">No pools yet — go to the Screener, select some tickers, and save a pool.</p>}
         <table style={{ tableLayout: "fixed", width: "100%" }}>
           <colgroup>
@@ -87,7 +103,7 @@ export default function PoolsPage() {
                     )}
                   </td>
                   <td style={{ textAlign: "left", maxWidth: 0 }}>
-                    {isEditing ? (
+                    {isEditing && editMode === "full" ? (
                       <input
                         value={editTickers}
                         onChange={(e) => setEditTickers(e.target.value)}
@@ -111,7 +127,12 @@ export default function PoolsPage() {
                         <button className="btn secondary" onClick={cancelEdit}>Cancel</button>
                       </div>
                     ) : (
-                      <ActionMenu onEdit={() => startEdit(p)} onDelete={() => setDeleteTarget(p)} />
+                      <ActionMenu
+                        onRename={() => startRename(p)}
+                        onEdit={() => startEdit(p)}
+                        onDuplicate={() => duplicatePool(p)}
+                        onDelete={() => setDeleteTarget(p)}
+                      />
                     )}
                   </td>
                 </tr>

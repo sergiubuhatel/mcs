@@ -2,17 +2,27 @@ import { useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchRequested, setFilters, toggleSelectAll, toggleSelected } from "./companiesSlice";
+import { SpinnerIcon } from "../../layout/icons";
+
+// These two columns aren't stored -- sorting by them means the backend has
+// to pull a year of price history for every matching company and compute
+// the metric before it can sort, which takes noticeably longer than the
+// other (indexed-field) sorts. Worth telling the user to wait instead of
+// letting them think the click didn't do anything.
+const EXPENSIVE_SORT_FIELDS = new Set(["stock_growth_1y", "volatility"]);
 
 const COLUMNS = [
   { key: "ticker", label: "Ticker", sortable: true },
-  { key: "name", label: "Company", sortable: true },
-  { key: "sector", label: "Sector", sortable: true },
+  { key: "name", label: "Company", sortable: true, left: true },
+  { key: "sector", label: "Sector", sortable: true, left: true },
   { key: "current_price", label: "Price", sortable: true },
-  { key: "day_change", label: "Change", sortable: true },
+  { key: "day_change", label: "Change (1D)", sortable: true },
+  { key: "stock_growth_1y", label: "Change (1Y)", sortable: true },
+  { key: "volatility", label: "Volatility (1Y)", sortable: true, fmt: fmtPct },
   { key: "market_cap", label: "Mkt Cap", sortable: true, fmt: (v) => fmtLarge(v) },
   { key: "trailing_pe", label: "P/E", sortable: true, fmt: fmtNum },
-  { key: "revenue_growth_yoy", label: "Qtr Revenue Growth", sortable: true, fmt: fmtPct },
-  { key: "earnings_growth_yoy_q", label: "Qtr Earnings Growth", sortable: true, fmt: fmtPct },
+  { key: "revenue_growth_yoy", label: "Rev Growth", sortable: true, fmt: fmtPct },
+  { key: "earnings_growth_yoy_q", label: "EPS Growth", sortable: true, fmt: fmtPct },
   { key: "roe", label: "ROE", sortable: true, fmt: fmtPct },
   { key: "roa", label: "ROA", sortable: true, fmt: fmtPct },
   { key: "debt_to_equity", label: "D/E", sortable: true, fmt: fmtNum },
@@ -40,6 +50,11 @@ function changeColor(value) {
   if (value === null || value === undefined || value === 0) return "var(--color-text-primary)";
   return value > 0 ? "#16a34a" : "#dc2626";
 }
+function fmtSignedPct(v) {
+  if (v === null || v === undefined) return "-";
+  const pct = Number(v) * 100;
+  return `${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`;
+}
 
 export default function CompanyTable() {
   const dispatch = useDispatch();
@@ -63,6 +78,8 @@ export default function CompanyTable() {
     dispatch(fetchRequested());
   };
 
+  const waitingOnExpensiveSort = loading && EXPENSIVE_SORT_FIELDS.has(filters.sortBy);
+
   const selectedCount = Object.keys(selected).length;
   const pageTickers = results.map((r) => r.ticker);
   const pageSelectedCount = pageTickers.filter((t) => selected[t]).length;
@@ -75,12 +92,31 @@ export default function CompanyTable() {
   return (
     <div className="card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h3>Results {loading ? "(loading...)" : `(${total})`}</h3>
+        <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          Results {loading ? <SpinnerIcon className="spin" style={{ color: "var(--color-text-accent)" }} /> : `(${total})`}
+        </h3>
         <span className="muted">{selectedCount} selected for pool</span>
       </div>
       {error && <p className="error-text">{error}</p>}
       <div style={{ overflowX: "auto" }}>
-        <table>
+        <table style={{ tableLayout: "fixed", width: "100%" }}>
+          <colgroup>
+            <col style={{ width: 34 }} />
+            <col style={{ width: 70 }} />
+            <col />
+            <col style={{ width: 150 }} />
+            <col style={{ width: 85 }} />
+            <col style={{ width: 95 }} />
+            <col style={{ width: 95 }} />
+            <col style={{ width: 95 }} />
+            <col style={{ width: 90 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 95 }} />
+            <col style={{ width: 95 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+          </colgroup>
           <thead>
             <tr>
               <th>
@@ -98,8 +134,14 @@ export default function CompanyTable() {
                   key={c.key}
                   className={filters.sortBy === c.key ? "sorted" : ""}
                   onClick={() => c.sortable && onSort(c.key)}
+                  style={c.left ? { textAlign: "left" } : undefined}
                 >
-                  {c.label}{filters.sortBy === c.key ? (filters.sortDir === "desc" ? " ↓" : " ↑") : ""}
+                  {c.label}
+                  {c.sortable && (
+                    <span style={{ visibility: filters.sortBy === c.key ? "visible" : "hidden" }}>
+                      {" "}{filters.sortDir === "desc" ? "↓" : "↑"}
+                    </span>
+                  )}
                 </th>
               ))}
             </tr>
@@ -115,8 +157,12 @@ export default function CompanyTable() {
                   <input type="checkbox" checked={!!selected[row.ticker]} onChange={() => dispatch(toggleSelected(row.ticker))} />
                 </td>
                 <td><Link to={`/companies/${row.ticker}`} onClick={(e) => e.stopPropagation()}>{row.ticker}</Link></td>
-                <td>{row.name}</td>
-                <td><span className="pill">{row.sector || "-"}</span></td>
+                <td style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>
+                  {row.name}
+                </td>
+                <td style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span className="pill">{row.sector || "-"}</span>
+                </td>
                 <td style={{ color: changeColor(dayChangePct(row)), fontWeight: 600 }}>
                   {row.current_price != null ? `$${Number(row.current_price).toFixed(2)}` : "-"}
                 </td>
@@ -127,6 +173,8 @@ export default function CompanyTable() {
                     return `${chg > 0 ? "+" : ""}${chg.toFixed(2)}%`;
                   })()}
                 </td>
+                <td style={{ color: changeColor(row.stock_growth_1y), fontWeight: 600 }}>{fmtSignedPct(row.stock_growth_1y)}</td>
+                <td>{fmtPct(row.volatility)}</td>
                 <td>{fmtLarge(row.market_cap != null ? row.market_cap * 1e6 : null)}</td>
                 <td>{fmtNum(row.trailing_pe)}</td>
                 <td>{fmtPct(row.revenue_growth_yoy)}</td>
@@ -172,6 +220,34 @@ export default function CompanyTable() {
           </button>
         </div>
       </div>
+
+      {waitingOnExpensiveSort && (
+        <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 1000 }}>
+          <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.5)" }} />
+          <div
+            className="relative"
+            style={{
+              zIndex: 1,
+              minWidth: 320,
+              background: "var(--color-bg-primary)",
+              border: "1px solid var(--color-divider)",
+              borderRadius: 10,
+              boxShadow: "0 16px 40px rgba(0,0,0,0.25)",
+              padding: "28px 32px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              textAlign: "center",
+            }}
+          >
+            <SpinnerIcon className="spin" width={32} height={32} style={{ color: "var(--color-text-accent)", marginBottom: 12 }} />
+            <h3 style={{ margin: 0 }}>Sorting...</h3>
+            <p className="muted" style={{ marginTop: 6 }}>
+              Computing 1-year price history for every matching company. This can take a few seconds -- please wait.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

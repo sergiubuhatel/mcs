@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { deleteRequested, fetchRequested, updateRequested } from "../features/portfolios/portfoliosSlice";
+import { createRequested, deleteRequested, fetchRequested, updateRequested } from "../features/portfolios/portfoliosSlice";
 import ManualPortfolioForm from "../features/portfolios/ManualPortfolioForm";
 import ActionMenu from "../components/ActionMenu";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import Modal from "../components/Modal";
+import LoadingSpinner from "../components/LoadingSpinner";
 import { PlusIcon, SaveIcon } from "../layout/icons";
 
 export default function PortfoliosPage() {
@@ -20,7 +21,7 @@ export default function PortfoliosPage() {
     dispatch(fetchRequested());
   }, [dispatch]);
 
-  const startEdit = (p) => {
+  const startRename = (p) => {
     setEditingId(p._key);
     setEditName(p.name);
   };
@@ -35,6 +36,16 @@ export default function PortfoliosPage() {
   const confirmDelete = () => {
     dispatch(deleteRequested(deleteTarget._key));
     setDeleteTarget(null);
+  };
+
+  const duplicatePortfolio = (p) => {
+    dispatch(
+      createRequested({
+        name: `${p.name} (copy)`,
+        holdings: p.holdings.map((h) => ({ ticker: h.ticker, weight: h.weight })),
+        method: p.method,
+      })
+    );
   };
 
   const sortedItems = [...items].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -53,7 +64,7 @@ export default function PortfoliosPage() {
             <PlusIcon width={18} height={18} />
           </button>
         </div>
-        {loading && <p className="muted">Loading...</p>}
+        {loading && <LoadingSpinner />}
         {items.length === 0 && !loading && <p className="muted">No portfolios yet.</p>}
         <table style={{ tableLayout: "fixed", width: "100%" }}>
           <colgroup>
@@ -100,7 +111,7 @@ export default function PortfoliosPage() {
                         <button className="btn secondary" onClick={cancelEdit}>Cancel</button>
                       </div>
                     ) : (
-                      <ActionMenu onEdit={() => startEdit(p)} onDelete={() => setDeleteTarget(p)} />
+                      <ActionMenu onRename={() => startRename(p)} onDuplicate={() => duplicatePortfolio(p)} onDelete={() => setDeleteTarget(p)} />
                     )}
                   </td>
                 </tr>
