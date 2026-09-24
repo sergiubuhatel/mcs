@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 
 from ..db.arango_client import get_db
-from .price_metrics import price_history_metrics
 
 TRADING_DAYS_PER_YEAR = 252
 
@@ -109,8 +108,8 @@ def list_portfolios() -> list[dict]:
 
 def _with_company_details(holdings: list[dict]) -> list[dict]:
     """Attach each holding's company name + key stats (from `companies` /
-    `stock_stats`) for display -- stored holdings only ever carry
-    ticker/weight."""
+    `stock_stats` / `calculated_stats`) for display -- stored holdings only
+    ever carry ticker/weight."""
     db = get_db()
     tickers = [h["ticker"] for h in holdings]
     cursor = db.aql.execute(
@@ -118,6 +117,7 @@ def _with_company_details(holdings: list[dict]) -> list[dict]:
         FOR c IN companies
             FILTER c._key IN @tickers
             LET stats = DOCUMENT('stock_stats', c._key)
+            LET calc = DOCUMENT('calculated_stats', c._key)
             RETURN {
                 ticker: c._key,
                 name: c.name,
@@ -127,13 +127,14 @@ def _with_company_details(holdings: list[dict]) -> list[dict]:
                 revenue_growth_yoy_q: stats.revenue_growth_yoy_q,
                 earnings_growth_yoy_q: stats.earnings_growth_yoy_q,
                 current_price: stats.current_price,
-                previous_close: stats.previous_close
+                previous_close: stats.previous_close,
+                stock_growth_1y: calc.stock_growth_1y,
+                volatility: calc.volatility_1y
             }
         """,
         bind_vars={"tickers": tickers},
     )
     details = {row["ticker"]: row for row in cursor}
-    price_metrics = price_history_metrics(tickers)
 
     def day_change(detail: dict) -> float | None:
         current, previous = detail.get("current_price"), detail.get("previous_close")
@@ -145,8 +146,6 @@ def _with_company_details(holdings: list[dict]) -> list[dict]:
         {
             **h,
             **{k: v for k, v in details.get(h["ticker"], {}).items() if k != "ticker"},
-            "stock_growth_1y": price_metrics.get(h["ticker"], {}).get("growth_1y"),
-            "volatility": price_metrics.get(h["ticker"], {}).get("volatility_1y"),
             "day_change": day_change(details.get(h["ticker"], {})),
         }
         for h in holdings

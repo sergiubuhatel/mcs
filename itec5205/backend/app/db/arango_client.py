@@ -34,6 +34,14 @@ COLLECTIONS = {
         {"type": "persistent", "fields": ["roe_ttm"], "unique": False},
         {"type": "persistent", "fields": ["debt_to_equity_mrq"], "unique": False},
     ],
+    # Metrics derived from `stock_prices` (not sourced from Yahoo's `info`
+    # like `stock_stats`) -- computed once per ticker at import time and
+    # kept separate so the raw-vs-derived distinction stays obvious. `_key`
+    # is the ticker, same join pattern as `stock_stats`.
+    "calculated_stats": [
+        {"type": "persistent", "fields": ["stock_growth_1y"], "unique": False},
+        {"type": "persistent", "fields": ["volatility_1y"], "unique": False},
+    ],
     # A named subset of tickers a user saved off a screener search, to use
     # as the candidate universe fed into RL training (search -> pool -> RL).
     "pools": [],

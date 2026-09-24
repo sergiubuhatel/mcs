@@ -3,7 +3,6 @@ indicators, backed by a single AQL query joining companies + stock_stats.
 """
 
 from ..db.arango_client import get_db
-from .price_metrics import price_history_metrics
 
 # Whitelisted sortable fields -> which merged-document attribute they map to.
 # Only whitelisted values are ever interpolated into the AQL string, so this
@@ -38,6 +37,11 @@ SORTABLE_FIELDS = {
     "ev_to_ebitda": "stats.ev_to_ebitda",
     "earnings_growth_yoy_q": "stats.earnings_growth_yoy_q",
     "free_cash_flow": "stats.free_cash_flow",
+    # Derived from stock_prices at import time (see yahoo_import.import_ticker)
+    # into their own `calculated_stats` collection, joined below the same way
+    # `stock_stats` is -- so these sort just like any other stored field.
+    "stock_growth_1y": "calc.stock_growth_1y",
+    "volatility": "calc.volatility_1y",
 }
 
 # Fields that aren't a single stored attribute but a computed expression --
@@ -67,19 +71,6 @@ FILTERABLE_RANGES = {
     "earnings_growth_yoy_q": "stats.earnings_growth_yoy_q",
     "free_cash_flow": "stats.free_cash_flow",
 }
-
-
-PRICE_METRIC_FIELDS = {"stock_growth_1y": "growth_1y", "volatility": "volatility_1y"}
-
-
-def _attach_price_metrics(results: list[dict]) -> None:
-    """Trailing 1Y price growth + volatility, computed for just the tickers
-    on this page (not the whole filtered universe) to keep this cheap."""
-    metrics = price_history_metrics([r["ticker"] for r in results])
-    for r in results:
-        m = metrics.get(r["ticker"], {})
-        r["stock_growth_1y"] = m.get("growth_1y")
-        r["volatility"] = m.get("volatility_1y")
 
 
 def search_companies(
@@ -130,8 +121,14 @@ def search_companies(
 
     filter_expr = " AND ".join(filter_clauses)
 
-    return_block = """
-            RETURN {
+    aql = f"""
+        FOR company IN companies
+            LET stats = DOCUMENT('stock_stats', company._key)
+            LET calc = DOCUMENT('calculated_stats', company._key)
+            FILTER {filter_expr}
+            SORT {sort_field} {sort_dir}
+            LIMIT @offset, @limit
+            RETURN {{
                 ticker: company._key,
                 name: company.name,
                 sector: company.sector,
@@ -157,8 +154,10 @@ def search_companies(
                 peg_ratio: stats.peg_ratio,
                 ev_to_ebitda: stats.ev_to_ebitda,
                 earnings_growth_yoy_q: stats.earnings_growth_yoy_q,
-                free_cash_flow: stats.free_cash_flow
-            }
+                free_cash_flow: stats.free_cash_flow,
+                stock_growth_1y: calc.stock_growth_1y,
+                volatility: calc.volatility_1y
+            }}
     """
     count_aql = f"""
         FOR company IN companies
@@ -168,43 +167,9 @@ def search_companies(
             RETURN total
     """
 
-    if sort_by in PRICE_METRIC_FIELDS:
-        # stock_growth_1y/volatility aren't stored -- they're derived from
-        # stock_prices. Sorting by one means every filtered row needs the
-        # metric computed (not just the page), so fetch the full filtered
-        # set (still typically well under the full universe once sector/
-        # range filters are applied), compute + sort in Python, then
-        # paginate the already-sorted list.
-        all_aql = f"""
-            FOR company IN companies
-                LET stats = DOCUMENT('stock_stats', company._key)
-                FILTER {filter_expr}
-                {return_block}
-        """
-        all_results = list(db.aql.execute(all_aql, bind_vars={k: v for k, v in bind_vars.items() if k not in ("limit", "offset")}))
-        _attach_price_metrics(all_results)
-
-        present = [r for r in all_results if r[sort_by] is not None]
-        missing = [r for r in all_results if r[sort_by] is None]
-        present.sort(key=lambda r: r[sort_by], reverse=(sort_dir == "DESC"))
-        all_results = present + missing
-
-        total = len(all_results)
-        results = all_results[offset : offset + limit]
-    else:
-        aql = f"""
-            FOR company IN companies
-                LET stats = DOCUMENT('stock_stats', company._key)
-                FILTER {filter_expr}
-                SORT {sort_field} {sort_dir}
-                LIMIT @offset, @limit
-                {return_block}
-        """
-        results = list(db.aql.execute(aql, bind_vars=bind_vars))
-        total_cursor = list(db.aql.execute(count_aql, bind_vars={k: v for k, v in bind_vars.items() if k not in ("limit", "offset")}))
-        total = total_cursor[0] if total_cursor else 0
-
-        _attach_price_metrics(results)
+    results = list(db.aql.execute(aql, bind_vars=bind_vars))
+    total_cursor = list(db.aql.execute(count_aql, bind_vars={k: v for k, v in bind_vars.items() if k not in ("limit", "offset")}))
+    total = total_cursor[0] if total_cursor else 0
 
     return {"results": results, "total": total, "limit": limit, "offset": offset}
 

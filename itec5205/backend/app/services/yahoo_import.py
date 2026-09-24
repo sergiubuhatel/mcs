@@ -16,6 +16,7 @@ import pandas as pd
 import yfinance as yf
 
 from ..db.arango_client import get_db
+from .price_metrics import price_history_metrics
 
 _KEY_SAFE = re.compile(r"[^A-Za-z0-9_\-:.@()+,=;$!*'%]")
 
@@ -220,11 +221,13 @@ def import_ticker(
     interval: str = "1d",
     import_history: bool = True,
     import_statistics: bool = True,
+    import_calculated_stats: bool = True,
 ) -> dict:
     """Fetch history and/or stats (incl. fundamental ratios, all sourced
     from `info` -- see `STAT_FIELDS`) for one ticker and upsert them into
-    ArangoDB, per the `import_history`/`import_statistics` flags. Returns a
-    small summary dict for progress reporting.
+    ArangoDB, per the `import_history`/`import_statistics`/
+    `import_calculated_stats` flags. Returns a small summary dict for
+    progress reporting.
 
     Company metadata (name/sector/industry) always gets upserted regardless
     of which flags are set -- it comes from the same `info` fetch already
@@ -266,6 +269,25 @@ def import_ticker(
         for row in history_rows:
             row["_key"] = f"{ticker}_{row['date']}"
             prices_col.insert(row, overwrite=True)
+
+    if import_calculated_stats:
+        # Change(1Y)/volatility are derived from `stock_prices`, not from
+        # Yahoo's `info` -- recomputed into their own collection here rather
+        # than live at request time, so the screener/portfolio grids can
+        # just read a stored field like any other stat. Independent of
+        # `import_history`: it reads whatever's already in `stock_prices`
+        # (just-upserted above, or from a prior import), so it also works
+        # as a standalone backfill for tickers imported before this existed.
+        price_metrics = price_history_metrics([ticker]).get(ticker, {})
+        db.collection("calculated_stats").insert(
+            {
+                "_key": ticker,
+                "stock_growth_1y": price_metrics.get("growth_1y"),
+                "volatility_1y": price_metrics.get("volatility_1y"),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            overwrite=True,
+        )
 
     if import_statistics:
         stats_row = fetch_ticker_stats(ticker, info)

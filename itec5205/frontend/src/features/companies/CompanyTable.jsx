@@ -4,13 +4,6 @@ import { useDispatch, useSelector } from "react-redux";
 import { fetchRequested, setFilters, toggleSelectAll, toggleSelected } from "./companiesSlice";
 import { SpinnerIcon } from "../../layout/icons";
 
-// These two columns aren't stored -- sorting by them means the backend has
-// to pull a year of price history for every matching company and compute
-// the metric before it can sort, which takes noticeably longer than the
-// other (indexed-field) sorts. Worth telling the user to wait instead of
-// letting them think the click didn't do anything.
-const EXPENSIVE_SORT_FIELDS = new Set(["stock_growth_1y", "volatility"]);
-
 const COLUMNS = [
   { key: "ticker", label: "Ticker", sortable: true },
   { key: "name", label: "Company", sortable: true, left: true },
@@ -77,8 +70,6 @@ export default function CompanyTable() {
     dispatch(setFilters({ limit: Number(e.target.value), offset: 0 }));
     dispatch(fetchRequested());
   };
-
-  const waitingOnExpensiveSort = loading && EXPENSIVE_SORT_FIELDS.has(filters.sortBy);
 
   const selectedCount = Object.keys(selected).length;
   const pageTickers = results.map((r) => r.ticker);
@@ -220,34 +211,6 @@ export default function CompanyTable() {
           </button>
         </div>
       </div>
-
-      {waitingOnExpensiveSort && (
-        <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 1000 }}>
-          <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.5)" }} />
-          <div
-            className="relative"
-            style={{
-              zIndex: 1,
-              minWidth: 320,
-              background: "var(--color-bg-primary)",
-              border: "1px solid var(--color-divider)",
-              borderRadius: 10,
-              boxShadow: "0 16px 40px rgba(0,0,0,0.25)",
-              padding: "28px 32px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              textAlign: "center",
-            }}
-          >
-            <SpinnerIcon className="spin" width={32} height={32} style={{ color: "var(--color-text-accent)", marginBottom: 12 }} />
-            <h3 style={{ margin: 0 }}>Sorting...</h3>
-            <p className="muted" style={{ marginTop: 6 }}>
-              Computing 1-year price history for every matching company. This can take a few seconds -- please wait.
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

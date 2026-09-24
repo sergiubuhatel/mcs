@@ -204,6 +204,7 @@ function ImportPanel({ onClose }) {
   const [onlyMissing, setOnlyMissing] = useState(true);
   const [importHistory, setImportHistory] = useState(true);
   const [importStatistics, setImportStatistics] = useState(true);
+  const [importCalculatedStats, setImportCalculatedStats] = useState(true);
 
   const submit = () => {
     const list =
@@ -219,6 +220,7 @@ function ImportPanel({ onClose }) {
       only_missing: scope === "all" && onlyMissing,
       import_history: importHistory,
       import_statistics: importStatistics,
+      import_calculated_stats: importCalculatedStats,
     }));
     onClose(); // progress/Stop/Resume live in the bottom bar, not here
   };
@@ -268,6 +270,14 @@ function ImportPanel({ onClose }) {
           <input type="checkbox" checked={importStatistics} onChange={(e) => setImportStatistics(e.target.checked)} />
           Import statistics
         </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" }}>
+          <input
+            type="checkbox"
+            checked={importCalculatedStats}
+            onChange={(e) => setImportCalculatedStats(e.target.checked)}
+          />
+          Import calculated statistics
+        </label>
       </div>
       {scope === "all" ? (
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", margin: "8px 0" }}>
@@ -285,7 +295,10 @@ function ImportPanel({ onClose }) {
       <button
         className="btn"
         onClick={submit}
-        disabled={(scope === "specific" && !tickers.trim()) || (!importHistory && !importStatistics)}
+        disabled={
+          (scope === "specific" && !tickers.trim()) ||
+          (!importHistory && !importStatistics && !importCalculatedStats)
+        }
       >
         <DownloadIcon /> Start Import
       </button>

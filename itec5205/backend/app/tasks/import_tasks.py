@@ -37,6 +37,7 @@ def import_sp500_data(
     interval: str = "1d",
     import_history: bool = True,
     import_statistics: bool = True,
+    import_calculated_stats: bool = True,
 ):
     total = len(tickers)
     succeeded = []
@@ -51,6 +52,7 @@ def import_sp500_data(
             pool.submit(
                 import_ticker, t, years=years, interval=interval,
                 import_history=import_history, import_statistics=import_statistics,
+                import_calculated_stats=import_calculated_stats,
             ): t
             for t in tickers
         }
@@ -91,6 +93,7 @@ def import_sp500_data(
             "interval": interval,
             "import_history": import_history,
             "import_statistics": import_statistics,
+            "import_calculated_stats": import_calculated_stats,
         }
         socketio.emit("import_progress", {"stage": "stopped", **result}, room=room)
         return result
@@ -106,6 +109,7 @@ def import_sp500_data(
         "interval": interval,
         "import_history": import_history,
         "import_statistics": import_statistics,
+        "import_calculated_stats": import_calculated_stats,
     }
     socketio.emit("import_progress", {"stage": "done", **result}, room=room)
     return result

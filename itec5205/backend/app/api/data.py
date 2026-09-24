@@ -27,6 +27,7 @@ def trigger_import():
 
     import_history = bool(body.get("import_history", True))
     import_statistics = bool(body.get("import_statistics", True))
+    import_calculated_stats = bool(body.get("import_calculated_stats", True))
 
     # "Only missing" is defined by price-history gaps, which is meaningless
     # for a statistics-only run (a live snapshot field has no notion of a
@@ -43,6 +44,7 @@ def trigger_import():
         interval=body.get("interval", "1d"),
         import_history=import_history,
         import_statistics=import_statistics,
+        import_calculated_stats=import_calculated_stats,
     )
     return jsonify({"task_id": task.id, "ticker_count": len(tickers)}), 202
 
@@ -83,5 +85,6 @@ def resume_import(task_id: str):
         interval=prior.get("interval", "1d"),
         import_history=prior.get("import_history", True),
         import_statistics=prior.get("import_statistics", True),
+        import_calculated_stats=prior.get("import_calculated_stats", True),
     )
     return jsonify({"task_id": task.id, "ticker_count": len(remaining)}), 202
