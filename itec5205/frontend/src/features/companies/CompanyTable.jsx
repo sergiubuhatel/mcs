@@ -2,7 +2,8 @@ import { useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchRequested, setFilters, toggleSelectAll, toggleSelected } from "./companiesSlice";
-import { SpinnerIcon } from "../../layout/icons";
+import { ListIcon, SpinnerIcon } from "../../layout/icons";
+import { sectorColor } from "../../utils/sectorColors";
 
 const COLUMNS = [
   { key: "ticker", label: "Ticker", sortable: true },
@@ -83,9 +84,14 @@ export default function CompanyTable() {
   return (
     <div className="card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          Results {loading ? <SpinnerIcon className="spin" style={{ color: "var(--color-text-accent)" }} /> : `(${total})`}
-        </h3>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="icon-badge" style={{ background: "rgba(59,130,246,0.15)", color: "#3b82f6" }}>
+            <ListIcon />
+          </div>
+          <h3 style={{ display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
+            Results {loading ? <SpinnerIcon className="spin" style={{ color: "var(--color-text-accent)" }} /> : `(${total})`}
+          </h3>
+        </div>
         <span className="muted">{selectedCount} selected for pool</span>
       </div>
       {error && <p className="error-text">{error}</p>}

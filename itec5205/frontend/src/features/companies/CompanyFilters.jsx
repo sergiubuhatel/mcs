@@ -1,29 +1,59 @@
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchIndustriesRequested, fetchRequested, fetchSectorsRequested, setFilters } from "./companiesSlice";
-import { SearchIcon } from "../../layout/icons";
+import { BarChartIcon, DatabaseIcon, GrowthIcon, SearchIcon, TrendChartIcon } from "../../layout/icons";
 
-const RANGE_FIELDS = [
-  { key: "market_cap", label: "Market Cap ($M)" },
-  { key: "trailing_pe", label: "Trailing P/E" },
-  { key: "roe", label: "ROE" },
-  { key: "roa", label: "ROA" },
-  { key: "debt_to_equity", label: "Debt/Equity" },
-  { key: "current_ratio", label: "Current Ratio" },
-  { key: "gross_margin", label: "Gross Margin" },
-  { key: "net_margin", label: "Net Margin" },
-  { key: "dividend_yield", label: "Dividend Yield" },
-  { key: "forward_pe", label: "Forward P/E" },
-  { key: "peg_ratio", label: "PEG Ratio (5yr expected)" },
-  { key: "ev_to_ebitda", label: "EV/EBITDA" },
-  { key: "operating_margin", label: "Operating Margin (ttm)" },
-  // percent: true -> the user types a plain percentage (e.g. 20 for 20%);
-  // the underlying stored/filtered value is the decimal fraction (0.20)
-  // yfinance itself returns, so the saga divides by 100 right before this
-  // hits the API (see PERCENT_RANGE_FIELDS in companiesSaga.js).
-  { key: "revenue_growth_yoy", label: "Quarterly Revenue Growth (yoy) %", percent: true },
-  { key: "earnings_growth_yoy_q", label: "Quarterly Earnings Growth (yoy) %", percent: true },
-  { key: "free_cash_flow", label: "Free Cash Flow ($)" },
+// Same fields as before, just grouped for display -- no field was added,
+// removed, or renamed.
+const FILTER_GROUPS = [
+  {
+    title: "Market Metrics",
+    icon: BarChartIcon,
+    color: "#3b82f6",
+    fields: [
+      { key: "market_cap", label: "Market Cap ($M)" },
+      { key: "trailing_pe", label: "Trailing P/E" },
+      { key: "forward_pe", label: "Forward P/E" },
+      { key: "peg_ratio", label: "PEG Ratio (5yr expected)" },
+    ],
+  },
+  {
+    title: "Profitability",
+    icon: TrendChartIcon,
+    color: "#16a34a",
+    fields: [
+      { key: "roe", label: "ROE" },
+      { key: "roa", label: "ROA" },
+      { key: "gross_margin", label: "Gross Margin" },
+      { key: "operating_margin", label: "Operating Margin (ttm)" },
+      { key: "net_margin", label: "Net Margin" },
+    ],
+  },
+  {
+    title: "Financial Health",
+    icon: DatabaseIcon,
+    color: "#7c3aed",
+    fields: [
+      { key: "debt_to_equity", label: "Debt/Equity" },
+      { key: "current_ratio", label: "Current Ratio" },
+      { key: "ev_to_ebitda", label: "EV/EBITDA" },
+    ],
+  },
+  {
+    title: "Growth",
+    icon: GrowthIcon,
+    color: "#f59e0b",
+    fields: [
+      // percent: true -> the user types a plain percentage (e.g. 20 for
+      // 20%); the underlying stored/filtered value is the decimal fraction
+      // (0.20) yfinance itself returns, so the saga divides by 100 right
+      // before this hits the API (see PERCENT_RANGE_FIELDS in companiesSaga.js).
+      { key: "revenue_growth_yoy", label: "Quarterly Revenue Growth (yoy) %", percent: true },
+      { key: "earnings_growth_yoy_q", label: "Quarterly Earnings Growth (yoy) %", percent: true },
+      { key: "dividend_yield", label: "Dividend Yield" },
+      { key: "free_cash_flow", label: "Free Cash Flow ($)" },
+    ],
+  },
 ];
 
 export default function CompanyFilters() {
@@ -56,10 +86,22 @@ export default function CompanyFilters() {
 
   return (
     <form className="card" onSubmit={submit}>
-      <h3>Screen companies</h3>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div className="icon-badge" style={{ background: "rgba(59,130,246,0.15)", color: "#3b82f6" }}>
+            <SearchIcon width={18} height={18} />
+          </div>
+          <div>
+            <h3 style={{ margin: 0 }}>Stock Screener</h3>
+            <p className="muted" style={{ margin: 0 }}>Filter S&amp;P 500 companies using fundamental metrics</p>
+          </div>
+        </div>
+        <button className="btn" type="submit"><SearchIcon /> Search</button>
+      </div>
+
       <div className="filters-grid">
         <div>
-          <label>Search name / ticker</label>
+          <label>Search Companies</label>
           <input value={filters.q} onChange={(e) => dispatch(setFilters({ q: e.target.value }))} placeholder="e.g. Apple or AAPL" />
         </div>
         <div>
@@ -82,24 +124,34 @@ export default function CompanyFilters() {
         </div>
       </div>
 
-      <div className="filters-grid">
-        {RANGE_FIELDS.map(({ key, label, percent }) => {
-          const [min, max] = filters.ranges[key] || ["", ""];
-          const minPlaceholder = percent ? "min % (e.g. 10)" : "min";
-          const maxPlaceholder = percent ? "max % (e.g. 25)" : "max";
-          return (
-            <div key={key}>
-              <label>{label}</label>
-              <div style={{ display: "flex", gap: 4 }}>
-                <input placeholder={minPlaceholder} value={min} onChange={(e) => onRangeChange(key, "min", e.target.value)} />
-                <input placeholder={maxPlaceholder} value={max} onChange={(e) => onRangeChange(key, "max", e.target.value)} />
-              </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+        {FILTER_GROUPS.map(({ title, icon: Icon, color, fields }) => (
+          <div key={title} className="filter-group">
+            <h4 style={{ color: "var(--color-text-primary)" }}>
+              <span className="icon-badge" style={{ width: 26, height: 26, background: `${color}26`, color }}>
+                <Icon width={14} height={14} />
+              </span>
+              {title}
+            </h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {fields.map(({ key, label, percent }) => {
+                const [min, max] = filters.ranges[key] || ["", ""];
+                const minPlaceholder = percent ? "min % (e.g. 10)" : "min";
+                const maxPlaceholder = percent ? "max % (e.g. 25)" : "max";
+                return (
+                  <div key={key}>
+                    <label>{label}</label>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <input placeholder={minPlaceholder} value={min} onChange={(e) => onRangeChange(key, "min", e.target.value)} />
+                      <input placeholder={maxPlaceholder} value={max} onChange={(e) => onRangeChange(key, "max", e.target.value)} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
-
-      <button className="btn" type="submit"><SearchIcon /> Search</button>
     </form>
   );
 }

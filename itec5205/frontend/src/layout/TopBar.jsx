@@ -34,9 +34,12 @@ export default function TopBar() {
 
   return (
     <header
-      className="flex h-14 shrink-0 items-center justify-end px-4"
+      className="flex h-14 shrink-0 items-center justify-between px-4"
       style={{ borderBottom: "1px solid var(--color-divider)", background: "var(--color-bg-secondary)" }}
     >
+      <span style={{ color: "var(--color-text-primary)", fontWeight: 600, fontSize: "0.95rem" }}>
+        Investment Decision Support
+      </span>
       <button
         className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-tertiary"
         style={{ color: "var(--color-text-secondary)" }}

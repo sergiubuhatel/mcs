@@ -17,14 +17,14 @@
 }
 
 .dark {
-  --color-bg-primary: #2d3748;
-  --color-bg-secondary: #283141;
-  --color-bg-tertiary: #232a36;
-  --color-text-primary: #f7fafc;
-  --color-text-secondary: #e2e8f0;
-  --color-text-accent: #81e6d9;
-  --color-divider: #535f72;
-  --color-bg-hover: #3a4756;
+  --color-bg-primary: #141b2d;
+  --color-bg-secondary: #0b1120;
+  --color-bg-tertiary: #1b2540;
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-accent: #60a5fa;
+  --color-divider: #253044;
+  --color-bg-hover: #1b2540;
 }
 
 * { box-sizing: border-box; }
@@ -69,11 +69,38 @@ a:hover { text-decoration: underline; }
 .card {
   background: var(--color-bg-primary);
   border: 1px solid var(--color-divider);
-  border-radius: 10px;
-  padding: 16px;
+  border-radius: 12px;
+  padding: 18px;
   margin-bottom: 16px;
 }
 .card h2, .card h3 { margin-top: 0; }
+
+/* Icon badge -- a small rounded-square swatch behind a section's leading
+   icon (search/filter-group headers etc.), colored via inline style per
+   section so each group reads as its own category at a glance. */
+.icon-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  flex-shrink: 0;
+}
+
+.filter-group {
+  border: 1px solid var(--color-divider);
+  border-radius: 10px;
+  padding: 14px;
+  background: var(--color-bg-secondary);
+}
+.filter-group h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+}
 
 input:not([type="checkbox"]):not([type="radio"]), select, textarea {
   padding: 6px 8px; border-radius: 5px; font-size: 0.85rem;
@@ -90,7 +117,7 @@ input::placeholder, textarea::placeholder { color: var(--color-text-secondary); 
 /* Fixed (non-theme-swapping) accent so buttons look the same in light and
    dark mode -- unlike --color-text-accent, which intentionally changes
    between themes for body text/links. */
-:root { --btn-accent: #2b6cb0; }
+:root { --btn-accent: #3b82f6; }
 
 .btn {
   display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
