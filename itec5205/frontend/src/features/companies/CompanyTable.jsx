@@ -34,6 +34,12 @@ function fmtSignedPct(v) {
   const pct = Number(v) * 100;
   return `${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`;
 }
+// dividend_yield comes back from yfinance already as a plain percent number
+// (e.g. 0.44 meaning 0.44%), unlike roe/roa/margins/growth (decimal
+// fractions) -- so this doesn't multiply by 100 like fmtPct does.
+function fmtRawPct(v) {
+  return v === null || v === undefined ? "-" : `${Number(v).toFixed(2)}%`;
+}
 
 export default function CompanyTable() {
   const dispatch = useDispatch();
@@ -110,6 +116,17 @@ export default function CompanyTable() {
     { key: "roe", label: "ROE", sortable: true, width: 70, render: (row) => fmtPct(row.roe) },
     { key: "roa", label: "ROA", sortable: true, width: 70, render: (row) => fmtPct(row.roa) },
     { key: "debt_to_equity", label: "D/E", sortable: true, width: 70, render: (row) => fmtNum(row.debt_to_equity) },
+    // Present in the screener's filter form but not shown here by default --
+    // available via the Columns picker instead of crowding the default view.
+    { key: "forward_pe", label: "Forward P/E", sortable: true, width: 80, hiddenByDefault: true, render: (row) => fmtNum(row.forward_pe) },
+    { key: "peg_ratio", label: "PEG Ratio", sortable: true, width: 80, hiddenByDefault: true, render: (row) => fmtNum(row.peg_ratio) },
+    { key: "gross_margin", label: "Gross Margin", sortable: true, width: 95, hiddenByDefault: true, render: (row) => fmtPct(row.gross_margin) },
+    { key: "operating_margin", label: "Op Margin", sortable: true, width: 90, hiddenByDefault: true, render: (row) => fmtPct(row.operating_margin) },
+    { key: "net_margin", label: "Net Margin", sortable: true, width: 90, hiddenByDefault: true, render: (row) => fmtPct(row.net_margin) },
+    { key: "current_ratio", label: "Current Ratio", sortable: true, width: 95, hiddenByDefault: true, render: (row) => fmtNum(row.current_ratio) },
+    { key: "ev_to_ebitda", label: "EV/EBITDA", sortable: true, width: 90, hiddenByDefault: true, render: (row) => fmtNum(row.ev_to_ebitda) },
+    { key: "dividend_yield", label: "Dividend Yield", sortable: true, width: 100, hiddenByDefault: true, render: (row) => fmtRawPct(row.dividend_yield) },
+    { key: "free_cash_flow", label: "Free Cash Flow", sortable: true, width: 100, render: (row) => fmtLarge(row.free_cash_flow) },
   ];
 
   const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("companyTable", COLUMNS);

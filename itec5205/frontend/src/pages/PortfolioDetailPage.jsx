@@ -26,6 +26,12 @@ function changeColor(value) {
   if (value === null || value === undefined || value === 0) return "var(--color-text-primary)";
   return value > 0 ? "#16a34a" : "#dc2626";
 }
+// dividend_yield comes back from yfinance already as a plain percent number
+// (e.g. 0.44 meaning 0.44%), unlike roe/roa/margins/growth (decimal
+// fractions) -- so this doesn't multiply by 100 like fmtPct does.
+function fmtRawPct(v) {
+  return v === null || v === undefined ? "-" : `${Number(v).toFixed(2)}%`;
+}
 
 const TRADING_DAYS_PER_YEAR = 252;
 
@@ -82,6 +88,16 @@ const HOLDINGS_COLUMNS = [
   { key: "revenue_growth_yoy_q", label: "Revenue Growth", render: (h) => fmtPct(h.revenue_growth_yoy_q) },
   { key: "earnings_growth_yoy_q", label: "Earnings Growth", render: (h) => fmtPct(h.earnings_growth_yoy_q) },
   { key: "weight", label: "Weight", className: "weight", render: (h) => `${(h.weight * 100).toFixed(2)}%` },
+  // Present on the screener's filter form but not shown here by default --
+  // available via the Columns picker instead of crowding the default view.
+  { key: "peg_ratio", label: "PEG Ratio", hiddenByDefault: true, render: (h) => fmtNum(h.peg_ratio) },
+  { key: "gross_margin", label: "Gross Margin", hiddenByDefault: true, render: (h) => fmtPct(h.gross_margin) },
+  { key: "operating_margin", label: "Op Margin", hiddenByDefault: true, render: (h) => fmtPct(h.operating_margin) },
+  { key: "net_margin", label: "Net Margin", hiddenByDefault: true, render: (h) => fmtPct(h.net_margin) },
+  { key: "current_ratio", label: "Current Ratio", hiddenByDefault: true, render: (h) => fmtNum(h.current_ratio) },
+  { key: "ev_to_ebitda", label: "EV/EBITDA", hiddenByDefault: true, render: (h) => fmtNum(h.ev_to_ebitda) },
+  { key: "dividend_yield", label: "Dividend Yield", hiddenByDefault: true, render: (h) => fmtRawPct(h.dividend_yield) },
+  { key: "free_cash_flow", label: "Free Cash Flow", render: (h) => fmtLarge(h.free_cash_flow) },
 ];
 
 export default function PortfolioDetailPage() {
