@@ -103,9 +103,7 @@ export default function PortfolioDetailPage() {
     <div>
       <div className="card" style={{ position: "relative" }}>
         {CloseButton}
-        <h2 style={{ paddingRight: 48 }}>
-          {portfolio.name} <span className="pill">{portfolio.method}</span>
-        </h2>
+        <h2 style={{ paddingRight: 48 }}>{portfolio.name}</h2>
         <p className="muted">
           Expected annual return: <strong style={{ color: changeColor(portfolio.expected_return) }}>{fmtPct(portfolio.expected_return)}</strong>
           {" · "}Volatility: <strong>{fmtPct(portfolio.expected_volatility)}</strong>
