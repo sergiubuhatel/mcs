@@ -26,6 +26,23 @@ function fmtLarge(v) {
   return `$${n.toFixed(0)}`;
 }
 
+const TRADING_DAYS_PER_YEAR = 252;
+
+// Annualized stdev of daily % change over the given window -- same formula
+// the backend uses for the stored 1Y figure, just recomputed client-side
+// over whatever range is currently selected on the chart.
+function computeVolatility(rangeHistory) {
+  const dailyReturns = rangeHistory
+    .map((h) => h.percentage_change)
+    .filter((v) => v !== null && v !== undefined)
+    .map((v) => v / 100);
+  if (dailyReturns.length < 2) return null;
+
+  const mean = dailyReturns.reduce((sum, v) => sum + v, 0) / dailyReturns.length;
+  const variance = dailyReturns.reduce((sum, v) => sum + (v - mean) ** 2, 0) / (dailyReturns.length - 1);
+  return Math.sqrt(variance) * Math.sqrt(TRADING_DAYS_PER_YEAR);
+}
+
 
 export default function CompanyDetailPage() {
   const { ticker } = useParams();
@@ -102,6 +119,7 @@ export default function CompanyDetailPage() {
           rangeHistory.length >= 2 && rangeHistory[0].close
             ? ((rangeHistory[rangeHistory.length - 1].close - rangeHistory[0].close) / rangeHistory[0].close) * 100
             : null;
+        const periodVolatility = computeVolatility(rangeHistory);
         return (
           <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
@@ -111,6 +129,9 @@ export default function CompanyDetailPage() {
                   <span style={{ color: changeColor(periodChangePct), fontWeight: 600 }}>
                     {periodChangePct > 0 ? "+" : ""}{periodChangePct.toFixed(2)}% ({range})
                   </span>
+                )}
+                {periodVolatility !== null && (
+                  <span className="muted">Volatility ({range}): <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(periodVolatility)}</strong></span>
                 )}
               </div>
               <div style={{ display: "flex", gap: 4 }}>
