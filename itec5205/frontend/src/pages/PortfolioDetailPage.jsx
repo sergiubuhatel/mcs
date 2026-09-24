@@ -87,6 +87,7 @@ const HOLDINGS_COLUMNS = [
   { key: "forward_pe", label: "Forward P/E", render: (h) => fmtNum(h.forward_pe) },
   { key: "revenue_growth_yoy_q", label: "Revenue Growth", render: (h) => fmtPct(h.revenue_growth_yoy_q) },
   { key: "earnings_growth_yoy_q", label: "Earnings Growth", render: (h) => fmtPct(h.earnings_growth_yoy_q) },
+  { key: "free_cash_flow", label: "Free Cash Flow", render: (h) => fmtLarge(h.free_cash_flow) },
   { key: "weight", label: "Weight", className: "weight", render: (h) => `${(h.weight * 100).toFixed(2)}%` },
   // Present on the screener's filter form but not shown here by default --
   // available via the Columns picker instead of crowding the default view.
@@ -97,7 +98,6 @@ const HOLDINGS_COLUMNS = [
   { key: "current_ratio", label: "Current Ratio", hiddenByDefault: true, render: (h) => fmtNum(h.current_ratio) },
   { key: "ev_to_ebitda", label: "EV/EBITDA", hiddenByDefault: true, render: (h) => fmtNum(h.ev_to_ebitda) },
   { key: "dividend_yield", label: "Dividend Yield", hiddenByDefault: true, render: (h) => fmtRawPct(h.dividend_yield) },
-  { key: "free_cash_flow", label: "Free Cash Flow", render: (h) => fmtLarge(h.free_cash_flow) },
 ];
 
 export default function PortfolioDetailPage() {
