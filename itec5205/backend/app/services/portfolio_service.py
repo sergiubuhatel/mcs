@@ -33,12 +33,28 @@ def _returns_matrix(tickers: list[str], lookback_days: int = TRADING_DAYS_PER_YE
     return pivot.tail(lookback_days)
 
 
+def returns_past_year(tickers: list[str]) -> pd.DataFrame:
+    """Daily returns over exactly the window the portfolio page's "1Y" change
+    uses (frontend `filterByInterval`): chart points dated on/after the same
+    calendar date one year before the latest one. That change is measured
+    from the first such point, so its own day's return is excluded. Keeping
+    the two identical matters for a return floor: a portfolio that clears
+    100% by a hair over 252 rows can show 98% on a window one day shorter."""
+    df = _returns_matrix(tickers, lookback_days=TRADING_DAYS_PER_YEAR + 10)
+    if df.empty:
+        return df
+    dates = pd.to_datetime(pd.Series(df.index))
+    cutoff = dates.iloc[-1] - pd.DateOffset(years=1)
+    first_in_window = int((dates >= cutoff).to_numpy().argmax())
+    return df.iloc[first_in_window + 1 :]
+
+
 def compute_metrics(holdings: list[dict]) -> dict:
     """holdings: [{ticker, weight}, ...] with weights already normalized to sum to 1."""
     tickers = [h["ticker"] for h in holdings]
     weights = np.array([h["weight"] for h in holdings], dtype=float)
 
-    returns = _returns_matrix(tickers)
+    returns = returns_past_year(tickers)
     if returns.empty:
         return {"expected_return": None, "annual_return": None, "expected_volatility": None, "sharpe_ratio": None}
 

@@ -9,6 +9,24 @@ function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
 }
 
+// Company-count inputs: blank stays blank (auto), otherwise a whole number
+// between 2 (the fewest the agent can allocate across) and the pool size.
+function clampCount(raw, poolSize) {
+  return raw === "" ? "" : Math.max(2, Math.min(poolSize, Math.round(Number(raw))));
+}
+
+function countOrNull(v) {
+  return v === "" ? null : Number(v);
+}
+
+function describeCount(min, max) {
+  if (min === "" && max === "") return "which companies to keep (and how many)";
+  if (min !== "" && min === max) return `the best ${min} companies`;
+  if (min === "") return `which companies to keep (at most ${max})`;
+  if (max === "") return `which companies to keep (at least ${min})`;
+  return `which companies to keep (${min}–${max})`;
+}
+
 // Blank = no constraint / auto; otherwise a typed percentage -> fraction.
 function pctOrNull(v) {
   return v === "" || v === null || v === undefined ? null : Number(v) / 100;
@@ -20,7 +38,8 @@ export default function RLTrainingPanel({ pool }) {
   const [riskAversion, setRiskAversion] = useState(1.0);
   const [timesteps, setTimesteps] = useState(20000);
   const [mode, setMode] = useState("full"); // "full" | "subset"
-  const [subsetSize, setSubsetSize] = useState(""); // blank = auto-pick the size
+  const [minCompanies, setMinCompanies] = useState(""); // blank = no lower bound (auto)
+  const [maxCompanies, setMaxCompanies] = useState(""); // blank = no upper bound (auto)
   const [maxVolatility, setMaxVolatility] = useState(""); // annual %, blank = no ceiling
   const [minReturn, setMinReturn] = useState(""); // realized past-year return %, blank = no floor
   const [lookbackDays, setLookbackDays] = useState(252); // trading days the trend line is fit over
@@ -33,7 +52,8 @@ export default function RLTrainingPanel({ pool }) {
         timesteps: Number(timesteps),
         portfolio_name: pool.name,
         mode,
-        subset_size: subsetSize === "" ? null : Math.max(2, Math.min(499, Number(subsetSize) || 2)),
+        min_companies: countOrNull(clampCount(minCompanies, pool.tickers.length)),
+        max_companies: countOrNull(clampCount(maxCompanies, pool.tickers.length)),
         lookback_days: Number(lookbackDays),
         max_volatility: pctOrNull(maxVolatility),
         min_return: pctOrNull(minReturn),
@@ -41,6 +61,7 @@ export default function RLTrainingPanel({ pool }) {
     );
   };
 
+  const countBoundsInvalid = minCompanies !== "" && maxCompanies !== "" && Number(minCompanies) > Number(maxCompanies);
   const training = status === "starting" || status === "training";
   const pct = progress && progress.total ? Math.min(100, Math.round((progress.completed / progress.total) * 100)) : 0;
 
@@ -93,26 +114,33 @@ export default function RLTrainingPanel({ pool }) {
           />
         </div>
         <div>
-            <label>Number of companies (blank = auto)</label>
-            <input
-              type="number"
-              step="1"
-              min="2"
-              max={Math.min(499, pool.tickers.length)}
-              placeholder="auto"
-              value={subsetSize}
-              onChange={(e) => {
-                const raw = e.target.value;
-                if (raw === "") {
-                  setSubsetSize(raw);
-                  return;
-                }
-                const clamped = Math.max(2, Math.min(499, pool.tickers.length, Number(raw)));
-                setSubsetSize(clamped);
-              }}
-              disabled={training}
-            />
-          </div>
+          <label>Min companies (blank = auto)</label>
+          <input
+            type="number"
+            step="1"
+            min="2"
+            max={pool.tickers.length}
+            placeholder="auto"
+            value={minCompanies}
+            onChange={(e) => setMinCompanies(e.target.value)}
+            onBlur={(e) => setMinCompanies(clampCount(e.target.value, pool.tickers.length))}
+            disabled={training}
+          />
+        </div>
+        <div>
+          <label>Max companies (blank = auto)</label>
+          <input
+            type="number"
+            step="1"
+            min="2"
+            max={pool.tickers.length}
+            placeholder="auto"
+            value={maxCompanies}
+            onChange={(e) => setMaxCompanies(e.target.value)}
+            onBlur={(e) => setMaxCompanies(clampCount(e.target.value, pool.tickers.length))}
+            disabled={training}
+          />
+        </div>
         {mode === "subset" && (
           <div>
             <label>Trend window (how far back to check for a straight line)</label>
@@ -129,16 +157,15 @@ export default function RLTrainingPanel({ pool }) {
       <p className="muted" style={{ margin: "4px 0 8px" }}>
         {mode === "subset" &&
           "Candidates: companies whose price over the trend window tracks a straight line upward (K-ratio). "}
-        {mode === "full" && subsetSize === "" && maxVolatility === "" && minReturn === ""
+        {mode === "full" && minCompanies === "" && maxCompanies === "" && maxVolatility === "" && minReturn === ""
           ? "No limits or company count set: the agent trains on every ticker in the pool."
-          : `A mean-variance optimizer picks ${
-              subsetSize === "" ? "which companies to keep (and how many)" : `the best ${subsetSize} companies`
-            } from the past year of returns — the highest return under the volatility limit, or the lowest volatility above the annual return floor${
+          : `A mean-variance optimizer picks ${describeCount(minCompanies, maxCompanies)} from the past year of returns — the highest return under the volatility limit, or the lowest volatility above the annual return floor${
               maxVolatility === "" && minReturn === "" ? " (here: the highest Sharpe ratio, since no limits are set)" : ""
             }. The PPO agent then trains on just those, and if its weights miss a limit they are blended toward the optimizer's allocation.`}
       </p>
 
-      <button className="btn" onClick={start} disabled={training}>
+      {countBoundsInvalid && <p className="error-text">Min companies can't be greater than max companies.</p>}
+      <button className="btn" onClick={start} disabled={training || countBoundsInvalid}>
         <PieChartIcon /> {training ? "Training..." : "Train RL portfolio"}
       </button>{" "}
       {status !== "idle" && (
@@ -194,6 +221,16 @@ export default function RLTrainingPanel({ pool }) {
             <strong>{fmtPct(result.metrics?.expected_volatility)}</strong> · Sharpe:{" "}
             <strong>{result.metrics?.sharpe_ratio ?? "-"}</strong>
           </p>
+          {result.excluded?.length > 0 && (
+            <p className="error-text">
+              Left out — not enough price history to estimate risk and return (needs about{" "}
+              {result.excluded[0].required_days} trading days):{" "}
+              {result.excluded.map((e) => `${e.ticker} (${e.days} days)`).join(", ")}
+              {result.min_companies != null &&
+                result.holdings?.length < result.min_companies &&
+                `. Only ${result.holdings.length} companies could be used — fewer than the minimum of ${result.min_companies}.`}
+            </p>
+          )}
           {result.constraints && (
             <p className={result.constraints.satisfied ? "muted" : "error-text"}>
               Constraints ({[

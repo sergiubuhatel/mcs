@@ -14,7 +14,7 @@ from ..config import RL_MODELS_DIR
 from ..db.arango_client import get_db
 from ..extensions import socketio
 from ..rl.portfolio_env import PortfolioEnv
-from .portfolio_service import compute_metrics, metrics_from_returns
+from .portfolio_service import compute_metrics, metrics_from_returns, returns_past_year
 from .portfolio_service import _returns_matrix as returns_matrix
 
 MIN_HISTORY_DAYS = 120
@@ -54,6 +54,51 @@ class SocketIOProgressCallback(BaseCallback):
             if self.task is not None:
                 self.task.update_state(state="PROGRESS", meta=progress)
         return True
+
+
+# Share of a year's trading days a ticker needs to be optimized over (see
+# `optimize_selection`'s dropna threshold).
+OPTIMIZER_HISTORY_DAYS = int(TRADING_DAYS_PER_YEAR * 0.9)
+
+
+def price_history_days(tickers: list[str]) -> dict[str, int]:
+    """How many daily returns are stored per ticker (0 if none) -- used to
+    explain why a requested company was left out of a portfolio."""
+    db = get_db()
+    cursor = db.aql.execute(
+        """
+        FOR p IN stock_prices
+            FILTER p.ticker IN @tickers AND p.percentage_change != null
+            COLLECT ticker = p.ticker WITH COUNT INTO days
+            RETURN {ticker, days}
+        """,
+        bind_vars={"tickers": tickers},
+    )
+    counts = {row["ticker"]: row["days"] for row in cursor}
+    return {t: counts.get(t, 0) for t in tickers}
+
+
+def excluded_for_history(
+    requested: list[str], used: list[str], mode: str, optimized: bool, lookback_days: int
+) -> list[dict]:
+    """Requested tickers missing from `used` because they don't have enough
+    price history for the steps this run went through -- the RL training
+    minimum, plus the optimizer's ~1 year and/or the trend window's share.
+    Companies the optimizer or trend filter dropped on merit aren't listed."""
+    required = MIN_HISTORY_DAYS
+    if optimized:
+        required = max(required, OPTIMIZER_HISTORY_DAYS)
+    if mode == "subset":
+        required = max(required, int(lookback_days * 0.9))
+    missing = [t for t in dict.fromkeys(requested) if t not in set(used)]
+    if not missing:
+        return []
+    days = price_history_days(missing)
+    return [
+        {"ticker": t, "days": days[t], "required_days": required}
+        for t in missing
+        if days[t] < required
+    ]
 
 
 def default_universe(n: int = 30) -> list[str]:
@@ -208,46 +253,66 @@ def optimize_selection(
     tickers: list[str],
     max_volatility: float | None = None,
     min_return: float | None = None,
-    count: int | None = None,
+    min_count: int | None = None,
+    max_count: int | None = None,
 ) -> dict:
     """Choose which companies (and a baseline weighting of them) best meet
     the volatility ceiling / return floor over the past year, by walking the
     long-only efficient frontier of `tickers` and taking the best point per
     `_candidate_rank`. Companies weighted below MIN_SELECTED_WEIGHT are
-    dropped, so the number of companies falls out of the optimization --
-    unless `count` fixes it, in which case the `count` largest positions are
-    kept and the frontier is re-solved over just those.
+    dropped, so the number of companies falls out of the optimization. If
+    that number is outside [min_count, max_count], the nearest bound is
+    used: every frontier point's top-N companies is tried as a candidate set
+    (re-optimized over just those N) and the best set wins -- so a small
+    count can land on e.g. the high-return end of the frontier instead of
+    being stuck with the largest positions of the unrestricted solution.
 
     Returns {tickers, weights (dict), metrics, feasible}. `feasible` is False
     when no long-only mix of these companies meets the limits; the closest
     frontier point is returned then."""
-    returns_df = returns_matrix(tickers)
+    returns_df = returns_past_year(tickers)
     if not returns_df.empty:
         returns_df = returns_df.dropna(axis=1, thresh=int(len(returns_df) * 0.9)).fillna(0.0)
     if returns_df.shape[1] < 2:
         raise ValueError("Not enough tickers with a year of price history to optimize over")
+    return _optimize(returns_df, max_volatility, min_return, min_count, max_count)
 
+
+def _optimize(
+    returns_df, max_volatility: float | None, min_return: float | None, min_count: int | None, max_count: int | None
+) -> dict:
+    """`optimize_selection` over an already-fetched returns DataFrame."""
     columns = list(returns_df.columns)
     returns = returns_df.values
     frontier = _efficient_frontier(returns)
-    ranked = sorted(
+    best = min(
         frontier, key=lambda w: _candidate_rank(metrics_from_returns(returns, w), max_volatility, min_return)
     )
-    best = ranked[0]
 
     # Order by optimal weight, breaking ties (e.g. zero weights) by mean return.
     mean_returns = returns.mean(axis=0)
     order = sorted(range(len(columns)), key=lambda i: (-best[i], -mean_returns[i]))
-    if count is not None:
-        keep = order[: max(2, min(count, len(columns)))]
-        if len(keep) < len(columns):
-            # Re-solve over just these; count == len keeps all of them.
-            return optimize_selection([columns[i] for i in keep], max_volatility, min_return, count=len(keep))
-    else:
-        keep = [i for i in order if best[i] >= MIN_SELECTED_WEIGHT]
-        keep = keep if len(keep) >= 2 else order[:2]  # RL training needs at least 2 assets
+    auto_size = sum(1 for i in order if best[i] >= MIN_SELECTED_WEIGHT)
+    lo = max(2, min_count or 2)  # RL training needs at least 2 assets
+    hi = max(lo, max_count) if max_count is not None else len(columns)
+    size = min(max(auto_size, lo), hi, len(columns))
+    keep = order[:size]
+    if size != auto_size and size < len(columns):
+        candidate_sets = {
+            tuple(sorted(sorted(range(len(columns)), key=lambda i: (-w[i], -mean_returns[i]))[:size]))
+            for w in frontier
+        }
+        # Re-solve over each set; min == max == size keeps all of its companies.
+        results = [
+            _optimize(returns_df.iloc[:, list(subset)], max_volatility, min_return, size, size)
+            for subset in candidate_sets
+        ]
+        return min(results, key=lambda r: _candidate_rank(r["metrics"], max_volatility, min_return))
 
-    weights = best[keep] / best[keep].sum() if best[keep].sum() > 0 else np.ones(len(keep)) / len(keep)
+    # Floor at MIN_SELECTED_WEIGHT so a company kept to reach `min_count`
+    # still gets a (small) position rather than a zero weight.
+    weights = np.maximum(best[keep], MIN_SELECTED_WEIGHT)
+    weights = weights / weights.sum()
     metrics = metrics_from_returns(returns[:, keep], weights)
     return {
         "tickers": [columns[i] for i in keep],
@@ -260,7 +325,8 @@ def optimize_selection(
 def select_universe(
     tickers: list[str],
     mode: str = "full",
-    count: int | None = None,
+    min_count: int | None = None,
+    max_count: int | None = None,
     lookback_days: int = 252,
     max_volatility: float | None = None,
     min_return: float | None = None,
@@ -268,29 +334,33 @@ def select_universe(
     """Decide which companies the agent trains on.
 
     - "subset" mode first narrows `tickers` to those with an upward trend,
-      ranked by K-ratio. With a fixed `count` and no limits, it keeps the
-      top `count` by K-ratio, as it always has.
-    - Any volatility/return limit, or a blank `count` in subset mode, runs
-      `optimize_selection` over the candidates -- that is what drops
-      companies and sizes the portfolio automatically.
-    - "full" mode with no limits and no `count` trains on every ticker.
+      ranked by K-ratio. With an exact count (min == max) and no limits, it
+      keeps the top that-many by K-ratio, as it always has.
+    - Otherwise any volatility/return limit or company-count bound (and
+      always in subset mode) runs `optimize_selection` over the candidates --
+      that is what drops companies and sizes the portfolio, within
+      [min_count, max_count].
+    - "full" mode with no limits and no count bounds trains on every ticker.
 
     Returns {tickers, selection (K-ratio rows, subset mode only), optimizer
     (optimize_selection's result, or None)}."""
+    if min_count is not None and max_count is not None and min_count > max_count:
+        raise ValueError(f"Min companies ({min_count}) is greater than max companies ({max_count})")
     constrained = max_volatility is not None or min_return is not None
+    bounded = min_count is not None or max_count is not None
     candidates, ranked = tickers, None
     if mode == "subset":
         ranked = rank_by_trend_consistency(tickers, lookback_days=lookback_days)
         if len(ranked) < 2:
             raise ValueError("Fewer than 2 tickers in this universe have an upward price trend to select from")
-        if count is not None and not constrained:
-            chosen = ranked[: max(2, min(count, len(ranked)))]
+        if min_count is not None and min_count == max_count and not constrained:
+            chosen = ranked[: max(2, min(min_count, len(ranked)))]
             return {"tickers": [r["ticker"] for r in chosen], "selection": chosen, "optimizer": None}
         candidates = [r["ticker"] for r in ranked]
-    elif not constrained and count is None:
+    elif not constrained and not bounded:
         return {"tickers": tickers, "selection": None, "optimizer": None}
 
-    optimizer = optimize_selection(candidates, max_volatility, min_return, count)
+    optimizer = optimize_selection(candidates, max_volatility, min_return, min_count, max_count)
     chosen = set(optimizer["tickers"])
     selection = [r for r in ranked if r["ticker"] in chosen] if ranked is not None else None
     return {"tickers": optimizer["tickers"], "selection": selection, "optimizer": optimizer}
@@ -311,7 +381,7 @@ def _enforce_constraints(
     stays as close to the RL policy as possible. Returns (weights, blend)
     where blend is the anchor's share (0 = RL weights unchanged). If no
     blend is feasible, the closest one is returned."""
-    returns_df = returns_matrix(tickers).reindex(columns=tickers).fillna(0.0)
+    returns_df = returns_past_year(tickers).reindex(columns=tickers).fillna(0.0)
     if returns_df.empty:
         return weights, 0.0
     returns = returns_df.values
