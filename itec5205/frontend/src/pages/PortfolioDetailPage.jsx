@@ -348,6 +348,12 @@ export default function PortfolioDetailPage() {
                 <Cell key={a.ticker} fill={ALLOCATION_COLORS[i % ALLOCATION_COLORS.length]} />
               ))}
               <LabelList
+                dataKey="name"
+                position="insideLeft"
+                offset={10}
+                style={{ fill: "#fff", fontSize: 12, fontWeight: 600 }}
+              />
+              <LabelList
                 dataKey="weightPct"
                 position="right"
                 formatter={(v) => `${Number(v).toFixed(2)}%`}
