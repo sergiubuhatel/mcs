@@ -27,6 +27,18 @@ const companiesSlice = createSlice({
     setFilters(state, action) {
       state.filters = { ...state.filters, ...action.payload };
     },
+    // Resets every search field back to empty; keeps the grid's current
+    // sort and page size, and goes back to the first page.
+    clearFilters(state) {
+      state.filters = {
+        ...state.filters,
+        sector: initialState.filters.sector,
+        industry: initialState.filters.industry,
+        q: initialState.filters.q,
+        ranges: initialState.filters.ranges,
+        offset: 0,
+      };
+    },
     fetchRequested() {
       // handled by saga; reducer just needs to exist as an action creator
     },
@@ -76,6 +88,7 @@ const companiesSlice = createSlice({
 
 export const {
   setFilters,
+  clearFilters,
   fetchRequested,
   fetchStarted,
   fetchSucceeded,

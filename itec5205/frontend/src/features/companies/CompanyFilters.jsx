@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchIndustriesRequested, fetchRequested, fetchSectorsRequested, setFilters } from "./companiesSlice";
+import { clearFilters, fetchIndustriesRequested, fetchRequested, fetchSectorsRequested, setFilters } from "./companiesSlice";
 import { BarChartIcon, DatabaseIcon, GrowthIcon, SearchIcon, TrendChartIcon } from "../../layout/icons";
 
 // How many stored units (market_cap is stored in $M, free_cash_flow in raw
@@ -96,6 +96,14 @@ export default function CompanyFilters() {
     dispatch(fetchRequested());
   };
 
+  const clear = () => {
+    dispatch(clearFilters());
+    setUnits({ market_cap: "B", free_cash_flow: "B" });
+    setRawUnitValues({ market_cap: ["", ""], free_cash_flow: ["", ""] });
+    dispatch(fetchIndustriesRequested()); // sector is cleared -> all industries again
+    dispatch(fetchRequested());
+  };
+
   const onSectorChange = (e) => {
     dispatch(setFilters({ sector: e.target.value, industry: "" }));
     dispatch(fetchIndustriesRequested());
@@ -137,7 +145,10 @@ export default function CompanyFilters() {
             <p className="muted" style={{ margin: 0 }}>Filter S&amp;P 500 companies using fundamental metrics</p>
           </div>
         </div>
-        <button className="btn" type="submit"><SearchIcon /> Search</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn secondary" type="button" onClick={clear}>Clear</button>
+          <button className="btn" type="submit"><SearchIcon /> Search</button>
+        </div>
       </div>
 
       <div className="filters-grid">
