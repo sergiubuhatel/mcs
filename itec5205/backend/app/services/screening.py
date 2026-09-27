@@ -70,6 +70,11 @@ FILTERABLE_RANGES = {
     "ev_to_ebitda": "stats.ev_to_ebitda",
     "earnings_growth_yoy_q": "stats.earnings_growth_yoy_q",
     "free_cash_flow": "stats.free_cash_flow",
+    # Calculated at import time into `calculated_stats` (stored as fractions,
+    # e.g. 0.35 for 35%) -- joined as `calc` in both queries below.
+    "stock_growth_1y": "calc.stock_growth_1y",
+    "volatility": "calc.volatility_1y",
+    "day_change": f"({COMPUTED_SORT_EXPRESSIONS['day_change']})",
 }
 
 
@@ -116,7 +121,9 @@ def search_companies(
             bind_vars[var] = lo
         if hi is not None:
             var = f"{key}_max"
-            filter_clauses.append(f"{path} <= @{var}")
+            # AQL orders null below every number, so `null <= x` is true --
+            # exclude missing values explicitly or a max bound lets them through.
+            filter_clauses.append(f"{path} != null AND {path} <= @{var}")
             bind_vars[var] = hi
 
     filter_expr = " AND ".join(filter_clauses)
@@ -162,6 +169,7 @@ def search_companies(
     count_aql = f"""
         FOR company IN companies
             LET stats = DOCUMENT('stock_stats', company._key)
+            LET calc = DOCUMENT('calculated_stats', company._key)
             FILTER {filter_expr}
             COLLECT WITH COUNT INTO total
             RETURN total

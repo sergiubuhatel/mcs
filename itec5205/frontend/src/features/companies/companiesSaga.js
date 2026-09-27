@@ -14,7 +14,13 @@ import {
 // Fields where the UI takes a plain percentage (e.g. 20 for 20%) but the
 // stored/filtered value is the decimal fraction (0.20) yfinance returns --
 // kept in sync with the `percent: true` entries in CompanyFilters.jsx.
-const PERCENT_RANGE_FIELDS = new Set(["revenue_growth_yoy", "earnings_growth_yoy_q"]);
+const PERCENT_RANGE_FIELDS = new Set([
+  "revenue_growth_yoy",
+  "earnings_growth_yoy_q",
+  "day_change",
+  "stock_growth_1y",
+  "volatility",
+]);
 
 function buildParams(filters) {
   const params = {

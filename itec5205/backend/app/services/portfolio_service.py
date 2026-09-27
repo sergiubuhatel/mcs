@@ -40,19 +40,30 @@ def compute_metrics(holdings: list[dict]) -> dict:
 
     returns = _returns_matrix(tickers)
     if returns.empty:
-        return {"expected_return": None, "expected_volatility": None, "sharpe_ratio": None}
+        return {"expected_return": None, "annual_return": None, "expected_volatility": None, "sharpe_ratio": None}
 
-    returns = returns.reindex(columns=tickers).fillna(0.0)
-    portfolio_daily = returns.values @ weights
+    return metrics_from_returns(returns.reindex(columns=tickers).fillna(0.0).values, weights)
+
+
+def metrics_from_returns(returns: np.ndarray, weights: np.ndarray) -> dict:
+    """Annualized return/volatility/Sharpe of fixed `weights` applied to a
+    (days, assets) matrix of fractional daily returns -- `compute_metrics`
+    without the DB fetch, for scoring many candidate weightings at once."""
+    portfolio_daily = returns @ weights
 
     mean_daily = portfolio_daily.mean()
     std_daily = portfolio_daily.std()
     expected_return = mean_daily * TRADING_DAYS_PER_YEAR
     expected_volatility = std_daily * np.sqrt(TRADING_DAYS_PER_YEAR)
     sharpe_ratio = float(expected_return / expected_volatility) if expected_volatility else None
+    # Realized, compounded return over the window (value at the end / value
+    # at the start - 1) -- what the portfolio actually grew by, the same idea
+    # as a stock's Change (1Y), unlike the mean-based expected_return.
+    annual_return = float(np.prod(1.0 + portfolio_daily) - 1.0)
 
     return {
         "expected_return": round(float(expected_return), 4),
+        "annual_return": round(annual_return, 4),
         "expected_volatility": round(float(expected_volatility), 4),
         "sharpe_ratio": round(sharpe_ratio, 4) if sharpe_ratio is not None else None,
     }

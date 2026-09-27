@@ -63,6 +63,18 @@ const FILTER_GROUPS = [
       { key: "free_cash_flow", label: "Free Cash Flow", unit: true },
     ],
   },
+  {
+    // Calculated from stored price history at import time (calculated_stats),
+    // not reported by Yahoo -- same percent entry convention as Growth.
+    title: "Price Performance",
+    icon: TrendChartIcon,
+    color: "#0ea5e9",
+    fields: [
+      { key: "day_change", label: "Change (1D) %", percent: true },
+      { key: "stock_growth_1y", label: "Change (1Y) %", percent: true },
+      { key: "volatility", label: "Volatility (1Y) %", percent: true },
+    ],
+  },
 ];
 
 export default function CompanyFilters() {

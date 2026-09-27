@@ -14,10 +14,18 @@ from ..config import RL_MODELS_DIR
 from ..db.arango_client import get_db
 from ..extensions import socketio
 from ..rl.portfolio_env import PortfolioEnv
-from .portfolio_service import compute_metrics
+from .portfolio_service import compute_metrics, metrics_from_returns
 from .portfolio_service import _returns_matrix as returns_matrix
 
 MIN_HISTORY_DAYS = 120
+TRADING_DAYS_PER_YEAR = 252
+# Positions below this optimal weight are dropped when the optimizer sizes
+# the portfolio on its own.
+MIN_SELECTED_WEIGHT = 0.005
+# Trade-off points sampled along the efficient frontier.
+FRONTIER_POINTS = 40
+# Blend steps tried by `_enforce_constraints` (0 = pure RL weights).
+BLEND_STEPS = [i / 20 for i in range(21)]
 
 
 class SocketIOProgressCallback(BaseCallback):
@@ -134,15 +142,201 @@ def rank_by_trend_consistency(tickers: list[str], lookback_days: int = 252) -> l
     return scored
 
 
-def select_subset_by_trend_consistency(tickers: list[str], subset_size: int, lookback_days: int = 252) -> list[dict]:
-    """The top `subset_size` tickers from `rank_by_trend_consistency`,
-    clamped to at least 2 (the minimum `train_and_recommend` needs) and at
-    most however many actually had an upward, scorable trend."""
-    ranked = rank_by_trend_consistency(tickers, lookback_days=lookback_days)
-    if len(ranked) < 2:
-        raise ValueError("Fewer than 2 tickers in this universe have an upward price trend to select from")
-    size = max(2, min(subset_size, len(ranked)))
-    return ranked[:size]
+def constraint_violation(metrics: dict, max_volatility: float | None, min_return: float | None) -> float:
+    """Total shortfall (in annualized fraction units) of `metrics` against
+    the optional volatility ceiling / annual (compounded, past-year) return
+    floor; 0 means both are met."""
+    violation = 0.0
+    if max_volatility is not None and metrics.get("expected_volatility") is not None:
+        violation += max(0.0, metrics["expected_volatility"] - max_volatility)
+    if min_return is not None and metrics.get("annual_return") is not None:
+        violation += max(0.0, min_return - metrics["annual_return"])
+    return violation
+
+
+def _candidate_rank(metrics: dict, max_volatility: float | None, min_return: float | None) -> tuple:
+    """Sort key, best first: feasible before infeasible, then smaller
+    violation, then the objective the limits imply -- highest return under a
+    volatility cap (with or without a return floor), lowest volatility above
+    a return floor alone, highest Sharpe when there are no limits."""
+    violation = constraint_violation(metrics, max_volatility, min_return)
+    ret, vol, sharpe = metrics.get("annual_return"), metrics.get("expected_volatility"), metrics.get("sharpe_ratio")
+    if max_volatility is not None:
+        objective = -ret if ret is not None else float("inf")
+    elif min_return is not None:
+        objective = vol if vol is not None else float("inf")
+    else:
+        objective = -sharpe if sharpe is not None else float("inf")
+    return (violation > 0, round(violation, 6), objective)
+
+
+def _project_to_simplex(v: np.ndarray) -> np.ndarray:
+    """Euclidean projection onto {w >= 0, sum(w) = 1} (long-only, fully invested)."""
+    u = np.sort(v)[::-1]
+    css = np.cumsum(u)
+    rho = np.nonzero(u * np.arange(1, len(v) + 1) > css - 1)[0][-1]
+    return np.maximum(v - (css[rho] - 1) / (rho + 1), 0.0)
+
+
+def _efficient_frontier(returns: np.ndarray, points: int = FRONTIER_POINTS, iters: int = 500) -> list[np.ndarray]:
+    """Long-only mean-variance frontier: for each trade-off t, minimize
+    annual variance - t * annual return over the simplex with accelerated
+    projected gradient (a convex QP, so this converges to the true optimum).
+    t = 0 is the minimum-variance portfolio; large t tends to the single
+    highest-return asset. Projection yields exact zeros, so the frontier
+    portfolios are naturally sparse -- that's what sizes the selection."""
+    n = returns.shape[1]
+    mu = returns.mean(axis=0) * TRADING_DAYS_PER_YEAR
+    cov = np.cov(returns, rowvar=False, ddof=0) * TRADING_DAYS_PER_YEAR
+    step = 1.0 / (2.0 * max(np.linalg.eigvalsh(cov)[-1], 1e-12))
+
+    frontier = []
+    w = np.ones(n) / n
+    for t in np.concatenate([[0.0], np.geomspace(1e-3, 1e3, points - 1)]):
+        y, w_prev, momentum = w.copy(), w.copy(), 1.0
+        for _ in range(iters):
+            w_next = _project_to_simplex(y - step * (2.0 * cov @ y - t * mu))
+            momentum_next = (1 + (1 + 4 * momentum**2) ** 0.5) / 2
+            y = w_next + ((momentum - 1) / momentum_next) * (w_next - w_prev)
+            w_prev, w, momentum = w_next, w_next, momentum_next
+        frontier.append(w.copy())
+    frontier.append(np.eye(n)[int(np.argmax(mu))])  # the max-return end point exactly
+    return frontier
+
+
+def optimize_selection(
+    tickers: list[str],
+    max_volatility: float | None = None,
+    min_return: float | None = None,
+    count: int | None = None,
+) -> dict:
+    """Choose which companies (and a baseline weighting of them) best meet
+    the volatility ceiling / return floor over the past year, by walking the
+    long-only efficient frontier of `tickers` and taking the best point per
+    `_candidate_rank`. Companies weighted below MIN_SELECTED_WEIGHT are
+    dropped, so the number of companies falls out of the optimization --
+    unless `count` fixes it, in which case the `count` largest positions are
+    kept and the frontier is re-solved over just those.
+
+    Returns {tickers, weights (dict), metrics, feasible}. `feasible` is False
+    when no long-only mix of these companies meets the limits; the closest
+    frontier point is returned then."""
+    returns_df = returns_matrix(tickers)
+    if not returns_df.empty:
+        returns_df = returns_df.dropna(axis=1, thresh=int(len(returns_df) * 0.9)).fillna(0.0)
+    if returns_df.shape[1] < 2:
+        raise ValueError("Not enough tickers with a year of price history to optimize over")
+
+    columns = list(returns_df.columns)
+    returns = returns_df.values
+    frontier = _efficient_frontier(returns)
+    ranked = sorted(
+        frontier, key=lambda w: _candidate_rank(metrics_from_returns(returns, w), max_volatility, min_return)
+    )
+    best = ranked[0]
+
+    # Order by optimal weight, breaking ties (e.g. zero weights) by mean return.
+    mean_returns = returns.mean(axis=0)
+    order = sorted(range(len(columns)), key=lambda i: (-best[i], -mean_returns[i]))
+    if count is not None:
+        keep = order[: max(2, min(count, len(columns)))]
+        if len(keep) < len(columns):
+            # Re-solve over just these; count == len keeps all of them.
+            return optimize_selection([columns[i] for i in keep], max_volatility, min_return, count=len(keep))
+    else:
+        keep = [i for i in order if best[i] >= MIN_SELECTED_WEIGHT]
+        keep = keep if len(keep) >= 2 else order[:2]  # RL training needs at least 2 assets
+
+    weights = best[keep] / best[keep].sum() if best[keep].sum() > 0 else np.ones(len(keep)) / len(keep)
+    metrics = metrics_from_returns(returns[:, keep], weights)
+    return {
+        "tickers": [columns[i] for i in keep],
+        "weights": {columns[i]: float(w) for i, w in zip(keep, weights)},
+        "metrics": metrics,
+        "feasible": constraint_violation(metrics, max_volatility, min_return) == 0,
+    }
+
+
+def select_universe(
+    tickers: list[str],
+    mode: str = "full",
+    count: int | None = None,
+    lookback_days: int = 252,
+    max_volatility: float | None = None,
+    min_return: float | None = None,
+) -> dict:
+    """Decide which companies the agent trains on.
+
+    - "subset" mode first narrows `tickers` to those with an upward trend,
+      ranked by K-ratio. With a fixed `count` and no limits, it keeps the
+      top `count` by K-ratio, as it always has.
+    - Any volatility/return limit, or a blank `count` in subset mode, runs
+      `optimize_selection` over the candidates -- that is what drops
+      companies and sizes the portfolio automatically.
+    - "full" mode with no limits and no `count` trains on every ticker.
+
+    Returns {tickers, selection (K-ratio rows, subset mode only), optimizer
+    (optimize_selection's result, or None)}."""
+    constrained = max_volatility is not None or min_return is not None
+    candidates, ranked = tickers, None
+    if mode == "subset":
+        ranked = rank_by_trend_consistency(tickers, lookback_days=lookback_days)
+        if len(ranked) < 2:
+            raise ValueError("Fewer than 2 tickers in this universe have an upward price trend to select from")
+        if count is not None and not constrained:
+            chosen = ranked[: max(2, min(count, len(ranked)))]
+            return {"tickers": [r["ticker"] for r in chosen], "selection": chosen, "optimizer": None}
+        candidates = [r["ticker"] for r in ranked]
+    elif not constrained and count is None:
+        return {"tickers": tickers, "selection": None, "optimizer": None}
+
+    optimizer = optimize_selection(candidates, max_volatility, min_return, count)
+    chosen = set(optimizer["tickers"])
+    selection = [r for r in ranked if r["ticker"] in chosen] if ranked is not None else None
+    return {"tickers": optimizer["tickers"], "selection": selection, "optimizer": optimizer}
+
+
+def _enforce_constraints(
+    tickers: list[str],
+    weights: np.ndarray,
+    max_volatility: float | None,
+    min_return: float | None,
+    anchor: dict[str, float] | None = None,
+) -> tuple[np.ndarray, float]:
+    """The env's constraint penalty is soft, so the learned weights can
+    still miss the target. If they do, blend them toward an anchor
+    allocation -- the optimizer's weights when given (feasible whenever the
+    limits are reachable at all), plus equal and inverse-volatility weights --
+    using the smallest blend that satisfies the constraints, so the result
+    stays as close to the RL policy as possible. Returns (weights, blend)
+    where blend is the anchor's share (0 = RL weights unchanged). If no
+    blend is feasible, the closest one is returned."""
+    returns_df = returns_matrix(tickers).reindex(columns=tickers).fillna(0.0)
+    if returns_df.empty:
+        return weights, 0.0
+    returns = returns_df.values
+
+    anchors = [np.ones(len(tickers)) / len(tickers)]
+    stds = returns.std(axis=0)
+    if np.all(stds > 0):
+        inverse_vol = 1.0 / stds
+        anchors.append(inverse_vol / inverse_vol.sum())
+    if anchor:
+        optimal = np.array([anchor.get(t, 0.0) for t in tickers])
+        if optimal.sum() > 0:
+            anchors.insert(0, optimal / optimal.sum())
+
+    best_weights, best_blend = weights, 0.0
+    best_key = _candidate_rank(metrics_from_returns(returns, weights), max_volatility, min_return)
+    for blend in BLEND_STEPS[1:]:
+        if not best_key[0]:
+            break  # smallest feasible blend found
+        for candidate_anchor in anchors:
+            candidate = (1 - blend) * weights + blend * candidate_anchor
+            key = _candidate_rank(metrics_from_returns(returns, candidate), max_volatility, min_return)
+            if key < best_key:
+                best_weights, best_blend, best_key = candidate, blend, key
+    return best_weights, best_blend
 
 
 def train_and_recommend(
@@ -152,6 +346,9 @@ def train_and_recommend(
     window: int = 30,
     progress_room: str | None = None,
     progress_task=None,
+    max_volatility: float | None = None,
+    min_return: float | None = None,
+    anchor: dict[str, float] | None = None,
 ) -> dict:
     tickers = universe or default_universe()
     if len(tickers) < 2:
@@ -171,7 +368,9 @@ def train_and_recommend(
     used_tickers = list(returns_df.columns)
     returns = returns_df.values
 
-    env = PortfolioEnv(returns, window=window, risk_aversion=risk_aversion)
+    env = PortfolioEnv(
+        returns, window=window, risk_aversion=risk_aversion, max_volatility=max_volatility, min_return=min_return
+    )
     model = PPO("MlpPolicy", env, verbose=0)
 
     callback = SocketIOProgressCallback(progress_room, timesteps, task=progress_task) if progress_room else None
@@ -183,8 +382,21 @@ def train_and_recommend(
     action, _ = model.predict(final_obs, deterministic=True)
     weights = PortfolioEnv.softmax(np.asarray(action, dtype=np.float64))
 
+    constrained = max_volatility is not None or min_return is not None
+    blend = 0.0
+    if constrained:
+        weights, blend = _enforce_constraints(used_tickers, weights, max_volatility, min_return, anchor)
+
     holdings = [{"ticker": ticker, "weight": float(weight)} for ticker, weight in zip(used_tickers, weights)]
     metrics = compute_metrics(holdings)
+    constraints = None
+    if constrained:
+        constraints = {
+            "max_volatility": max_volatility,
+            "min_return": min_return,
+            "satisfied": constraint_violation(metrics, max_volatility, min_return) == 0,
+            "blend": round(blend, 2),
+        }
 
     run_id = str(uuid.uuid4())
     os.makedirs(RL_MODELS_DIR, exist_ok=True)
@@ -196,6 +408,14 @@ def train_and_recommend(
         "tickers": used_tickers,
         "holdings": holdings,
         "metrics": metrics,
+        "constraints": constraints,
         "model_path": model_path,
-        "hyperparams": {"algorithm": "PPO", "timesteps": timesteps, "risk_aversion": risk_aversion, "window": window},
+        "hyperparams": {
+            "algorithm": "PPO",
+            "timesteps": timesteps,
+            "risk_aversion": risk_aversion,
+            "window": window,
+            "max_volatility": max_volatility,
+            "min_return": min_return,
+        },
     }

@@ -9,13 +9,20 @@ function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
 }
 
+// Blank = no constraint / auto; otherwise a typed percentage -> fraction.
+function pctOrNull(v) {
+  return v === "" || v === null || v === undefined ? null : Number(v) / 100;
+}
+
 export default function RLTrainingPanel({ pool }) {
   const dispatch = useDispatch();
   const { status, progress, result, error } = useSelector((s) => s.rl);
   const [riskAversion, setRiskAversion] = useState(1.0);
   const [timesteps, setTimesteps] = useState(20000);
   const [mode, setMode] = useState("full"); // "full" | "subset"
-  const [subsetSize, setSubsetSize] = useState(Math.min(10, pool.tickers.length));
+  const [subsetSize, setSubsetSize] = useState(""); // blank = auto-pick the size
+  const [maxVolatility, setMaxVolatility] = useState(""); // annual %, blank = no ceiling
+  const [minReturn, setMinReturn] = useState(""); // realized past-year return %, blank = no floor
   const [lookbackDays, setLookbackDays] = useState(252); // trading days the trend line is fit over
 
   const start = () => {
@@ -26,8 +33,10 @@ export default function RLTrainingPanel({ pool }) {
         timesteps: Number(timesteps),
         portfolio_name: pool.name,
         mode,
-        subset_size: Math.max(2, Math.min(499, Number(subsetSize) || 2)),
+        subset_size: subsetSize === "" ? null : Math.max(2, Math.min(499, Number(subsetSize) || 2)),
         lookback_days: Number(lookbackDays),
+        max_volatility: pctOrNull(maxVolatility),
+        min_return: pctOrNull(minReturn),
       })
     );
   };
@@ -43,11 +52,11 @@ export default function RLTrainingPanel({ pool }) {
       <div style={{ display: "flex", gap: 16, margin: "8px 0" }}>
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" }}>
           <input type="radio" name="rl-mode" checked={mode === "full"} onChange={() => setMode("full")} disabled={training} />
-          Train entire pool ({pool.tickers.length} tickers)
+          Select from entire pool ({pool.tickers.length} tickers)
         </label>
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" }}>
           <input type="radio" name="rl-mode" checked={mode === "subset"} onChange={() => setMode("subset")} disabled={training} />
-          Auto-select lowest-risk / highest-return subset
+          Only companies with a steady upward trend
         </label>
       </div>
 
@@ -60,14 +69,37 @@ export default function RLTrainingPanel({ pool }) {
           <label>Training timesteps</label>
           <input type="number" step="1000" value={timesteps} onChange={(e) => setTimesteps(e.target.value)} disabled={training} />
         </div>
-        {mode === "subset" && (
-          <div>
-            <label>Subset size</label>
+        <div>
+          <label>Max volatility, annual % (optional)</label>
+          <input
+            type="number"
+            step="1"
+            min="0"
+            placeholder="no limit (e.g. 25)"
+            value={maxVolatility}
+            onChange={(e) => setMaxVolatility(e.target.value)}
+            disabled={training}
+          />
+        </div>
+        <div>
+          <label>Min annual return % (optional)</label>
+          <input
+            type="number"
+            step="1"
+            placeholder="no minimum (e.g. 20)"
+            value={minReturn}
+            onChange={(e) => setMinReturn(e.target.value)}
+            disabled={training}
+          />
+        </div>
+        <div>
+            <label>Number of companies (blank = auto)</label>
             <input
               type="number"
               step="1"
               min="2"
               max={Math.min(499, pool.tickers.length)}
+              placeholder="auto"
               value={subsetSize}
               onChange={(e) => {
                 const raw = e.target.value;
@@ -78,13 +110,9 @@ export default function RLTrainingPanel({ pool }) {
                 const clamped = Math.max(2, Math.min(499, pool.tickers.length, Number(raw)));
                 setSubsetSize(clamped);
               }}
-              onBlur={(e) => {
-                if (e.target.value === "") setSubsetSize(2);
-              }}
               disabled={training}
             />
           </div>
-        )}
         {mode === "subset" && (
           <div>
             <label>Trend window (how far back to check for a straight line)</label>
@@ -98,12 +126,17 @@ export default function RLTrainingPanel({ pool }) {
           </div>
         )}
       </div>
-      {mode === "subset" && (
-        <p className="muted" style={{ margin: "4px 0 8px" }}>
-          Ranks the pool by how closely its price action over that window tracks a straight line upward (K-ratio: trend
-          steepness relative to how tightly the price hugs that line) and trains on just the top {subsetSize}.
-        </p>
-      )}
+      <p className="muted" style={{ margin: "4px 0 8px" }}>
+        {mode === "subset" &&
+          "Candidates: companies whose price over the trend window tracks a straight line upward (K-ratio). "}
+        {mode === "full" && subsetSize === "" && maxVolatility === "" && minReturn === ""
+          ? "No limits or company count set: the agent trains on every ticker in the pool."
+          : `A mean-variance optimizer picks ${
+              subsetSize === "" ? "which companies to keep (and how many)" : `the best ${subsetSize} companies`
+            } from the past year of returns — the highest return under the volatility limit, or the lowest volatility above the annual return floor${
+              maxVolatility === "" && minReturn === "" ? " (here: the highest Sharpe ratio, since no limits are set)" : ""
+            }. The PPO agent then trains on just those, and if its weights miss a limit they are blended toward the optimizer's allocation.`}
+      </p>
 
       <button className="btn" onClick={start} disabled={training}>
         <PieChartIcon /> {training ? "Training..." : "Train RL portfolio"}
@@ -117,7 +150,7 @@ export default function RLTrainingPanel({ pool }) {
           <div className="progress-bar"><div style={{ width: `${pct}%` }} /></div>
           <p className="muted">
             {progress?.stage === "selecting"
-              ? "Ranking pool by trend consistency..."
+              ? "Selecting companies..."
               : progress && progress.completed != null && progress.total != null
               ? // PPO trains in fixed-size batches (n_steps) and only stops between
                 // full batches, so the real step count can slightly overshoot the
@@ -135,7 +168,9 @@ export default function RLTrainingPanel({ pool }) {
         <div>
           {result.selection && (
             <>
-              <h4>Selected subset (straightest upward trend, past 1Y)</h4>
+              <h4>
+                Selected companies (straightest upward trend){result.subset_size_auto && ` — ${result.selection.length}, auto-sized`}
+              </h4>
               <table className="holdings-table">
                 <thead><tr><th>Ticker</th><th>K-ratio</th><th>Trend fit (R²)</th><th>Implied annual return</th></tr></thead>
                 <tbody>
@@ -151,12 +186,31 @@ export default function RLTrainingPanel({ pool }) {
               </table>
             </>
           )}
-          <h4>Recommended allocation</h4>
+          <h4>
+            Recommended allocation ({result.holdings?.length} companies{result.subset_size_auto ? ", auto-sized" : ""})
+          </h4>
           <p className="muted">
-            Expected annual return: <strong>{fmtPct(result.metrics?.expected_return)}</strong> · Volatility:{" "}
+            Annual return (past 1Y): <strong>{fmtPct(result.metrics?.annual_return)}</strong> · Volatility:{" "}
             <strong>{fmtPct(result.metrics?.expected_volatility)}</strong> · Sharpe:{" "}
             <strong>{result.metrics?.sharpe_ratio ?? "-"}</strong>
           </p>
+          {result.constraints && (
+            <p className={result.constraints.satisfied ? "muted" : "error-text"}>
+              Constraints ({[
+                result.constraints.max_volatility != null && `volatility ≤ ${fmtPct(result.constraints.max_volatility)}`,
+                result.constraints.min_return != null && `annual return ≥ ${fmtPct(result.constraints.min_return)}`,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+              ): {result.constraints.satisfied ? "met" : "not met"}
+              {result.constraints.blend > 0 &&
+                ` (RL weights blended ${fmtPct(result.constraints.blend)} toward the optimizer allocation)`}
+              {result.constraints.feasible === false &&
+                ` — no long-only mix of this pool reached them over the past year; best achievable: ${fmtPct(
+                  result.constraints.best_achievable?.annual_return
+                )} annual return at ${fmtPct(result.constraints.best_achievable?.expected_volatility)} volatility`}
+            </p>
+          )}
           <table className="holdings-table">
             <thead><tr><th>Ticker</th><th>Weight</th></tr></thead>
             <tbody>

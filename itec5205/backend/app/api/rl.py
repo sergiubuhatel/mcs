@@ -15,6 +15,11 @@ from ..tasks.rl_tasks import train_rl_portfolio
 bp = Blueprint("rl", __name__, url_prefix="/api/rl")
 
 
+def _optional(value, cast):
+    """None for a missing/blank field -- these are "no constraint" / "auto"."""
+    return None if value in (None, "") else cast(value)
+
+
 @bp.post("/train")
 def train():
     body = request.get_json(silent=True) or {}
@@ -34,8 +39,10 @@ def train():
         window=int(body.get("window", 30)),
         portfolio_name=body.get("portfolio_name"),
         mode=body.get("mode", "full"),
-        subset_size=int(body.get("subset_size", 10)),
+        subset_size=_optional(body.get("subset_size"), int),
         lookback_days=int(body.get("lookback_days", 252)),
+        max_volatility=_optional(body.get("max_volatility"), float),
+        min_return=_optional(body.get("min_return"), float),
     )
     return jsonify({"task_id": task.id}), 202
 
