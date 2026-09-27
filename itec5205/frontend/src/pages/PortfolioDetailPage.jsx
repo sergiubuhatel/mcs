@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiClient } from "../api/client";
 import { CloseIcon } from "../layout/icons";
 import { INTERVALS, filterByInterval } from "../utils/dateRanges";
@@ -52,6 +52,13 @@ function computeVolatilityFromSeries(rangeSeries) {
   const variance = dailyReturns.reduce((sum, v) => sum + (v - mean) ** 2, 0) / (dailyReturns.length - 1);
   return Math.sqrt(variance) * Math.sqrt(TRADING_DAYS_PER_YEAR);
 }
+
+// Categorical palette for the allocation chart (one distinct color per holding,
+// cycling if a portfolio ever has more holdings than colors).
+const ALLOCATION_COLORS = [
+  "#2563eb", "#f97316", "#16a34a", "#dc2626", "#9333ea",
+  "#a16207", "#ec4899", "#6b7280", "#ca8a04", "#0ea5e9",
+];
 
 const HOLDINGS_COLUMNS = [
   {
@@ -109,6 +116,7 @@ export default function PortfolioDetailPage() {
   const [range, setRange] = useState("1Y");
   const [sortBy, setSortBy] = useState("weight");
   const [sortDir, setSortDir] = useState("desc");
+  const [allocationChart, setAllocationChart] = useState("bar");
   const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("portfolioHoldings", HOLDINGS_COLUMNS);
 
   const onSortClick = (key) => {
@@ -161,6 +169,9 @@ export default function PortfolioDetailPage() {
       ? ((rangeSeries[rangeSeries.length - 1].value - rangeSeries[0].value) / rangeSeries[0].value) * 100
       : null;
   const periodVolatility = computeVolatilityFromSeries(rangeSeries);
+  const allocation = portfolio.holdings
+    .map((h) => ({ ticker: h.ticker, name: h.name, weightPct: h.weight * 100 }))
+    .sort((a, b) => b.weightPct - a.weightPct);
 
   return (
     <div>
@@ -253,6 +264,100 @@ export default function PortfolioDetailPage() {
           </ResponsiveContainer>
         )}
         <p className="muted">Indexed to 100 at the start of the available price history, applying the portfolio's fixed weights to each day's actual returns.</p>
+      </div>
+
+      <div className="card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <h3 style={{ margin: 0 }}>Portfolio allocation</h3>
+          <div style={{ display: "flex", gap: 4 }}>
+            {[
+              { key: "bar", label: "Bar" },
+              { key: "pie", label: "Pie" },
+            ].map((opt) => (
+              <button
+                key={opt.key}
+                className={allocationChart === opt.key ? "btn" : "btn secondary"}
+                style={{ padding: "4px 10px", fontSize: "0.78rem" }}
+                onClick={() => setAllocationChart(opt.key)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {allocationChart === "pie" ? (
+          <ResponsiveContainer width="100%" height={380}>
+            <PieChart>
+              <Pie
+                data={allocation}
+                dataKey="weightPct"
+                nameKey="ticker"
+                cx="50%"
+                cy="50%"
+                outerRadius={140}
+                startAngle={90}
+                endAngle={-270}
+                stroke="var(--color-bg-primary, #0f172a)"
+                strokeWidth={2}
+                labelLine={false}
+                label={({ cx, cy, midAngle, innerRadius, outerRadius, payload }) => {
+                  const r = innerRadius + (outerRadius - innerRadius) * 0.62;
+                  const x = cx + r * Math.cos((-midAngle * Math.PI) / 180);
+                  const y = cy + r * Math.sin((-midAngle * Math.PI) / 180);
+                  return (
+                    <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={600}>
+                      <tspan x={x} dy="-0.6em">{payload.ticker}</tspan>
+                      <tspan x={x} dy="1.2em">{payload.weightPct.toFixed(1)}%</tspan>
+                    </text>
+                  );
+                }}
+              >
+                {allocation.map((a, i) => (
+                  <Cell key={a.ticker} fill={ALLOCATION_COLORS[i % ALLOCATION_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip
+                {...tooltipProps}
+                formatter={(value, _name, item) => [`${Number(value).toFixed(2)}%`, item.payload.name || item.payload.ticker]}
+              />
+              <Legend
+                layout="vertical"
+                align="right"
+                verticalAlign="middle"
+                formatter={(value, entry) => (
+                  <span style={{ color: "var(--color-text-primary)" }}>
+                    {value} <strong>{entry.payload.weightPct.toFixed(2)}%</strong>
+                  </span>
+                )}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : (
+        <ResponsiveContainer width="100%" height={allocation.length * 40 + 40}>
+          <BarChart data={allocation} layout="vertical" margin={{ top: 12, right: 60, left: 8, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+            <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `${v}%`} domain={[0, "auto"]} />
+            <YAxis type="category" dataKey="ticker" tick={{ fontSize: 12 }} width={60} />
+            <Tooltip
+              {...tooltipProps}
+              cursor={{ fill: "rgba(148, 163, 184, 0.12)" }}
+              formatter={(value, _name, item) => [`${Number(value).toFixed(2)}%`, item.payload.name || item.payload.ticker]}
+            />
+            <Bar dataKey="weightPct" radius={[0, 4, 4, 0]} barSize={24}>
+              {allocation.map((a, i) => (
+                <Cell key={a.ticker} fill={ALLOCATION_COLORS[i % ALLOCATION_COLORS.length]} />
+              ))}
+              <LabelList
+                dataKey="weightPct"
+                position="right"
+                formatter={(v) => `${Number(v).toFixed(2)}%`}
+                style={{ fill: "var(--color-text-primary)", fontSize: 12, fontWeight: 600 }}
+              />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+        )}
+        <p className="muted">Share of the portfolio invested in each holding, as allocated by the RL model.</p>
       </div>
     </div>
   );
