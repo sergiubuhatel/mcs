@@ -14,15 +14,34 @@ TRADING_DAYS_PER_YEAR = 252
 
 
 def _returns_matrix(tickers: list[str], lookback_days: int = TRADING_DAYS_PER_YEAR) -> pd.DataFrame:
+    """Daily fractional returns, one column per ticker, last `lookback_days`
+    rows. Only a date window wide enough for that many trading days is read
+    (~1.6 calendar days per trading day, plus slack for holidays), via the
+    persistent [ticker, date] index -- reading every ticker's full stored
+    history just to keep its last year made the fetch the dominant cost of
+    RL selection over a large pool."""
     db = get_db()
+    latest = next(db.aql.execute(
+        """
+        FOR t IN @tickers
+            LET d = FIRST(FOR p IN stock_prices FILTER p.ticker == t SORT p.date DESC LIMIT 1 RETURN p.date)
+            COLLECT AGGREGATE latest = MAX(d)
+            RETURN latest
+        """,
+        bind_vars={"tickers": tickers},
+    ), None)
+    if latest is None:
+        return pd.DataFrame()
+    window_days = min(int(lookback_days * 1.6) + 14, 365 * 100)  # capped: "everything" callers pass a huge lookback
+    since = (pd.Timestamp(latest) - pd.Timedelta(days=window_days)).strftime("%Y-%m-%d")
     cursor = db.aql.execute(
         """
         FOR p IN stock_prices
-            FILTER p.ticker IN @tickers AND p.percentage_change != null
+            FILTER p.ticker IN @tickers AND p.date >= @since AND p.percentage_change != null
             SORT p.date ASC
             RETURN {ticker: p.ticker, date: p.date, percentage_change: p.percentage_change}
         """,
-        bind_vars={"tickers": tickers},
+        bind_vars={"tickers": tickers, "since": since},
     )
     rows = list(cursor)
     if not rows:

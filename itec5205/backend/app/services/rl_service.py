@@ -22,8 +22,10 @@ TRADING_DAYS_PER_YEAR = 252
 # Positions below this optimal weight are dropped when the optimizer sizes
 # the portfolio on its own.
 MIN_SELECTED_WEIGHT = 0.005
-# Trade-off points sampled along the efficient frontier.
+# Trade-off points sampled along the efficient frontier, and the number of
+# interpolation steps added between each neighbouring pair of them.
 FRONTIER_POINTS = 40
+INTERPOLATION_STEPS = 10
 # Blend steps tried by `_enforce_constraints` (0 = pure RL weights).
 BLEND_STEPS = [i / 20 for i in range(21)]
 
@@ -249,6 +251,24 @@ def _efficient_frontier(returns: np.ndarray, points: int = FRONTIER_POINTS, iter
     return frontier
 
 
+def _drop_small_positions(w: np.ndarray) -> np.ndarray:
+    kept = np.where(w >= MIN_SELECTED_WEIGHT, w, 0.0)
+    return kept / kept.sum() if kept.sum() > 0 else w
+
+
+def _interpolate_frontier(frontier: list[np.ndarray], steps: int = INTERPOLATION_STEPS) -> list[np.ndarray]:
+    """The sampled frontier points can be far apart in risk/return (e.g. the
+    minimum-variance point at 49% return and the next one at 114%), so a
+    limit that falls between two of them would be reported as unreachable,
+    or met with a lot of room to spare. Adding convex combinations of each
+    pair of neighbouring points fills those gaps: a mix of two long-only,
+    fully-invested portfolios is itself one."""
+    dense = [frontier[0]]
+    for a, b in zip(frontier, frontier[1:]):
+        dense.extend((1 - k / steps) * a + (k / steps) * b for k in range(1, steps + 1))
+    return dense
+
+
 def optimize_selection(
     tickers: list[str],
     max_volatility: float | None = None,
@@ -285,8 +305,12 @@ def _optimize(
     columns = list(returns_df.columns)
     returns = returns_df.values
     frontier = _efficient_frontier(returns)
+    # Rank each candidate as it will actually be returned -- with positions
+    # below MIN_SELECTED_WEIGHT dropped -- so a point that meets a limit by a
+    # hair doesn't slip past it once those slivers are removed.
     best = min(
-        frontier, key=lambda w: _candidate_rank(metrics_from_returns(returns, w), max_volatility, min_return)
+        (_drop_small_positions(w) for w in _interpolate_frontier(frontier)),
+        key=lambda w: _candidate_rank(metrics_from_returns(returns, w), max_volatility, min_return),
     )
 
     # Order by optimal weight, breaking ties (e.g. zero weights) by mean return.
