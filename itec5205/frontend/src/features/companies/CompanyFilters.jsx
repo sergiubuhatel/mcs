@@ -1,81 +1,8 @@
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { clearFilters, fetchIndustriesRequested, fetchRequested, fetchSectorsRequested, setFilters } from "./companiesSlice";
-import { BarChartIcon, DatabaseIcon, GrowthIcon, SearchIcon, TrendChartIcon } from "../../layout/icons";
-
-// How many stored units (market_cap is stored in $M, free_cash_flow in raw
-// $) one typed unit is worth -- lets the user type "500" and pick Billion
-// instead of typing out 500000/500000000000.
-const UNIT_MULTIPLIERS = {
-  market_cap: { M: 1, B: 1_000, T: 1_000_000 },
-  free_cash_flow: { M: 1e6, B: 1e9, T: 1e12 },
-};
-const UNIT_LABELS = { M: "Million", B: "Billion", T: "Trillion" };
-
-// Same fields as before, just grouped for display -- no field was added,
-// removed, or renamed.
-const FILTER_GROUPS = [
-  {
-    title: "Market Metrics",
-    icon: BarChartIcon,
-    color: "#3b82f6",
-    fields: [
-      { key: "market_cap", label: "Market Cap", unit: true },
-      { key: "trailing_pe", label: "Trailing P/E" },
-      { key: "forward_pe", label: "Forward P/E" },
-      { key: "peg_ratio", label: "PEG Ratio (5yr expected)" },
-    ],
-  },
-  {
-    title: "Profitability",
-    icon: TrendChartIcon,
-    color: "#16a34a",
-    fields: [
-      { key: "roe", label: "ROE" },
-      { key: "roa", label: "ROA" },
-      { key: "gross_margin", label: "Gross Margin" },
-      { key: "operating_margin", label: "Operating Margin (ttm)" },
-      { key: "net_margin", label: "Net Margin" },
-    ],
-  },
-  {
-    title: "Financial Health",
-    icon: DatabaseIcon,
-    color: "#7c3aed",
-    fields: [
-      { key: "debt_to_equity", label: "Debt/Equity" },
-      { key: "current_ratio", label: "Current Ratio" },
-      { key: "ev_to_ebitda", label: "EV/EBITDA" },
-    ],
-  },
-  {
-    title: "Growth",
-    icon: GrowthIcon,
-    color: "#f59e0b",
-    fields: [
-      // percent: true -> the user types a plain percentage (e.g. 20 for
-      // 20%); the underlying stored/filtered value is the decimal fraction
-      // (0.20) yfinance itself returns, so the saga divides by 100 right
-      // before this hits the API (see PERCENT_RANGE_FIELDS in companiesSaga.js).
-      { key: "revenue_growth_yoy", label: "Quarterly Revenue Growth (yoy) %", percent: true },
-      { key: "earnings_growth_yoy_q", label: "Quarterly Earnings Growth (yoy) %", percent: true },
-      { key: "dividend_yield", label: "Dividend Yield" },
-      { key: "free_cash_flow", label: "Free Cash Flow", unit: true },
-    ],
-  },
-  {
-    // Calculated from stored price history at import time (calculated_stats),
-    // not reported by Yahoo -- same percent entry convention as Growth.
-    title: "Price Performance",
-    icon: TrendChartIcon,
-    color: "#0ea5e9",
-    fields: [
-      { key: "day_change", label: "Change (1D) %", percent: true },
-      { key: "stock_growth_1y", label: "Change (1Y) %", percent: true },
-      { key: "volatility", label: "Volatility (1Y) %", percent: true },
-    ],
-  },
-];
+import { SearchIcon } from "../../layout/icons";
+import { FILTER_GROUPS, UNIT_LABELS, UNIT_MULTIPLIERS } from "./filterFields";
 
 export default function CompanyFilters() {
   const dispatch = useDispatch();
