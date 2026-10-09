@@ -1,3 +1,35 @@
+# One-shot launch of the whole stack:  docker compose up -d --build
+# Startup order: arangodb + redis -> init-db (creates collections, then exits)
+# -> backend + the four Celery workers -> frontend.
+
+# Settings shared by every service built from ./backend (API, workers, init).
+x-backend-env: &backend-env
+  ARANGO_HOST: http://arangodb:8529
+  ARANGO_DB: investing
+  ARANGO_USER: root
+  ARANGO_PASSWORD: ${ARANGO_PASSWORD:-root}
+  REDIS_URL: redis://redis:6379/0
+  TICKERS_FILE: /data/tickers.txt
+  RL_MODELS_DIR: /data/rl_models
+  CORS_ORIGINS: http://localhost:5173,http://localhost:8080
+
+# Only `backend` builds the image; the workers/init-db/flower reuse it.
+# Building it once per service in parallel (7 identical PyTorch builds)
+# exhausted Docker Desktop's memory and crashed the engine.
+x-backend: &backend
+  image: itec5205-backend
+  pull_policy: never
+  restart: unless-stopped
+  environment: *backend-env
+  volumes:
+    - ./tickers.txt:/data/tickers.txt:ro
+    - rl_models:/data/rl_models
+  depends_on:
+    redis:
+      condition: service_healthy
+    init-db:
+      condition: service_completed_successfully
+
 services:
   arangodb:
     image: arangodb:3.11
@@ -18,110 +50,84 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Waits for ArangoDB, creates the database/collections/indexes (idempotent), exits.
+  init-db:
+    image: itec5205-backend
+    pull_policy: never
+    container_name: itec5205-init-db
+    restart: "no"
+    command: python scripts/init_db.py
+    environment: *backend-env
+    depends_on:
+      - arangodb
 
   backend:
+    <<: *backend
     build: ./backend
+    pull_policy: build
     container_name: itec5205-backend
-    restart: unless-stopped
-    depends_on:
-      - arangodb
-      - redis
-    environment:
-      ARANGO_HOST: http://arangodb:8529
-      ARANGO_DB: investing
-      ARANGO_USER: root
-      ARANGO_PASSWORD: ${ARANGO_PASSWORD:-root}
-      REDIS_URL: redis://redis:6379/0
-      TICKERS_FILE: /data/tickers.txt
-      RL_MODELS_DIR: /data/rl_models
-      CORS_ORIGINS: http://localhost:5173,http://localhost:8080
     ports:
       - "5000:5000"
-    volumes:
-      - ./tickers.txt:/data/tickers.txt:ro
-      - rl_models:/data/rl_models
 
+  # One Celery worker per queue (see task_routes in backend/app/tasks/celery_app.py).
   worker-import:
-    build: ./backend
+    <<: *backend
     container_name: itec5205-worker-import
-    restart: unless-stopped
     command: celery -A celery_worker.celery_app worker --loglevel=info -Q import -n import@%h
-    depends_on:
-      - arangodb
-      - redis
-    environment:
-      ARANGO_HOST: http://arangodb:8529
-      ARANGO_DB: investing
-      ARANGO_USER: root
-      ARANGO_PASSWORD: ${ARANGO_PASSWORD:-root}
-      REDIS_URL: redis://redis:6379/0
-      TICKERS_FILE: /data/tickers.txt
-      RL_MODELS_DIR: /data/rl_models
-      CORS_ORIGINS: http://localhost:5173,http://localhost:8080
-    volumes:
-      - ./tickers.txt:/data/tickers.txt:ro
-      - rl_models:/data/rl_models
 
   worker-rl:
-    build: ./backend
+    <<: *backend
     container_name: itec5205-worker-rl
-    restart: unless-stopped
     command: celery -A celery_worker.celery_app worker --loglevel=info -Q rl -n rl@%h
-    depends_on:
-      - arangodb
-      - redis
-    environment:
-      ARANGO_HOST: http://arangodb:8529
-      ARANGO_DB: investing
-      ARANGO_USER: root
-      ARANGO_PASSWORD: ${ARANGO_PASSWORD:-root}
-      REDIS_URL: redis://redis:6379/0
-      TICKERS_FILE: /data/tickers.txt
-      RL_MODELS_DIR: /data/rl_models
-      CORS_ORIGINS: http://localhost:5173,http://localhost:8080
-    volumes:
-      - ./tickers.txt:/data/tickers.txt:ro
-      - rl_models:/data/rl_models
 
   worker-predict:
-    build: ./backend
+    <<: *backend
     container_name: itec5205-worker-predict
-    restart: unless-stopped
     command: celery -A celery_worker.celery_app worker --loglevel=info -Q predict -n predict@%h
-    depends_on:
-      - arangodb
-      - redis
-    environment:
-      ARANGO_HOST: http://arangodb:8529
-      ARANGO_DB: investing
-      ARANGO_USER: root
-      ARANGO_PASSWORD: ${ARANGO_PASSWORD:-root}
-      REDIS_URL: redis://redis:6379/0
-      TICKERS_FILE: /data/tickers.txt
-      RL_MODELS_DIR: /data/rl_models
-      CORS_ORIGINS: http://localhost:5173,http://localhost:8080
-    volumes:
-      - ./tickers.txt:/data/tickers.txt:ro
-      - rl_models:/data/rl_models
+
+  worker-arima:
+    <<: *backend
+    container_name: itec5205-worker-arima
+    command: celery -A celery_worker.celery_app worker --loglevel=info -Q arima -n arima@%h
 
   flower:
-    build: ./backend
+    image: itec5205-backend
+    pull_policy: never
     container_name: itec5205-flower
     restart: unless-stopped
     command: celery -A celery_worker.celery_app flower --port=5555
-    depends_on:
-      - redis
     environment:
       REDIS_URL: redis://redis:6379/0
     ports:
       - "5555:5555"
+    depends_on:
+      backend:
+        condition: service_started
 
   frontend:
     build: ./frontend
     container_name: itec5205-frontend
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+        # Recreating backend changes its IP; restarting frontend makes nginx
+        # re-resolve it (otherwise /api/* returns 502).
+        restart: true
+      worker-import:
+        condition: service_started
+      worker-rl:
+        condition: service_started
+      worker-predict:
+        condition: service_started
+      worker-arima:
+        condition: service_started
     ports:
       - "8080:80"
 

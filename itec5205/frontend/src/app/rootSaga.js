@@ -4,6 +4,7 @@ import poolsSaga from "../features/pools/poolsSaga";
 import portfoliosSaga from "../features/portfolios/portfoliosSaga";
 import rlSaga from "../features/rl/rlSaga";
 import predictionsSaga from "../features/predictions/predictionsSaga";
+import arimaSaga from "../features/arima/arimaSaga";
 import dataImportSaga from "../features/dataImport/dataImportSaga";
 
 export default function* rootSaga() {
@@ -13,6 +14,7 @@ export default function* rootSaga() {
     fork(portfoliosSaga),
     fork(rlSaga),
     fork(predictionsSaga),
+    fork(arimaSaga),
     fork(dataImportSaga),
   ]);
 }

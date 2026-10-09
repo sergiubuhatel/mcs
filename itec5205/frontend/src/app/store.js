@@ -6,6 +6,7 @@ import poolsReducer from "../features/pools/poolsSlice";
 import portfoliosReducer from "../features/portfolios/portfoliosSlice";
 import rlReducer from "../features/rl/rlSlice";
 import predictionsReducer from "../features/predictions/predictionsSlice";
+import arimaReducer from "../features/arima/arimaSlice";
 import dataImportReducer from "../features/dataImport/dataImportSlice";
 import themeReducer from "../features/theme/themeSlice";
 import rootSaga from "./rootSaga";
@@ -16,6 +17,7 @@ const rootReducer = combineReducers({
   portfolios: portfoliosReducer,
   rl: rlReducer,
   predictions: predictionsReducer,
+  arima: arimaReducer,
   dataImport: dataImportReducer,
   theme: themeReducer,
 });

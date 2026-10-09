@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSelector } from "react-redux";
 import PredictionPanel from "../features/predictions/PredictionPanel";
+import ArimaPanel from "../features/arima/ArimaPanel";
 import { SearchIcon } from "../layout/icons";
 
 export default function PredictionPage() {
@@ -17,7 +18,7 @@ export default function PredictionPage() {
     <div>
       <div className="card">
         <h2>Prediction</h2>
-        <p className="muted">LSTM-based short-horizon price forecasts, per ticker — this is the result view for the "Predict Stock Price" action.</p>
+        <p className="muted">LSTM and ARIMA short-horizon price forecasts, per ticker — this is the result view for the "Predict Stock Price" action.</p>
         <form onSubmit={submit} style={{ display: "flex", gap: 8 }}>
           <input
             value={ticker}
@@ -30,7 +31,10 @@ export default function PredictionPage() {
       </div>
 
       {activeTicker ? (
-        <PredictionPanel ticker={activeTicker} />
+        <>
+          <PredictionPanel ticker={activeTicker} />
+          <ArimaPanel ticker={activeTicker} />
+        </>
       ) : (
         <div className="card muted">Enter a ticker above, or use "Predict Stock Price" in the bottom bar.</div>
       )}

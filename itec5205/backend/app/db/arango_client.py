@@ -48,6 +48,7 @@ COLLECTIONS = {
     "portfolios": [],
     "rl_runs": [],
     "price_predictions": [],
+    "arima_predictions": [],
 }
 
 

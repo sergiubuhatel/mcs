@@ -8,6 +8,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /etc/nginx/sites-enabled/default
 
+# CPU-only PyTorch, in its own layer: the default Linux wheel pulls several GB
+# of CUDA libraries (no GPU is used here) and the heavy install crashed Docker
+# Desktop builds. Separate layer = editing requirements.txt doesn't redo it.
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
