@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useSelector } from "react-redux";
-import PredictionPanel from "../features/predictions/PredictionPanel";
-import ArimaPanel from "../features/arima/ArimaPanel";
+import ForecastPanels from "../features/predictions/ForecastPanels";
 import { SearchIcon } from "../layout/icons";
 
 export default function PredictionPage() {
@@ -31,10 +30,7 @@ export default function PredictionPage() {
       </div>
 
       {activeTicker ? (
-        <>
-          <PredictionPanel ticker={activeTicker} />
-          <ArimaPanel ticker={activeTicker} />
-        </>
+        <ForecastPanels ticker={activeTicker} />
       ) : (
         <div className="card muted">Enter a ticker above, or use "Predict Stock Price" in the bottom bar.</div>
       )}

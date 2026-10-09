@@ -8,6 +8,7 @@ from celery.result import AsyncResult
 from flask import Blueprint, jsonify, request
 
 from ..db.arango_client import get_db
+from ..services.lstm_service import DEFAULT_LOOKBACK_DAYS
 from ..tasks.arima_tasks import train_arima_prediction
 from ..tasks.celery_app import celery_app
 
@@ -25,7 +26,7 @@ def train():
     if order is not None and (not isinstance(order, list) or len(order) != 3):
         return jsonify({"error": "'order' must be [p, d, q]"}), 400
 
-    lookback = body.get("lookback_days", 756)
+    lookback = body.get("lookback_days", DEFAULT_LOOKBACK_DAYS)
     task = train_arima_prediction.delay(
         ticker=ticker,
         order=[int(v) for v in order] if order else None,

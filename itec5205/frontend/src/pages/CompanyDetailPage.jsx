@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiClient } from "../api/client";
-import PredictionPanel from "../features/predictions/PredictionPanel";
-import ArimaPanel from "../features/arima/ArimaPanel";
+import ForecastPanels from "../features/predictions/ForecastPanels";
 import { CloseIcon } from "../layout/icons";
 import { INTERVALS, filterByInterval } from "../utils/dateRanges";
 import { tooltipProps } from "../utils/chartTheme";
@@ -161,8 +160,7 @@ export default function CompanyDetailPage() {
         );
       })()}
 
-      <PredictionPanel ticker={ticker} />
-      <ArimaPanel ticker={ticker} />
+      <ForecastPanels ticker={ticker} />
     </div>
   );
 }

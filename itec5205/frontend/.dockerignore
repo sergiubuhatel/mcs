@@ -1,0 +1,4 @@
+# node_modules is installed inside the image (Linux binaries); the local
+# Windows copy must not be sent or copied over it. dist/ is rebuilt there too.
+node_modules/
+dist/

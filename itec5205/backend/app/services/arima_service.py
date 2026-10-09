@@ -18,7 +18,7 @@ from statsmodels.tools.sm_exceptions import ConvergenceWarning
 from statsmodels.tsa.arima.model import ARIMA
 
 from ..config import RL_MODELS_DIR
-from .lstm_service import MIN_HISTORY_DAYS, _load_closes
+from .lstm_service import DEFAULT_LOOKBACK_DAYS, MIN_HISTORY_DAYS, _load_closes, split_index
 
 
 def _fit(series: np.ndarray, order: tuple[int, int, int]):
@@ -53,13 +53,14 @@ def train_and_predict(
     d: int = 1,
     max_p: int = 3,
     max_q: int = 3,
-    lookback_days: int | None = 756,
+    lookback_days: int | None = DEFAULT_LOOKBACK_DAYS,
     forecast_days: int = 7,
     on_step=None,
 ) -> dict:
     """`order=None` searches p in [0, max_p], q in [0, max_q] (d fixed) by AIC.
     `lookback_days` keeps only the most recent closes (None = full history):
-    ARIMA assumes a stable process, which 15 years of prices are not."""
+    ARIMA assumes a stable process, which 15 years of prices are not. The
+    default window and the test split are shared with the LSTM."""
     ticker = ticker.upper()
     dates, closes = _load_closes(ticker)
     if lookback_days:
@@ -68,7 +69,7 @@ def train_and_predict(
         raise ValueError(f"Not enough price history for '{ticker}' ({len(closes)} days) to fit an ARIMA model")
 
     series = closes.astype(np.float64)
-    split = int(len(series) * 0.8)
+    split = split_index(len(series))
     train, test = series[:split], series[split:]
 
     if order is None:
@@ -127,6 +128,7 @@ def train_and_predict(
         "test_rmse": rmse,
         "test_mae": mae,
         "history_days": len(closes),
+        "test_days": len(test),
         "last_actual_close": round(last_actual_close, 2),
         "forecast": forecast,
         "model_path": model_path,

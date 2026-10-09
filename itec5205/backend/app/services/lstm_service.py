@@ -18,6 +18,16 @@ from ..config import RL_MODELS_DIR
 from ..db.arango_client import get_db
 
 MIN_HISTORY_DAYS = 120
+# Shared by the LSTM and ARIMA forecasters so both learn from the same window
+# (~3 trading years) and are scored on the same held-out days.
+DEFAULT_LOOKBACK_DAYS = 756
+TEST_FRACTION = 0.2
+
+
+def split_index(n_closes: int) -> int:
+    """Index of the first held-out close: closes[split_index:] are the test days
+    for both models (chronological 80/20 split of the lookback window)."""
+    return int(n_closes * (1 - TEST_FRACTION))
 
 
 class LSTMPricePredictor(nn.Module):
@@ -56,74 +66,127 @@ def _make_sequences(scaled: np.ndarray, seq_len: int) -> tuple[np.ndarray, np.nd
     return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
 
 
+# Inputs/targets are expressed relative to the last close of each window
+# (in percent), not as min-max-scaled absolute prices: a 15-year price series
+# spans a huge range, so absolute scaling squeezes recent prices into a narrow
+# band the network can't resolve, and the training split never sees the test
+# price levels. Relative windows are on the same scale across the whole history.
+RETURN_SCALE = 100.0
+
+
+def _make_relative_sequences(closes: np.ndarray, seq_len: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """X[i] = closes[i:i+seq_len] / anchor - 1, y[i] = closes[i+seq_len] / anchor - 1,
+    with anchor = closes[i+seq_len-1] (also returned, to map predictions back to prices)."""
+    n = len(closes) - seq_len
+    windows = np.stack([closes[i : i + seq_len] for i in range(n)])
+    anchors = windows[:, -1]
+    X = (windows / anchors[:, None] - 1.0) * RETURN_SCALE
+    y = (closes[seq_len:] / anchors - 1.0) * RETURN_SCALE
+    return X.astype(np.float32), y.astype(np.float32), anchors.astype(np.float64)
+
+
 def train_and_predict(
     ticker: str,
     seq_len: int = 20,
-    epochs: int = 30,
+    epochs: int = 100,
     hidden_size: int = 32,
     forecast_days: int = 7,
+    lookback_days: int | None = DEFAULT_LOOKBACK_DAYS,
+    batch_size: int = 64,
+    patience: int = 10,
+    seed: int = 42,
     on_epoch=None,
 ) -> dict:
+    """`epochs` is the maximum: training stops early once validation loss
+    hasn't improved for `patience` epochs, and the best-validation weights are
+    kept. A fixed `seed` (weight init + batch shuffling) makes retraining on
+    the same data give the same forecast. `lookback_days` keeps only the most
+    recent closes (None = full history), same as the ARIMA forecaster."""
     ticker = ticker.upper()
     dates, closes = _load_closes(ticker)
+    if lookback_days:
+        dates, closes = dates[-lookback_days:], closes[-lookback_days:]
     if len(closes) < max(MIN_HISTORY_DAYS, seq_len + 30):
         raise ValueError(f"Not enough price history for '{ticker}' ({len(closes)} days) to train an LSTM")
 
-    price_min, price_max = float(closes.min()), float(closes.max())
-    span = (price_max - price_min) or 1.0
-    scaled = (closes - price_min) / span
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    shuffle_gen = torch.Generator().manual_seed(seed)
 
-    X, y = _make_sequences(scaled, seq_len)
-    split = int(len(X) * 0.8)
-    X_train, y_train = X[:split], y[:split]
-    X_test, y_test = X[split:], y[split:]
-
-    X_train_t = torch.tensor(X_train).unsqueeze(-1)
-    y_train_t = torch.tensor(y_train).unsqueeze(-1)
-    X_test_t = torch.tensor(X_test).unsqueeze(-1)
-    y_test_t = torch.tensor(y_test).unsqueeze(-1)
+    closes64 = closes.astype(np.float64)
+    X, y, anchors = _make_relative_sequences(closes64, seq_len)
+    # Chronological splits: train | validation (early stopping) | test (reported
+    # RMSE/MAE). Sample i predicts closes[i + seq_len], so the test samples are
+    # exactly those predicting closes[split_index:] -- the same days ARIMA is scored on.
+    split = split_index(len(closes64)) - seq_len
+    val_start = int(split * 0.9)
+    X_t = torch.tensor(X).unsqueeze(-1)
+    y_t = torch.tensor(y).unsqueeze(-1)
+    X_train_t, y_train_t = X_t[:val_start], y_t[:val_start]
+    X_val_t, y_val_t = X_t[val_start:split], y_t[val_start:split]
+    X_test_t = X_t[split:]
 
     model = LSTMPricePredictor(hidden_size=hidden_size)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = nn.MSELoss()
 
-    model.train()
+    best_val, best_state, best_epoch, stale = float("inf"), None, 0, 0
+    epochs_run = 0
     for epoch in range(1, epochs + 1):
-        optimizer.zero_grad()
-        pred = model(X_train_t)
-        loss = loss_fn(pred, y_train_t)
-        loss.backward()
-        optimizer.step()
+        model.train()
+        order = torch.randperm(len(X_train_t), generator=shuffle_gen)
+        train_loss = 0.0
+        for start in range(0, len(order), batch_size):
+            idx = order[start : start + batch_size]
+            optimizer.zero_grad()
+            loss = loss_fn(model(X_train_t[idx]), y_train_t[idx])
+            loss.backward()
+            optimizer.step()
+            train_loss += float(loss.item()) * len(idx)
+        train_loss /= len(order)
+
+        model.eval()
+        with torch.no_grad():
+            val_loss = float(loss_fn(model(X_val_t), y_val_t).item())
+        epochs_run = epoch
+        if val_loss < best_val - 1e-6:
+            best_val, best_epoch, stale = val_loss, epoch, 0
+            best_state = {k: v.clone() for k, v in model.state_dict().items()}
+        else:
+            stale += 1
         if on_epoch:
-            on_epoch(epoch, epochs, float(loss.item()))
+            on_epoch(epoch, epochs, train_loss, val_loss)
+        if stale >= patience:
+            break
 
+    model.load_state_dict(best_state)
     model.eval()
-    with torch.no_grad():
-        test_pred_scaled = model(X_test_t).squeeze(-1).numpy() if len(X_test) else np.array([])
 
-    def _unscale(arr):
-        return arr * span + price_min
+    def _to_price(pred_rel, anchor):
+        return anchor * (1.0 + pred_rel / RETURN_SCALE)
 
-    if len(test_pred_scaled):
-        test_pred = _unscale(test_pred_scaled)
-        test_actual = _unscale(y_test)
+    if len(X_test_t):
+        with torch.no_grad():
+            test_rel = model(X_test_t).squeeze(-1).numpy().astype(np.float64)
+        test_pred = _to_price(test_rel, anchors[split:])
+        test_actual = closes64[seq_len + split :]
         rmse = float(np.sqrt(np.mean((test_pred - test_actual) ** 2)))
         mae = float(np.mean(np.abs(test_pred - test_actual)))
     else:
         rmse = mae = None
 
-    # Recursive multi-step forecast from the most recent `seq_len` closes.
-    window = list(scaled[-seq_len:])
-    forecast_scaled = []
-    model.eval()
+    # Recursive multi-step forecast: each predicted close is appended to the
+    # price window and the window is re-normalized to its new last close.
+    window = list(closes64[-seq_len:])
+    forecast_prices = []
     with torch.no_grad():
         for _ in range(forecast_days):
-            x = torch.tensor(np.array(window[-seq_len:], dtype=np.float32)).view(1, seq_len, 1)
-            next_scaled = float(model(x).item())
-            forecast_scaled.append(next_scaled)
-            window.append(next_scaled)
+            w = np.array(window[-seq_len:])
+            x = torch.tensor(((w / w[-1] - 1.0) * RETURN_SCALE).astype(np.float32)).view(1, seq_len, 1)
+            next_price = float(_to_price(float(model(x).item()), w[-1]))
+            forecast_prices.append(next_price)
+            window.append(next_price)
 
-    forecast_prices = _unscale(np.array(forecast_scaled)).tolist()
     last_date = datetime.strptime(dates[-1], "%Y-%m-%d")
     forecast_dates = []
     d = last_date
@@ -135,7 +198,7 @@ def train_and_predict(
     os.makedirs(RL_MODELS_DIR, exist_ok=True)
     model_path = os.path.join(RL_MODELS_DIR, f"lstm_{ticker}.pt")
     torch.save(
-        {"state_dict": model.state_dict(), "price_min": price_min, "price_max": price_max, "seq_len": seq_len, "hidden_size": hidden_size},
+        {"state_dict": model.state_dict(), "input": "relative_window_pct", "seq_len": seq_len, "hidden_size": hidden_size},
         model_path,
     )
 
@@ -156,11 +219,15 @@ def train_and_predict(
         "ticker": ticker,
         "seq_len": seq_len,
         "epochs": epochs,
+        "epochs_run": epochs_run,
+        "best_epoch": best_epoch,
+        "seed": seed,
         "hidden_size": hidden_size,
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "test_rmse": rmse,
         "test_mae": mae,
         "history_days": len(closes),
+        "test_days": len(closes) - split_index(len(closes)),
         "last_actual_close": round(last_actual_close, 2),
         "forecast": forecast,
         "model_path": model_path,

@@ -8,6 +8,7 @@ from celery.result import AsyncResult
 from flask import Blueprint, jsonify, request
 
 from ..db.arango_client import get_db
+from ..services.lstm_service import DEFAULT_LOOKBACK_DAYS
 from ..tasks.celery_app import celery_app
 from ..tasks.predict_tasks import train_lstm_prediction
 
@@ -21,12 +22,14 @@ def train():
     if not ticker:
         return jsonify({"error": "'ticker' is required"}), 400
 
+    lookback = body.get("lookback_days", DEFAULT_LOOKBACK_DAYS)
     task = train_lstm_prediction.delay(
         ticker=ticker,
         seq_len=int(body.get("seq_len", 20)),
-        epochs=int(body.get("epochs", 30)),
+        epochs=int(body.get("epochs", 100)),
         hidden_size=int(body.get("hidden_size", 32)),
         forecast_days=int(body.get("forecast_days", 7)),
+        lookback_days=int(lookback) if lookback else None,
     )
     return jsonify({"task_id": task.id}), 202
 

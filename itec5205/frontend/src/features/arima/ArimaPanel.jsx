@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchExistingRequested, trainRequested } from "./arimaSlice";
 import { TrendChartIcon } from "../../layout/icons";
@@ -21,10 +21,9 @@ function ChangeBadge({ value }) {
 
 const orderLabel = (order) => (order ? `(${order.join(", ")})` : "-");
 
-export default function ArimaPanel({ ticker }) {
+export default function ArimaPanel({ ticker, lookbackDays }) {
   const dispatch = useDispatch();
   const { status, progress, result, error } = useSelector((s) => s.arima);
-  const [lookbackDays, setLookbackDays] = useState(756);
 
   useEffect(() => {
     dispatch(fetchExistingRequested(ticker));
@@ -40,10 +39,6 @@ export default function ArimaPanel({ ticker }) {
     <div className="card">
       <h3>ARIMA price forecast</h3>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-        <div>
-          <label style={{ display: "block", fontSize: "0.78rem", color: "var(--color-text-secondary)" }}>Lookback days</label>
-          <input type="number" value={lookbackDays} onChange={(e) => setLookbackDays(e.target.value)} style={{ width: 90 }} disabled={training} />
-        </div>
         <button className="btn" onClick={start} disabled={training}>
           <TrendChartIcon /> {training ? "Fitting..." : "Fit / refit ARIMA"}
         </button>
@@ -66,7 +61,7 @@ export default function ArimaPanel({ ticker }) {
           <p className="muted">
             Order: <strong>ARIMA{orderLabel(result.order)}</strong> · AIC: <strong>{result.aic?.toFixed(1) ?? "-"}</strong> · Test RMSE:{" "}
             <strong>{result.test_rmse?.toFixed(2) ?? "-"}</strong> · Test MAE: <strong>{result.test_mae?.toFixed(2) ?? "-"}</strong> · fitted on{" "}
-            {result.history_days} days
+            {result.history_days} days{result.test_days !== undefined && <>, tested on last {result.test_days}</>}
             {result.last_actual_close !== undefined && <> · Last close: <strong>${result.last_actual_close}</strong></>}
           </p>
           <table>

@@ -19,10 +19,10 @@ function ChangeBadge({ value }) {
   );
 }
 
-export default function PredictionPanel({ ticker }) {
+export default function PredictionPanel({ ticker, lookbackDays }) {
   const dispatch = useDispatch();
   const { status, progress, result, error } = useSelector((s) => s.predictions);
-  const [epochs, setEpochs] = useState(30);
+  const [epochs, setEpochs] = useState(100);
 
   useEffect(() => {
     dispatch(fetchExistingRequested(ticker));
@@ -32,14 +32,14 @@ export default function PredictionPanel({ ticker }) {
   const training = status === "starting" || status === "training";
   const pct = progress && progress.total ? Math.min(100, Math.round((progress.completed / progress.total) * 100)) : 0;
 
-  const start = () => dispatch(trainRequested({ ticker, epochs: Number(epochs), seq_len: 20, forecast_days: 7 }));
+  const start = () => dispatch(trainRequested({ ticker, epochs: Number(epochs), seq_len: 20, forecast_days: 7, lookback_days: lookbackDays }));
 
   return (
     <div className="card">
       <h3>LSTM price forecast</h3>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
         <div>
-          <label style={{ display: "block", fontSize: "0.78rem", color: "var(--color-text-secondary)" }}>Epochs</label>
+          <label style={{ display: "block", fontSize: "0.78rem", color: "var(--color-text-secondary)" }}>Max epochs</label>
           <input type="number" value={epochs} onChange={(e) => setEpochs(e.target.value)} style={{ width: 90 }} disabled={training} />
         </div>
         <button className="btn" onClick={start} disabled={training}>
@@ -50,7 +50,7 @@ export default function PredictionPanel({ ticker }) {
       {training && (
         <div>
           <div className="progress-bar"><div style={{ width: `${pct}%` }} /></div>
-          <p className="muted">{progress ? `epoch ${progress.completed}/${progress.total}, loss ${progress.loss?.toFixed?.(5) ?? "-"}` : "Starting..."}</p>
+          <p className="muted">{progress ? `epoch ${progress.completed}/${progress.total} (stops early when validation loss stalls), loss ${progress.loss?.toFixed?.(4) ?? "-"}, val ${progress.val_loss?.toFixed?.(4) ?? "-"}` : "Starting..."}</p>
         </div>
       )}
       {status === "error" && <p className="error-text">{error}</p>}
@@ -59,7 +59,8 @@ export default function PredictionPanel({ ticker }) {
         <div>
           <p className="muted">
             Test RMSE: <strong>{result.test_rmse?.toFixed(2) ?? "-"}</strong> · Test MAE:{" "}
-            <strong>{result.test_mae?.toFixed(2) ?? "-"}</strong> · trained on {result.history_days} days
+            <strong>{result.test_mae?.toFixed(2) ?? "-"}</strong> · trained on {result.history_days} days{result.test_days !== undefined && <>, tested on last {result.test_days}</>}
+            {result.best_epoch !== undefined && <> · best epoch {result.best_epoch}/{result.epochs_run} (seed {result.seed})</>}
             {result.last_actual_close !== undefined && <> · Last close: <strong>${result.last_actual_close}</strong></>}
           </p>
           <table>
