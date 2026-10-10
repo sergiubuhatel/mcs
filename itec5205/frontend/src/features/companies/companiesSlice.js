@@ -16,6 +16,7 @@ const initialState = {
   sectors: [],
   industries: [],
   selected: {}, // ticker -> true, for building a candidate pool
+  signals: {}, // ticker -> "Strong" | "Mixed" | "Weak" | "Avoid", over all current results
   loading: false,
   error: null,
 };
@@ -83,6 +84,13 @@ const companiesSlice = createSlice({
     clearSelected(state) {
       state.selected = {};
     },
+    // Adds every ticker in `action.payload` to the pool selection.
+    selectTickers(state, action) {
+      for (const t of action.payload) state.selected[t] = true;
+    },
+    setSignals(state, action) {
+      state.signals = action.payload;
+    },
   },
 });
 
@@ -100,6 +108,8 @@ export const {
   toggleSelected,
   toggleSelectAll,
   clearSelected,
+  selectTickers,
+  setSignals,
 } = companiesSlice.actions;
 
 export default companiesSlice.reducer;

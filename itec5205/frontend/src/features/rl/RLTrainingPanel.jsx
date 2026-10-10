@@ -37,7 +37,7 @@ export default function RLTrainingPanel({ pool }) {
   const { status, progress, result, error } = useSelector((s) => s.rl);
   const [riskAversion, setRiskAversion] = useState(1.0);
   const [timesteps, setTimesteps] = useState(20000);
-  const [mode, setMode] = useState("full"); // "full" | "subset"
+  const [mode, setMode] = useState("full"); // "full" | "subset" | "strong"
   const [minCompanies, setMinCompanies] = useState(""); // blank = no lower bound (auto)
   const [maxCompanies, setMaxCompanies] = useState(""); // blank = no upper bound (auto)
   const [maxVolatility, setMaxVolatility] = useState(""); // annual %, blank = no ceiling
@@ -78,6 +78,10 @@ export default function RLTrainingPanel({ pool }) {
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" }}>
           <input type="radio" name="rl-mode" checked={mode === "subset"} onChange={() => setMode("subset")} disabled={training} />
           Only companies with a steady upward trend
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" }}>
+          <input type="radio" name="rl-mode" checked={mode === "strong"} onChange={() => setMode("strong")} disabled={training} />
+          Only Strong signals (from the signal board)
         </label>
       </div>
 
@@ -157,8 +161,10 @@ export default function RLTrainingPanel({ pool }) {
       <p className="muted" style={{ margin: "4px 0 8px" }}>
         {mode === "subset" &&
           "Candidates: companies whose price over the trend window tracks a straight line upward (K-ratio). "}
-        {mode === "full" && minCompanies === "" && maxCompanies === "" && maxVolatility === "" && minReturn === ""
-          ? "No limits or company count set: the agent trains on every ticker in the pool."
+        {mode === "strong" &&
+          "Candidates: only the companies the signal board above currently rates Strong (every available star lit). "}
+        {mode !== "subset" && minCompanies === "" && maxCompanies === "" && maxVolatility === "" && minReturn === ""
+          ? `No limits or company count set: the agent trains on every ${mode === "strong" ? "Strong" : ""} ticker in the pool.`.replace("  ", " ")
           : `A mean-variance optimizer picks ${describeCount(minCompanies, maxCompanies)} from the past year of returns — the highest return under the volatility limit, or the lowest volatility above the annual return floor${
               maxVolatility === "" && minReturn === "" ? " (here: the highest Sharpe ratio, since no limits are set)" : ""
             }. The PPO agent then trains on just those, and if its weights miss a limit they are blended toward the optimizer's allocation.`}

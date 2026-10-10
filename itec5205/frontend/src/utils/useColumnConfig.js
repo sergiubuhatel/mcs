@@ -32,8 +32,14 @@ export function useColumnConfig(storageKey, defaultColumns) {
 
   const [order, setOrder] = useState(() => {
     if (Array.isArray(savedOrderRaw) && savedOrderRaw.length) {
-      const known = savedOrderRaw.filter((k) => defaultOrder.includes(k));
-      return [...known, ...newlySeenKeys];
+      const merged = savedOrderRaw.filter((k) => defaultOrder.includes(k));
+      // Slot each new column in right after its default predecessor (or
+      // first, if it has none) rather than at the end.
+      for (const k of newlySeenKeys) {
+        const prev = defaultOrder[defaultOrder.indexOf(k) - 1];
+        merged.splice(prev === undefined ? 0 : merged.indexOf(prev) + 1, 0, k);
+      }
+      return merged;
     }
     return defaultOrder;
   });

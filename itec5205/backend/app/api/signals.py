@@ -30,3 +30,14 @@ def signals():
         pool = get_pool(portfolio["source_pool_id"]) if portfolio.get("source_pool_id") else None
         return jsonify(build_signals([h["ticker"] for h in portfolio["holdings"]], pool=pool, portfolio=portfolio))
     return jsonify({"error": "Pass 'pool_id' or 'portfolio_id'"}), 400
+
+
+@bp.post("")
+def signals_for_tickers():
+    """``{"tickers": [...]}`` -- the screener's current results. They pass its
+    screen by definition (fundamentals star lit); there's no RL portfolio, so
+    the RL star is n/a and Strong means fundamentals + LSTM + ARIMA all up."""
+    tickers = (request.get_json(silent=True) or {}).get("tickers") or []
+    if not tickers:
+        return jsonify({"error": "Pass a non-empty 'tickers' list"}), 400
+    return jsonify(build_signals(tickers, in_screen=True))

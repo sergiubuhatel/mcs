@@ -62,6 +62,8 @@ def train_rl_portfolio(
     notes = f"PPO, timesteps={timesteps}, risk_aversion={risk_aversion}, window={window}"
     if mode == "subset":
         notes += f", candidates filtered by trend consistency (K-ratio, {lookback_days}-day lookback)"
+    elif mode == "strong":
+        notes += f", candidates limited to the {len(requested)} Strong signals"
     if optimizer is not None:
         notes += f", {len(universe)} companies selected by mean-variance optimizer"
         notes += " (auto-sized)" if auto_sized else ""

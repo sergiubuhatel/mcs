@@ -36,7 +36,7 @@ export function screenCriteria(filters) {
   return { sector: filters.sector || "", industry: filters.industry || "", q: filters.q || "", ranges };
 }
 
-function buildParams(filters) {
+export function buildParams(filters) {
   const params = {
     sector: filters.sector || undefined,
     industry: filters.industry || undefined,
@@ -54,10 +54,26 @@ function buildParams(filters) {
   return params;
 }
 
+const SIGNAL_RANK = { Strong: 3, Mixed: 2, Weak: 1, Avoid: 0 };
+
 function* handleFetch() {
   try {
     yield put(fetchStarted());
     const filters = yield select((state) => state.companies.filters);
+    if (filters.sortBy === "signal") {
+      // The signal isn't a stored field the API can sort on: fetch every
+      // result (largest market cap first as the tie-break), sort and page here.
+      const signals = yield select((state) => state.companies.signals);
+      const params = { ...buildParams(filters), sort_by: "market_cap", sort_dir: "desc", limit: 600, offset: 0 };
+      const { data } = yield call(apiClient.get, "/api/companies", { params });
+      const rank = (r) => SIGNAL_RANK[signals[r.ticker]] ?? -1;
+      const sorted = data.results
+        .map((r, i) => [r, i])
+        .sort(([a, i], [b, j]) => (filters.sortDir === "desc" ? rank(b) - rank(a) : rank(a) - rank(b)) || i - j)
+        .map(([r]) => r);
+      yield put(fetchSucceeded({ ...data, results: sorted.slice(filters.offset, filters.offset + filters.limit) }));
+      return;
+    }
     const { data } = yield call(apiClient.get, "/api/companies", { params: buildParams(filters) });
     yield put(fetchSucceeded(data));
   } catch (err) {

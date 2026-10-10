@@ -149,9 +149,13 @@ def latest_portfolio_for_pool(pool_id: str) -> dict | None:
     return rows[0] if rows else None
 
 
-def build_signals(tickers: list[str], pool: dict | None = None, portfolio: dict | None = None) -> dict:
+def build_signals(
+    tickers: list[str], pool: dict | None = None, portfolio: dict | None = None, in_screen: bool = False
+) -> dict:
     """Signal board rows for `tickers`. `pool` supplies the screen (fundamentals
-    star); `portfolio` the RL weights (RL star). Either may be None."""
+    star); `portfolio` the RL weights (RL star). Either may be None.
+    `in_screen=True` means `tickers` are themselves the current screener
+    results, so every one passes the screen by construction."""
     db = get_db()
     tickers = [t.upper() for t in tickers]
     names = {
@@ -162,7 +166,7 @@ def build_signals(tickers: list[str], pool: dict | None = None, portfolio: dict 
     }
     lstm_docs = {d["_key"]: d for d in db.collection("price_predictions").get_many(tickers)}
     arima_docs = {d["_key"]: d for d in db.collection("arima_predictions").get_many(tickers)}
-    screen = passes_screen(tickers, (pool or {}).get("filters"))
+    screen = {t: True for t in tickers} if in_screen else passes_screen(tickers, (pool or {}).get("filters"))
     weights = {h["ticker"]: h["weight"] for h in (portfolio or {}).get("holdings", [])} if portfolio else None
 
     rows = []

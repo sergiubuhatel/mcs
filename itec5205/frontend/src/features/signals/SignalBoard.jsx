@@ -72,7 +72,7 @@ function AgreeCell({ value }) {
   return <span className="muted" title="LSTM and ARIMA disagree (or one is flat)">≠</span>;
 }
 
-function SignalBadge({ signal }) {
+export function SignalBadge({ signal }) {
   return (
     <span style={{ ...SIGNAL_STYLE[signal], borderRadius: 10, padding: "2px 10px", fontSize: "0.78rem", fontWeight: 700 }}>
       {signal}
@@ -80,7 +80,7 @@ function SignalBadge({ signal }) {
   );
 }
 
-function progressText(run) {
+export function progressText(run) {
   const { lstm, arima } = run.counts;
   return `LSTM ${lstm.done + lstm.failed}/${lstm.total} · ARIMA ${arima.done + arima.failed}/${arima.total}`;
 }

@@ -6,6 +6,7 @@ import { ListIcon, SpinnerIcon } from "../../layout/icons";
 import { sectorColor } from "../../utils/sectorColors";
 import { useColumnConfig } from "../../utils/useColumnConfig";
 import ColumnPicker from "../../components/ColumnPicker";
+import { SignalBadge } from "../signals/SignalBoard";
 
 function fmtNum(v) {
   return v === null || v === undefined ? "-" : Number(v).toFixed(2);
@@ -44,7 +45,7 @@ function fmtRawPct(v) {
 export default function CompanyTable() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { results, total, filters, selected, loading, error } = useSelector((s) => s.companies);
+  const { results, total, filters, selected, signals, loading, error } = useSelector((s) => s.companies);
   const selectAllRef = useRef(null);
 
   const COLUMNS = [
@@ -54,12 +55,20 @@ export default function CompanyTable() {
       label: "Company",
       sortable: true,
       left: true,
-      width: undefined,
+      width: 190,
       render: (row) => (
         <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>
           {row.name}
         </span>
       ),
+    },
+    {
+      key: "signal",
+      label: "Signal",
+      sortable: true,
+      left: true,
+      width: 80,
+      render: (row) => (signals[row.ticker] ? <SignalBadge signal={signals[row.ticker]} /> : <span className="muted">-</span>),
     },
     {
       key: "sector",

@@ -9,6 +9,7 @@ from celery.result import AsyncResult
 from flask import Blueprint, jsonify, request
 
 from ..services.pool_service import get_pool
+from ..services.signal_service import SIGNAL_STRONG, build_signals, latest_portfolio_for_pool
 from ..tasks.celery_app import celery_app
 from ..tasks.rl_tasks import train_rl_portfolio
 
@@ -26,11 +27,21 @@ def train():
 
     universe = body.get("universe")
     pool_id = body.get("pool_id")
+    mode = body.get("mode", "full")
     if pool_id:
         pool = get_pool(pool_id)
         if pool is None:
             return jsonify({"error": f"Pool '{pool_id}' not found"}), 404
         universe = pool["tickers"]
+        if mode == "strong":
+            # Only the companies the signal board currently rates Strong; from
+            # here on it trains like "full" mode over that narrower universe.
+            board = build_signals(universe, pool=pool, portfolio=latest_portfolio_for_pool(pool_id))
+            universe = [r["ticker"] for r in board["rows"] if r["signal"] == SIGNAL_STRONG]
+            if len(universe) < 2:
+                return jsonify({"error": f"Only {len(universe)} Strong companies in this pool -- need at least 2 (run Forecast all first)"}), 400
+    elif mode == "strong":
+        return jsonify({"error": "'strong' mode needs a pool_id"}), 400
 
     task = train_rl_portfolio.delay(
         universe=universe,
@@ -38,7 +49,7 @@ def train():
         timesteps=int(body.get("timesteps", 50_000)),
         window=int(body.get("window", 30)),
         portfolio_name=body.get("portfolio_name"),
-        mode=body.get("mode", "full"),
+        mode=mode,
         min_companies=_optional(body.get("min_companies"), int),
         max_companies=_optional(body.get("max_companies"), int),
         lookback_days=int(body.get("lookback_days", 252)),
