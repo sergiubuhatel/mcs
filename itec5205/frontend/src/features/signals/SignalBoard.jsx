@@ -91,7 +91,7 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
   const [board, setBoard] = useState(null);
   const [error, setError] = useState(null);
   const [run, setRun] = useState(null);
-  const [trainingDays, setTrainingDays] = useState(756);
+  const [trainingDays, setTrainingDays] = useState(2515);
   const [epochs, setEpochs] = useState(100);
   const [refining, setRefining] = useState(false);
   const [refineRule, setRefineRule] = useState("keep_strong"); // "keep_strong" | "drop_weak"

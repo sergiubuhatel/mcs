@@ -21,8 +21,9 @@ from .horizons import MAX_HORIZON_DAYS, horizon_points
 
 MIN_HISTORY_DAYS = 120
 # Shared by the LSTM and ARIMA forecasters so both learn from the same window
-# (~3 trading years) and are scored on the same held-out days.
-DEFAULT_LOOKBACK_DAYS = 756
+# (10 years: trading days 2016-10-10..2026-10-09 in the stored data) and are
+# scored on the same held-out days.
+DEFAULT_LOOKBACK_DAYS = 2515
 TEST_FRACTION = 0.2
 
 

@@ -23,7 +23,7 @@ export default function ScreenerForecastBar() {
   const [summary, setSummary] = useState(null);
   const [run, setRun] = useState(null);
   const [error, setError] = useState(null);
-  const [trainingDays, setTrainingDays] = useState(756);
+  const [trainingDays, setTrainingDays] = useState(2515);
   const [epochs, setEpochs] = useState(100);
   const pollRef = useRef(null);
   const loadedKey = useRef(null);

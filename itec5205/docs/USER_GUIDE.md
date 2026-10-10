@@ -64,7 +64,7 @@ Click a pool's name to open three panels for it.
 
 - **Forecast all (LSTM + ARIMA)** queues both models for every company in the
   pool (*Training days* = how much recent history both models learn from,
-  default 756 ≈ 3 years; both are always trained on the same days). A progress
+  default 2515 ≈ 10 years; both are always trained on the same days). A progress
   line shows LSTM *x/n* · ARIMA *x/n*; **Cancel** stops a run. If another
   big run is ahead of yours, it shows *Waiting in queue*.
 - One row per company:

@@ -89,7 +89,7 @@ import or a forecast. Adding a new job type means: a task route in
 On a company's detail page (or the **Prediction** page) there are two panels:
 
 - **LSTM price forecast** — set *Epochs*, click **Train / retrain LSTM**.
-- **ARIMA price forecast** — set *Lookback days* (default 756 ≈ 3 years),
+- **ARIMA price forecast** — set *Lookback days* (default 2515 ≈ 10 years),
   click **Fit / refit ARIMA**. The worker tries orders (p, 1, q) for
   p, q ∈ 0..3, keeps the one with the lowest AIC, and shows a 7-day forecast
   with a 95% confidence interval.
@@ -99,7 +99,7 @@ models can be compared directly. API equivalents:
 
 ```
 POST /api/predictions/train   {"ticker": "AAPL", "epochs": 30}
-POST /api/arima/train         {"ticker": "AAPL", "lookback_days": 756}
+POST /api/arima/train         {"ticker": "AAPL", "lookback_days": 2515}
                               # optional: "order": [p, d, q] to skip the search
 GET  /api/predictions/status/<task_id>    GET /api/arima/status/<task_id>
 GET  /api/predictions/<ticker>            GET /api/arima/<ticker>

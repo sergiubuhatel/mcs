@@ -3,8 +3,8 @@ import { apiClient } from "../../api/client";
 import PredictionPanel from "./PredictionPanel";
 import ArimaPanel from "../arima/ArimaPanel";
 
-// Matches DEFAULT_LOOKBACK_DAYS in backend/app/services/lstm_service.py (~3 trading years).
-const DEFAULT_TRAINING_DAYS = 756;
+// Matches DEFAULT_LOOKBACK_DAYS in backend/app/services/lstm_service.py (~10 trading years).
+const DEFAULT_TRAINING_DAYS = 2515;
 
 function changeColor(value) {
   if (value === null || value === undefined || value === 0) return "var(--color-text-primary)";

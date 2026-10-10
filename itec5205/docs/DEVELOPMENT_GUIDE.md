@@ -154,7 +154,7 @@ Both forecasters take the same inputs and are evaluated the same way, so
 their numbers are directly comparable:
 
 - **Same window**: the most recent `lookback_days` closes (default
-  `DEFAULT_LOOKBACK_DAYS = 756`, ~3 trading years).
+  `DEFAULT_LOOKBACK_DAYS = 2515`, ~10 trading years).
 - **Same test days**: `split_index()` cuts the window 80/20; both report
   one-step-ahead RMSE/MAE on exactly the last 20%.
 - **Same horizon**: 84 daily steps (4 months); `horizons.py` picks the
