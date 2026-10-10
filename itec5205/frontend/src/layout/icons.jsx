@@ -217,3 +217,34 @@ export function CloseIcon(props) {
     </svg>
   );
 }
+
+export function PlayIcon(props) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path d="M7 4.8v14.4a.8.8 0 0 0 1.2.7l11.5-7.2a.8.8 0 0 0 0-1.4L8.2 4.1A.8.8 0 0 0 7 4.8Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// Three linked steps (search -> forecast -> portfolio): a policy.
+export function WorkflowIcon(props) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <rect x="3" y="3" width="7" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="14" y="9" width="7" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="3" y="15" width="7" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M10 6h3.5a1 1 0 0 1 1 1v2M14 12h-1.5M14.5 15v2a1 1 0 0 1-1 1H10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function SlidersIcon(props) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="15" cy="6" r="2" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="9" cy="12" r="2" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="17" cy="18" r="2" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}

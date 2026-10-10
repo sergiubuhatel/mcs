@@ -23,7 +23,7 @@ That single command builds the images and starts everything in order:
 1. `arangodb` and `redis`
 2. `init-db` — waits for ArangoDB, creates the database, collections and
    indexes (idempotent), then exits
-3. `backend` and the four Celery workers
+3. `backend` and the five Celery workers
 4. `flower` and `frontend`
 
 ## Open the app in the browser
@@ -76,6 +76,7 @@ so it survives container rebuilds.
 | `worker-rl` | Celery queue `rl` — PPO portfolio allocation training |
 | `worker-predict` | Celery queue `predict` — LSTM price forecast training |
 | `worker-arima` | Celery queue `arima` — ARIMA price forecast fitting |
+| `worker-policy` | Celery queue `policy` — runs policies (screen → forecast → RL portfolio) |
 | `flower` | Celery monitoring UI |
 | `frontend` | React app served by nginx, proxies `/api` and `/socket.io` to `backend` |
 

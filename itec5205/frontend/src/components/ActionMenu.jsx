@@ -15,7 +15,8 @@ const menuItemStyle = {
   color: "var(--color-text-primary)",
 };
 
-export default function ActionMenu({ onRename, onEdit, onDuplicate, onDelete }) {
+// `extraItems` ([{label, icon, onClick, disabled}]) go first, e.g. Run / Cancel.
+export default function ActionMenu({ onRename, onEdit, onDuplicate, onDelete, extraItems = [] }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -54,6 +55,19 @@ export default function ActionMenu({ onRename, onEdit, onDuplicate, onDelete }) 
             overflow: "hidden",
           }}
         >
+          {extraItems.map(({ label, icon: Icon, onClick, disabled }) => (
+            <button
+              key={label}
+              style={{ ...menuItemStyle, opacity: disabled ? 0.5 : 1, cursor: disabled ? "not-allowed" : "pointer" }}
+              disabled={disabled}
+              onClick={() => {
+                setOpen(false);
+                onClick();
+              }}
+            >
+              {Icon && <Icon />} {label}
+            </button>
+          ))}
           {onRename && (
             <button
               style={menuItemStyle}

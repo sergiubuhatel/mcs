@@ -22,6 +22,9 @@ The workflow from the project proposal, as one loop:
 6. **Refine**: create a new pool without the companies whose evidence doesn't
    line up, retrain RL on it, and compare iterations.
 
+**Policies** automate steps 1-4: save the screen, the forecast rules and the
+RL options once, then run them in one click to get a portfolio.
+
 ## 1. Starting the system
 
 From the repo root, with Docker Desktop running:
@@ -36,7 +39,7 @@ docker compose up -d --build
 | backend | http://localhost:5000/api | REST API + Socket.IO |
 | arangodb | http://localhost:8529 | ArangoDB web UI (user `root`, password = `ARANGO_PASSWORD` in `.env`, default `root`) |
 | flower | http://localhost:5555 | Celery job monitor |
-| redis, init-db, worker-import / -rl / -lstm / -arima | (internal) | broker, one-shot DB setup, background workers |
+| redis, init-db, worker-import / -rl / -lstm / -arima / -policy | (internal) | broker, one-shot DB setup, background workers |
 
 **Open http://localhost:8080** (on Windows: `start http://localhost:8080`).
 The database setup runs automatically (`init-db`).
@@ -47,6 +50,36 @@ The database starts empty. Click **Import** in the bottom bar to load the
 S&P 500 (~500 companies, price history + fundamentals from Yahoo Finance; it
 takes several minutes — progress shows in the bottom bar, and Stop/Resume
 work). Re-running the import refreshes the data.
+
+## Policies (`/policies`) and Criteria (`/criteria/...`)
+
+A **policy** = one *Screen Criteria* + one *Prediction Criteria* + one
+*Portfolio Criteria*. Each criteria is saved on its own (sidebar ->
+**Criteria**) so several policies can share them. Every grid has a **+**
+button (new) and a **⋮** menu per row (Edit, Duplicate, Delete; policies also
+**Run** / **Cancel run**). A criteria used by a policy can't be deleted.
+
+- **Screen Criteria** — the same fields as Fundamental Analysis. The editor
+  shows how many companies match today; *Copy current Fundamental Analysis
+  search* takes over whatever is filled in on the screener.
+- **Prediction Criteria** — the points in time to predict (any list: 3 days,
+  1 week, 1, 2, 3, 4 months, ...; in business days: week = 5, month = 21,
+  year = 252), the training window (business days, or months/years of
+  business days — 10 years ≈ 2515 days), which forecasts a company must pass
+  (LSTM and ARIMA both up, either, or one model only), an optional minimum
+  rise %, LSTM epochs, and whether to reuse forecasts already trained on the
+  same data (much faster re-runs).
+- **Portfolio Criteria** — the options of *Generate low-risk / high-return
+  portfolio with RL*: whole pool or steady-trend only, max volatility, min
+  annual return, min/max companies, risk aversion, timesteps.
+
+**Running** a policy (⋮ -> Run): (1) search with the screen criteria, (2)
+forecast every match and keep the companies whose forecasts rise at
+*every* point, (3) train RL on them with the portfolio criteria. The result
+is a new portfolio (plus the pools from steps 1 and 2 under Pools). The
+progress bar and *Step x of 3* line show what it is waiting for; click the
+policy name for the step cards, each company's forecast at each point and
+why it passed or not, and the run history.
 
 ## 2. Screener (`/`)
 

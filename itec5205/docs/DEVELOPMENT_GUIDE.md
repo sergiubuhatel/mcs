@@ -37,7 +37,7 @@ academic writeup see [`paper/ITEC5205_ResearchPaper.docx`](../paper/ITEC5205_Res
 Docker services (`docker-compose.yml`): `arangodb`, `redis`, `init-db`
 (one-shot: creates collections/indexes, then exits; everything else waits
 for it), `backend`, `worker-import`, `worker-rl`, `worker-lstm`,
-`worker-arima`, `flower` (Celery monitoring UI), `frontend`. Only
+`worker-arima`, `worker-policy` (queue `policy`, see *Policies* below), `flower` (Celery monitoring UI), `frontend`. Only
 `backend` builds the Python image (`itec5205-backend`); the workers,
 `init-db` and `flower` reuse it.
 **Both `frontend` and `backend` run nginx as their public-facing web
@@ -82,6 +82,7 @@ backend/
       arima_service.py            per-ticker ARIMA forecaster (AIC search over (p,q) and drift)
       horizons.py                 the 1/2/3/4-month horizons (21/42/63/84 trading days)
       signal_service.py           signal board: fundamentals + RL + LSTM + ARIMA -> compound signal
+      policy_service.py           policies + screen/prediction/portfolio criteria: CRUD, validation, run helpers
     rl/
       portfolio_env.py           the Gymnasium environment PPO trains against
     tasks/
@@ -90,9 +91,11 @@ backend/
       rl_tasks.py                   `train_rl_portfolio` Celery task
       predict_tasks.py              `train_lstm_prediction` Celery task (queue `lstm`)
       arima_tasks.py                `train_arima_prediction` Celery task (queue `arima`)
+      policy_tasks.py               `run_policy` orchestrator (queue `policy`)
     api/                        thin Flask blueprints; validate input, call services/tasks, return JSON
       companies.py, pools.py, portfolios.py, rl.py, data.py, predictions.py,
-      arima.py, forecasts.py (batch LSTM+ARIMA over a pool/portfolio), signals.py
+      arima.py, forecasts.py (batch LSTM+ARIMA over a pool/portfolio), signals.py,
+      policies.py (criteria + policies CRUD, run/cancel)
   scripts/init_db.py         create collections + indexes (retries until ArangoDB is up; run by `init-db`)
   wsgi.py                    exposes `app`; `python wsgi.py` serves it with Waitress
   celery_worker.py            Celery worker entrypoint (`celery -A celery_worker.celery_app worker`)
@@ -122,6 +125,9 @@ adapters around them.
 | `price_predictions`            | ticker                | latest LSTM forecast (84 daily steps + `horizons`) + test RMSE/MAE |
 | `arima_predictions`            | ticker                | latest ARIMA forecast (+ 95% interval per step, order, drift) |
 | `forecast_runs`                | uuid                  | batch forecast run: tickers, params, Celery task ids per model, `finished_at`, `wall_seconds`, `cancelled_at` |
+| `criteria`                     | uuid                  | `{kind: screen\|prediction\|portfolio, name, description, ...}` -- screen: `filters` (form state) + `screen` (API units); prediction: `horizons[{value,unit}]`, `training{value,unit}`, `models`, `min_change_pct`, `epochs`, `reuse_forecasts`; portfolio: the RL options |
+| `policies`                     | uuid                  | `{name, description, screen_criteria_id, prediction_criteria_id, portfolio_criteria_id}` |
+| `policy_runs`                  | uuid                  | one run: criteria snapshot, `status` (queued/running/succeeded/failed/cancelled), `step`, `percent`, `message`, `steps.{screen,forecast,portfolio}` (counts, per-ticker forecast rows), `pool_id`, `portfolio_id`, `wall_seconds` |
 
 `sectors`/`industries` exist as their own collections (not just distinct
 values scanned off `companies`) specifically so the Screener's dropdowns
@@ -196,6 +202,32 @@ ids in a `forecast_runs` document. `GET /api/forecasts/batch/<id>`
 aggregates the task states; the first read that sees every task done stores
 `wall_seconds`. `queued` is true while a model has jobs waiting and none
 running (i.e. behind another run on the same queue).
+
+### Policies (`policy_service.py`, `tasks/policy_tasks.py`)
+
+A policy names one criteria of each kind; `POST /api/policies/<id>/run`
+snapshots the three criteria into a `policy_runs` document and queues
+`run_policy` on the `policy` queue. The task:
+
+1. **Screen** -- `search_companies` with the screen criteria, saved as a pool
+   (`<policy> · <date>`).
+2. **Predict** -- training window = N business days, or for months/years the
+   exact closes stored per ticker since that calendar date. Queues LSTM
+   and/or ARIMA per ticker on the `lstm`/`arima` queues (forecast length =
+   max(84, longest horizon)), skipping forecasts already trained on the same
+   window of the same data when `reuse_forecasts` is on. A company passes
+   when the required model(s) forecast a rise >= `min_change_pct` (or > the
+   0.05% dead band) at **every** horizon. Failures are dropped via
+   `refine_pool`, so the run shows up as a refinement iteration.
+3. **Portfolio** -- `train_rl_portfolio` on the `rl` queue over the
+   refined pool with the portfolio criteria.
+
+It waits on its child jobs by polling their states (never `.get()` inside
+a task), which is why it has its own worker -- on the lstm/arima/rl workers
+it would hold the slot its children need. Progress (`percent`: screen
+0-5, predict 5-70, portfolio 70-100) is written to the run document every
+2 s and polled by the UI. Cancel sets the Redis stop flag; the task revokes
+its unfinished child jobs. A run whose task died is marked failed on read.
 
 ### Real-time progress: Socket.IO over Redis
 
@@ -360,6 +392,10 @@ Socket.IO room/event.
 | `GET /api/forecasts/batch/<run_id>`, `GET /api/forecasts/batch?pool_id=\|portfolio_id=` | Run progress (per-model counts, errors, `queued`, `wall_seconds`) / latest run |
 | `POST /api/forecasts/batch/<run_id>/cancel` | Revoke the run's unfinished jobs |
 | `GET /api/signals?pool_id=\|portfolio_id=` | Signal board rows + summary |
+| `GET/POST /api/criteria/<kind>`, `GET/PUT/DELETE /api/criteria/<kind>/<id>`, `POST .../<id>/duplicate` | Screen / prediction / portfolio criteria CRUD (`kind` = `screen`\|`prediction`\|`portfolio`); DELETE returns 409 while a policy uses it |
+| `GET/POST /api/policies`, `GET/PUT/DELETE /api/policies/<id>`, `POST .../<id>/duplicate` | Policy CRUD (the list includes each policy's last run) |
+| `POST /api/policies/<id>/run`, `GET /api/policies/<id>/runs` | Start a run (409 if one is active) / run history |
+| `GET /api/policies/runs/<run_id>`, `POST /api/policies/runs/<run_id>/cancel` | Run progress / cancel |
 | `GET /api/health` | Liveness check |
 
 ## 6. Troubleshooting / operational gotchas

@@ -10,7 +10,7 @@ celery_app = Celery(
     "itec5205",
     broker=config.CELERY_BROKER_URL,
     backend=config.CELERY_RESULT_BACKEND,
-    include=["app.tasks.import_tasks", "app.tasks.rl_tasks", "app.tasks.predict_tasks", "app.tasks.arima_tasks"],
+    include=["app.tasks.import_tasks", "app.tasks.rl_tasks", "app.tasks.predict_tasks", "app.tasks.arima_tasks", "app.tasks.policy_tasks"],
 )
 
 celery_app.conf.update(
@@ -26,6 +26,9 @@ celery_app.conf.update(
         "train_rl_portfolio": {"queue": "rl"},
         "train_lstm_prediction": {"queue": "lstm"},
         "train_arima_prediction": {"queue": "arima"},
+        # The policy orchestrator only waits on the jobs it queues above, so
+        # it needs its own worker -- on any of theirs it would block them.
+        "run_policy": {"queue": "policy"},
     },
 )
 

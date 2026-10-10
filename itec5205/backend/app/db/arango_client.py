@@ -58,6 +58,16 @@ COLLECTIONS = {
         {"type": "persistent", "fields": ["pool_id", "created_at"], "unique": False},
         {"type": "persistent", "fields": ["portfolio_id", "created_at"], "unique": False},
     ],
+    # Policies (search -> forecast -> RL, automated): reusable screen /
+    # prediction / portfolio criteria (`kind`), the policies that reference
+    # one of each, and each policy run's step-by-step progress + outcome.
+    "criteria": [
+        {"type": "persistent", "fields": ["kind", "name"], "unique": False},
+    ],
+    "policies": [],
+    "policy_runs": [
+        {"type": "persistent", "fields": ["policy_id", "created_at"], "unique": False},
+    ],
 }
 
 

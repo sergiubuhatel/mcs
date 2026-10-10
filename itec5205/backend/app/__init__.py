@@ -9,7 +9,7 @@ def create_app() -> Flask:
     cors.init_app(app, resources={r"/api/*": {"origins": "*"}})
     socketio.init_app(app)
 
-    from .api import arima, companies, forecasts, signals, data, pools, portfolios, predictions, rl
+    from .api import arima, companies, forecasts, signals, data, policies, pools, portfolios, predictions, rl
 
     app.register_blueprint(companies.bp)
     app.register_blueprint(pools.bp)
@@ -20,6 +20,7 @@ def create_app() -> Flask:
     app.register_blueprint(arima.bp)
     app.register_blueprint(forecasts.bp)
     app.register_blueprint(signals.bp)
+    app.register_blueprint(policies.bp)
 
     from . import sockets  # noqa: F401 - registers Socket.IO event handlers
 

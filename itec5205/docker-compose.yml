@@ -1,6 +1,6 @@
 # One-shot launch of the whole stack:  docker compose up -d --build
 # Startup order: arangodb + redis -> init-db (creates collections, then exits)
-# -> backend + the four Celery workers -> frontend.
+# -> backend + the five Celery workers -> frontend.
 
 # Settings shared by every service built from ./backend (API, workers, init).
 x-backend-env: &backend-env
@@ -100,6 +100,12 @@ services:
     <<: *backend
     command: celery -A celery_worker.celery_app worker --loglevel=info -Q arima -n arima@%h --concurrency=${ARIMA_CONCURRENCY:-4}
 
+  # Runs policies (screen -> forecast -> RL): mostly waits on the jobs it
+  # queues on the lstm/arima/rl workers, so a few at once are cheap.
+  worker-policy:
+    <<: *backend
+    command: celery -A celery_worker.celery_app worker --loglevel=info -Q policy -n policy@%h --concurrency=${POLICY_CONCURRENCY:-2}
+
   flower:
     image: itec5205-backend
     pull_policy: never
@@ -131,6 +137,8 @@ services:
       worker-lstm:
         condition: service_started
       worker-arima:
+        condition: service_started
+      worker-policy:
         condition: service_started
     ports:
       - "8080:80"
