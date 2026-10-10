@@ -8,15 +8,29 @@ function changeColor(value) {
   return value > 0 ? "#16a34a" : "#dc2626";
 }
 
+// `value` is the unrounded % change; a tiny non-zero move still gets its
+// arrow/color and shows as "<0.01%" instead of a misleading neutral "0.00%".
 function ChangeBadge({ value }) {
   if (value === null || value === undefined) return <span className="muted">-</span>;
   const arrow = value > 0 ? "▲ " : value < 0 ? "▼ " : "";
-  const sign = value > 0 ? "+" : "";
+  const tiny = Math.abs(value) > 0 && Math.abs(value) < 0.005;
+  const sign = tiny ? "" : value > 0 ? "+" : value < 0 ? "-" : "";
+  const abs = Math.abs(value);
+  const text = tiny ? "<0.01" : abs.toFixed(2);
   return (
     <span style={{ color: changeColor(value), fontWeight: value === 0 ? 400 : 600 }}>
-      {arrow}{sign}{value.toFixed(2)}%
+      {arrow}{sign}{text}%
     </span>
   );
+}
+
+// Day-over-day % change of each forecast row, from the prices themselves
+// (the stored change_pct fields are pre-rounded to 2 decimals).
+function withDayChange(forecast, lastActualClose) {
+  return (forecast || []).map((f, i) => {
+    const prev = i === 0 ? lastActualClose : forecast[i - 1].predicted_close;
+    return { ...f, dayChange: prev ? ((f.predicted_close - prev) / prev) * 100 : null };
+  });
 }
 
 const orderLabel = (order) => (order ? `(${order.join(", ")})` : "-");
@@ -74,12 +88,18 @@ export default function ArimaPanel({ ticker, lookbackDays }) {
               </tr>
             </thead>
             <tbody>
-              {result.forecast?.map((f) => (
+              {withDayChange(result.forecast, result.last_actual_close).map((f) => (
                 <tr key={f.date}>
                   <td>{f.date}</td>
-                  <td style={{ color: changeColor(f.change_pct_from_prior_day), fontWeight: 600 }}>${f.predicted_close}</td>
-                  <td><ChangeBadge value={f.change_pct_from_prior_day} /></td>
-                  <td className="muted">${f.lower_95} – ${f.upper_95}</td>
+                  <td style={{ color: changeColor(f.dayChange), fontWeight: 600 }}>${Number(f.predicted_close).toFixed(2)}</td>
+                  <td><ChangeBadge value={f.dayChange} /></td>
+                  {/* Each bound is colored vs. the last actual close: a bound below it is a
+                      possible loss (red), above it a possible gain (green). */}
+                  <td>
+                    <span style={{ color: changeColor(f.lower_95 - result.last_actual_close), fontWeight: 600 }}>${Number(f.lower_95).toFixed(2)}</span>
+                    {" – "}
+                    <span style={{ color: changeColor(f.upper_95 - result.last_actual_close), fontWeight: 600 }}>${Number(f.upper_95).toFixed(2)}</span>
+                  </td>
                 </tr>
               ))}
             </tbody>
