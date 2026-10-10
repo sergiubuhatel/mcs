@@ -127,7 +127,10 @@ def compound_signal(stars: dict[str, bool | None], agree: str | None) -> str:
     positive = sum(1 for v in available if v)
     if agree == "agree_down":
         return SIGNAL_AVOID
-    if len(available) >= 3 and positive == len(available):
+    # Strong needs both forecasts (up at every horizon) plus every other star
+    # that's available -- a hand-picked pool with no screen and no RL run yet
+    # can still be Strong on LSTM + ARIMA alone.
+    if stars.get("lstm") and stars.get("arima") and positive == len(available):
         return SIGNAL_STRONG
     if positive <= 1:
         return SIGNAL_WEAK
