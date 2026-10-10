@@ -18,6 +18,20 @@ const STAR_LABELS = [
   ["arima", "ARIMA: up at all four horizons"],
 ];
 
+const SIGNAL_RANK = { Strong: 3, Mixed: 2, Weak: 1, Avoid: 0 };
+
+// Sort key per column; "lstm:1M"-style keys read that model's horizon change.
+function sortValue(row, key) {
+  if (key === "signal") return SIGNAL_RANK[row.signal];
+  if (key === "stars") {
+    const vals = Object.values(row.stars || {});
+    return vals.filter(Boolean).length - vals.filter((v) => v === null || v === undefined).length / 10;
+  }
+  if (key === "rl_weight") return row.rl_weight;
+  const [model, label] = key.split(":");
+  return row[model]?.horizons[label]?.change_pct;
+}
+
 function Stars({ stars }) {
   return (
     <span style={{ letterSpacing: 1, whiteSpace: "nowrap" }}>
@@ -81,6 +95,8 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
   const [epochs, setEpochs] = useState(100);
   const [refining, setRefining] = useState(false);
   const [refineRule, setRefineRule] = useState("keep_strong"); // "keep_strong" | "drop_weak"
+  const [sortBy, setSortBy] = useState(null); // "signal" | "stars" | "rl_weight" | "lstm:1M" ...; null = backend order
+  const [sortDir, setSortDir] = useState("desc");
   const pollRef = useRef(null);
 
   const loadBoard = useCallback(() => {
@@ -167,6 +183,35 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
   const total = run ? run.counts.lstm.total + run.counts.arima.total : 0;
   const pct = total ? Math.round((done / total) * 100) : 0;
   const s = board?.summary;
+
+  const onSortClick = (key) => {
+    if (key === sortBy) setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    else {
+      setSortBy(key);
+      setSortDir("desc");
+    }
+  };
+  // Missing values always sink to the bottom, whichever direction.
+  const rows = !board ? [] : !sortBy ? board.rows : board.rows.slice().sort((a, b) => {
+    const va = sortValue(a, sortBy);
+    const vb = sortValue(b, sortBy);
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    return sortDir === "desc" ? vb - va : va - vb;
+  });
+  const sortableTh = (key, label, title, props = {}) => (
+    <th key={key} className={sortBy === key ? "sorted" : ""} onClick={() => onSortClick(key)} title={title} {...props}>
+      {label}
+      <span style={{ visibility: sortBy === key ? "visible" : "hidden" }}>{sortDir === "desc" ? "↓" : "↑"}</span>
+    </th>
+  );
+  // Explicit textAlign: the global th:first-child/nth-child(2) rule would
+  // otherwise left-align the first two cells of this second header row.
+  const horizonHeader = (model) =>
+    HORIZONS.map((h) =>
+      sortableTh(`${model}:${h.label}`, h.label, `Sort by ${model.toUpperCase()} ${h.name} change`, { style: { textAlign: "right" } })
+    );
   const droppable = !s ? 0 : refineRule === "drop_weak" ? s.Weak + s.Avoid : s.Mixed + s.Weak + s.Avoid;
 
   return (
@@ -252,19 +297,21 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
             <thead>
               <tr>
                 <th rowSpan={2} style={{ textAlign: "left" }}>Company</th>
-                <th rowSpan={2}>Signal</th>
-                <th rowSpan={2}>Stars</th>
-                <th rowSpan={2}>RL weight</th>
+                {sortableTh("signal", "Signal", "Sort by signal (Strong → Avoid)", { rowSpan: 2 })}
+                {sortableTh("stars", "Stars", "Sort by number of lit stars", { rowSpan: 2 })}
+                {sortableTh("rl_weight", "RL weight", "Sort by RL allocation weight", { rowSpan: 2 })}
                 <th colSpan={4}>LSTM change</th>
                 <th colSpan={4}>ARIMA change</th>
                 <th colSpan={4}>Agree</th>
               </tr>
               <tr>
-                {[0, 1, 2].map((g) => HORIZONS.map((h) => <th key={`${g}-${h.label}`}>{h.label}</th>))}
+                {horizonHeader("lstm")}
+                {horizonHeader("arima")}
+                {HORIZONS.map((h) => <th key={`g-${h.label}`} style={{ textAlign: "right", cursor: "default" }}>{h.label}</th>)}
               </tr>
             </thead>
             <tbody>
-              {board.rows.map((r) => (
+              {rows.map((r) => (
                 <tr key={r.ticker}>
                   <td style={{ textAlign: "left" }}>
                     <Link to={`/companies/${r.ticker}`}><strong>{r.ticker}</strong></Link>{" "}
