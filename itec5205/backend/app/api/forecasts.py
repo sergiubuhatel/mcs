@@ -106,7 +106,8 @@ def _status(run: dict) -> dict:
                 c["pending"] += 1
         counts[model] = c
 
-    finished = all(counts[m]["done"] + counts[m]["failed"] == counts[m]["total"] for m in MODELS)
+    cancelled = bool(run.get("cancelled_at"))
+    finished = cancelled or all(counts[m]["done"] + counts[m]["failed"] == counts[m]["total"] for m in MODELS)
     if finished and not run.get("finished_at"):
         finished_at = datetime.now(timezone.utc)
         run["finished_at"] = finished_at.isoformat()
@@ -125,6 +126,10 @@ def _status(run: dict) -> dict:
         "counts": counts,
         "errors": errors,
         "finished": finished,
+        "cancelled": cancelled,
+        # Jobs waiting with none of this run's running for that model: they're
+        # queued behind other runs' jobs on the same worker queue.
+        "queued": not finished and any(counts[m]["pending"] > 0 and counts[m]["running"] == 0 for m in MODELS),
         "finished_at": run.get("finished_at"),
         "wall_seconds": run.get("wall_seconds"),
         "mean_train_seconds": {
@@ -155,3 +160,21 @@ def latest_batch():
     if not rows:
         return jsonify({"run": None})
     return jsonify({"run": _status(rows[0])})
+
+
+@bp.post("/batch/<run_id>/cancel")
+def cancel_batch(run_id: str):
+    """Stop a run: revoke its unfinished jobs (queued ones are discarded when a
+    worker picks them up) and mark the run finished. Also clears runs whose
+    jobs were lost (e.g. a worker restarted while holding them)."""
+    col = get_db().collection("forecast_runs")
+    if not col.has(run_id):
+        return jsonify({"error": "Forecast run not found"}), 404
+    run = col.get(run_id)
+    for model in MODELS:
+        for task_id in run["tasks"][model].values():
+            if AsyncResult(task_id, app=celery_app).state not in DONE_STATES:
+                celery_app.control.revoke(task_id)
+    run["cancelled_at"] = datetime.now(timezone.utc).isoformat()
+    col.update({"_key": run_id, "cancelled_at": run["cancelled_at"]})
+    return jsonify(_status(run))

@@ -1,21 +1,26 @@
 # User's Guide — S&P 500 Investment Screener & RL Portfolio Builder
 
-This guide explains how to run the application and how to use it, end to
-end, from the browser. For how the system is built internally, see
-[`DEVELOPMENT_GUIDE.md`](./DEVELOPMENT_GUIDE.md). For the academic writeup,
-see [`paper/ITEC5205_ResearchPaper.docx`](../paper/ITEC5205_ResearchPaper.docx).
+This guide explains how to run the application and use it end to end from
+the browser. For how the system is built internally, see
+[`DEVELOPMENT_GUIDE.md`](./DEVELOPMENT_GUIDE.md).
 
 ## What this app does
 
-1. **Search** S&P 500 companies by profitability, debt, valuation (P/E),
-   market cap, sector/industry, and other fundamentals.
-2. **Save a pool** of candidate tickers from your search results.
-3. **Generate a portfolio with Reinforcement Learning** — trains a PPO
-   agent on a pool's historical returns and recommends a low-risk /
-   high-return allocation (a weight percentage per stock).
-4. **Predict individual stock prices** a week ahead with an LSTM model,
-   per ticker.
-5. **Save and compare portfolios** — both RL-generated and manually built.
+The workflow from the project proposal, as one loop:
+
+1. **Screen** S&P 500 companies by fundamentals (profitability, debt,
+   valuation, growth, volatility, ...).
+2. **Save a pool** of candidates from the screen.
+3. **Forecast** every company in the pool with two independent models — an
+   **LSTM** neural network and a classical **ARIMA** model — at 1, 2, 3 and
+   4 months ahead.
+4. **Allocate** with Reinforcement Learning (PPO) — a weight per company,
+   optionally under a volatility ceiling / return floor / company-count limits.
+5. **Combine the evidence** on the **signal board**: fundamentals, RL weight,
+   LSTM direction, ARIMA direction. When all four point up, *the stars align*
+   (signal **Strong**).
+6. **Refine**: create a new pool without the companies whose evidence doesn't
+   line up, retrain RL on it, and compare iterations.
 
 ## 1. Starting the system
 
@@ -25,113 +30,95 @@ From the repo root, with Docker Desktop running:
 docker compose up -d --build
 ```
 
-This starts six containers:
+| Service | URL | Purpose |
+|---|---|---|
+| frontend | http://localhost:8080 | **The web app** |
+| backend | http://localhost:5000/api | REST API + Socket.IO |
+| arangodb | http://localhost:8529 | ArangoDB web UI (user `root`, password = `ARANGO_PASSWORD` in `.env`, default `root`) |
+| flower | http://localhost:5555 | Celery job monitor |
+| redis, init-db, worker-import / -rl / -lstm / -arima | (internal) | broker, one-shot DB setup, background workers |
 
-| Service    | URL                          | Purpose                                  |
-|------------|-------------------------------|-------------------------------------------|
-| frontend   | http://localhost:8080         | The web app (React)                       |
-| backend    | http://localhost:5000/api     | REST API + Socket.IO (used directly only if you're not going through the frontend proxy) |
-| arangodb   | http://localhost:8529          | ArangoDB web UI (inspect the raw data)    |
-| flower     | http://localhost:5555          | Celery task monitor (see running jobs)    |
-| redis      | (internal only)               | Celery broker / Socket.IO message bus     |
-| worker     | (internal only)               | Runs import/RL/LSTM jobs in the background|
+**Open http://localhost:8080** (on Windows: `start http://localhost:8080`).
+The database setup runs automatically (`init-db`).
 
-**Open the app at http://localhost:8080.**
+### First use: load the data
 
-### ArangoDB login
+The database starts empty. Click **Import** in the bottom bar to load the
+S&P 500 (~500 companies, price history + fundamentals from Yahoo Finance; it
+takes several minutes — progress shows in the bottom bar, and Stop/Resume
+work). Re-running the import refreshes the data.
 
-The ArangoDB web UI (http://localhost:8529) logs in with:
+## 2. Screener (`/`)
 
-- **Username:** `root`
-- **Password:** the value of `ARANGO_PASSWORD` in your `.env` file at the
-  repo root (defaults to `root` if you copied `.env.example` as-is).
+- Filter by sector, industry, free text and min/max ranges on any indicator;
+  click a column header to sort.
+- Click a ticker for its **company page**.
+- Tick rows and **save them as a pool**. The pool remembers the screen you
+  used — that's what the *fundamentals* star re-checks later.
 
-Use the ArangoDB UI's "investing" database to browse collections directly
-(`companies`, `stock_prices`, `stock_stats`, `financial_ratios`, `sectors`,
-`industries`, `pools`, `portfolios`, `rl_runs`, `price_predictions`) if you
-want to see the raw documents behind the screener.
+## 3. Pools (`/pools`)
 
-### First-time setup: load the data
+Click a pool's name to open three panels for it.
 
-The database starts empty. Before the Screener shows anything:
+### Signal board — do all the stars align?
 
-1. Run the one-off schema setup (only needed once):
-   ```
-   docker compose exec backend python scripts/init_db.py
-   ```
-2. Trigger a data import. From the app, this isn't (yet) a button in the
-   UI — kick it off via the API once:
-   ```
-   curl -X POST http://localhost:8080/api/data/import -H "Content-Type: application/json" -d "{}"
-   ```
-   With no `tickers` given, it imports the full S&P 500 list from
-   `tickers.txt` (~500 companies; takes on the order of 10–20 minutes,
-   since Yahoo Finance is queried a few times per ticker). Watch progress
-   in Flower (http://localhost:5555) or by polling the returned
-   `task_id` at `/api/data/import/status/<task_id>`.
-   - To import a handful of tickers quickly instead (for a fast demo),
-     pass an explicit list: `{"tickers": ["AAPL","MSFT","NVDA"]}`.
+- **Forecast all (LSTM + ARIMA)** queues both models for every company in the
+  pool (*Training days* = how much recent history both models learn from,
+  default 756 ≈ 3 years; both are always trained on the same days). A progress
+  line shows LSTM *x/n* · ARIMA *x/n*; **Cancel** stops a run. If another
+  big run is ahead of yours, it shows *Waiting in queue*.
+- One row per company:
+  - **LSTM change / ARIMA change** at **1M, 2M, 3M, 4M** — green ▲ up, red ▼
+    down, ≈ flat (within ±0.05%). Hover an ARIMA cell for P(up).
+  - **Agree** per horizon: ▲▲ both up, ▼▼ both down, ≠ disagree. The models
+    *agree* overall only if they agree at all four horizons.
+  - **Stars** (★ yes, ☆ no, · n/a): fundamentals (still passes the pool's
+    screen), RL (held by the latest RL portfolio of this pool), LSTM up at all
+    horizons, ARIMA up at all horizons.
+  - **Signal**: **Strong** = every available star lit · **Mixed** · **Weak**
+    = at most one star · **Avoid** = both models agree on down.
+- **Refine** (refinement loop): choose *Keep only Strong* or *Drop Weak &
+  Avoid*, then **Refine: drop N → new pool**. A new pool "… · iteration 1" is
+  created and selected — train RL on it next.
 
-Re-running the import later refreshes prices/stats/ratios for the same
-tickers (it upserts, so it's safe to re-run).
+### RL portfolio
 
-## 2. Screener page (`/`)
+Set the limits you need (blank = none): max volatility, min annual return,
+min/max number of companies, risk aversion, timesteps. **Train** — progress
+streams live, and the result is saved on the Portfolios page and feeds the
+RL star on the signal board.
 
-- Use the filter form to narrow by **sector**, **industry**, free-text
-  search, and min/max ranges on market cap, P/E, ROE, ROA, debt-to-equity,
-  current ratio, gross/net margin, dividend yield.
-- Click a column header to sort by it (click again to flip direction).
-- Click a ticker to open its **Company Detail** page (price chart,
-  fundamentals, and the LSTM price forecast panel).
-- Check the box next to any rows you're interested in, then name and
-  **save them as a pool** at the top of the results — this pool becomes
-  the candidate universe for RL portfolio generation.
+### Refinement history
 
-## 3. Pools page (`/pools`)
+Appears once a pool has iterations: each iteration's companies, what was
+dropped, and its latest RL portfolio's 1Y return / volatility / Sharpe.
 
-- Lists every pool you've saved from the Screener.
-- Click a pool's name to open the **RL training panel** for it:
-  - **Risk aversion**: higher values push the agent toward lower
-    volatility even if it costs some expected return (it's the λ in
-    `reward = return − λ × volatility`).
-  - **Training timesteps**: how long to train the PPO agent. A few
-    thousand is enough for a quick look; tens of thousands gives a more
-    settled policy but takes longer.
-  - Click **Train RL portfolio**. Progress streams live (over
-    WebSockets) as a progress bar; when done, you'll see the recommended
-    **weight percentage per ticker**, plus the resulting portfolio's
-    estimated annual **return, volatility, and Sharpe ratio** (computed
-    from the pool's own historical daily returns). It's automatically
-    saved to the Portfolios page.
+## 4. Portfolios (`/portfolios`)
 
-## 4. Portfolios page (`/portfolios`)
+All saved portfolios (RL-generated and manual). A portfolio's page shows its
+performance chart, holdings, allocation and its own **signal board** (Forecast
+all works there too).
 
-- Shows every saved portfolio (both RL-generated and manual), each with
-  its holdings (ticker + weight %) and estimated return/volatility/Sharpe.
-- You can also build a portfolio **manually**: add ticker/weight rows and
-  save — weights don't need to sum to 1, they're normalized automatically.
-- Delete any portfolio you no longer want.
+## 5. Company page (`/companies/<ticker>`) and Prediction page
 
-## 5. Company Detail page (`/companies/<ticker>`)
-
-- Key stats (price, market cap, P/E, beta) and fundamentals (ROE, ROA,
-  debt-to-equity, current ratio, margins, revenue growth).
-- A price history chart (up to 2 years, depending on what was imported).
-- **LSTM price forecast panel**: click "Train / retrain LSTM" to fit a
-  small neural network to that ticker's price history and get a 7-trading-day
-  forecast, along with the model's held-out test RMSE/MAE (a smaller number
-  means a tighter fit — treat forecasts as illustrative, not investment advice).
+- Price, fundamentals and a price chart (1M … ALL).
+- **Training days** (shared by both models) and the last close with its
+  day-over-day move.
+- **LSTM** and **ARIMA** panels: predicted close at 1, 2, 3 and 4 months
+  (ARIMA also with its 95% interval: a bound below the last close is red, above
+  is green), test RMSE/MAE on the same held-out days for both, and **Show next
+  days** for a short-term daily view (display only — not used for agreement).
+- The LSTM is seeded, so retraining on the same data gives the same forecast.
 
 ## Tips
 
-- **Nothing shows up in the Screener** → you haven't run the import yet,
-  or it's still running. Check Flower or the import status endpoint.
-- **RL/LSTM training feels slow** → lower `timesteps`/`epochs` for a quick
-  look; the trade-off is a less-refined result.
-- **A pool needs at least 2 tickers with enough price history** — a
-  freshly imported ticker only has as much history as the import's
-  `period` argument requested (default 2 years).
-- Everything (pools, portfolios, prediction results) lives in ArangoDB, so
-  it survives restarting the containers — only `docker compose down -v`
-  (which deletes volumes) or wiping the `C:\docker-data\arangodb` folder
-  clears it.
+- **Screener empty** → run the Import first.
+- **Forecasting looks stuck** → another run is ahead in the queue (a 500-company
+  forecast takes ~15 minutes, ARIMA being the slow side); wait or **Cancel** it.
+- **Signal board shows "n/a" stars** → the pool was saved without a screen
+  (fundamentals) or no RL portfolio was trained on it yet (RL).
+- **⚠ next to a company** → its LSTM and ARIMA forecasts were made on different
+  data/windows; run Forecast all again.
+- Everything lives in ArangoDB (`C:\docker-data\arangodb`), so it survives
+  container restarts and rebuilds.
+- Forecasts are research output, not investment advice.

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiClient } from "../../api/client";
 import { TrendChartIcon } from "../../layout/icons";
-import { HORIZONS, changeColor } from "../predictions/ForecastTables";
+import { HORIZONS } from "../predictions/ForecastTables";
 
 const SIGNAL_STYLE = {
   Strong: { background: "#16a34a", color: "#fff" },
@@ -35,12 +35,18 @@ function Stars({ stars }) {
   );
 }
 
-function Pct({ value, title }) {
-  if (value === null || value === undefined) return <span className="muted">-</span>;
-  const arrow = value > 0 ? "▲" : value < 0 ? "▼" : "";
+// Colored by the direction the backend assigned (moves inside the ±deadband
+// count as flat -> neutral), so the color always matches the stars/agreement.
+function Pct({ point, title }) {
+  if (!point || point.change_pct === null || point.change_pct === undefined) return <span className="muted">-</span>;
+  const value = point.change_pct;
+  const dir = point.direction;
+  const color = dir === "up" ? "#16a34a" : dir === "down" ? "#dc2626" : "var(--color-text-primary)";
+  const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "≈";
+  const digits = Math.abs(value) < 1 ? 2 : 1;
   return (
-    <span title={title} style={{ color: changeColor(value), fontWeight: 600, whiteSpace: "nowrap" }}>
-      {arrow}{value > 0 ? "+" : ""}{value.toFixed(1)}%
+    <span title={title} style={{ color, fontWeight: dir === "flat" ? 400 : 600, whiteSpace: "nowrap" }}>
+      {arrow}{value > 0 ? "+" : ""}{value.toFixed(digits)}%
     </span>
   );
 }
@@ -74,6 +80,7 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
   const [trainingDays, setTrainingDays] = useState(756);
   const [epochs, setEpochs] = useState(100);
   const [refining, setRefining] = useState(false);
+  const [refineRule, setRefineRule] = useState("keep_strong"); // "keep_strong" | "drop_weak"
   const pollRef = useRef(null);
 
   const loadBoard = useCallback(() => {
@@ -134,11 +141,22 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
       .catch((err) => setError(err.response?.data?.error || err.message));
   };
 
+  const cancel = () => {
+    clearTimeout(pollRef.current);
+    apiClient
+      .post(`/api/forecasts/batch/${run.run_id}/cancel`)
+      .then((res) => {
+        setRun(res.data);
+        loadBoard();
+      })
+      .catch((err) => setError(err.response?.data?.error || err.message));
+  };
+
   const refine = () => {
     setRefining(true);
     setError(null);
     apiClient
-      .post(`/api/pools/${poolId}/refine`, { rule: "drop_weak" })
+      .post(`/api/pools/${poolId}/refine`, { rule: refineRule })
       .then((res) => onRefined?.(res.data))
       .catch((err) => setError(err.response?.data?.error || err.message))
       .finally(() => setRefining(false));
@@ -149,7 +167,7 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
   const total = run ? run.counts.lstm.total + run.counts.arima.total : 0;
   const pct = total ? Math.round((done / total) * 100) : 0;
   const s = board?.summary;
-  const droppable = s ? s.Weak + s.Avoid : 0;
+  const droppable = !s ? 0 : refineRule === "drop_weak" ? s.Weak + s.Avoid : s.Mixed + s.Weak + s.Avoid;
 
   return (
     <div className="card">
@@ -158,8 +176,8 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
         Four pieces of evidence per company: <strong>fundamentals</strong> (still passes the pool's screen),{" "}
         <strong>RL</strong> (held by the latest RL allocation), <strong>LSTM</strong> and <strong>ARIMA</strong> (each
         forecasting up at 1, 2, 3 and 4 months). LSTM and ARIMA <em>agree</em> only when they call the same direction at
-        all four horizons. <strong>Strong</strong> = every available star is lit; <strong>Avoid</strong> = both models agree
-        on down.
+        all four horizons; a move within ±{board?.deadband_pct ?? 0.05}% counts as flat (≈). <strong>Strong</strong> = every
+        available star is lit; <strong>Avoid</strong> = both models agree on down.
         {board && !board.has_screen && " This pool has no saved screen, so the fundamentals star is n/a."}
         {board && board.portfolio_id === null && " No RL portfolio has been trained on it yet, so the RL star is n/a."}
       </p>
@@ -176,15 +194,26 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
         <button className="btn" onClick={forecastAll} disabled={running}>
           <TrendChartIcon /> {running ? "Forecasting..." : `Forecast all (LSTM + ARIMA)`}
         </button>
-        {poolId && (
-          <button
-            className="btn secondary"
-            onClick={refine}
-            disabled={running || refining || droppable === 0}
-            title="Refinement loop: new pool without the Weak/Avoid companies; then retrain RL on it"
-          >
-            {refining ? "Refining..." : `Refine: drop ${droppable} Weak/Avoid → new pool`}
+        {running && (
+          <button className="btn secondary" onClick={cancel} title="Stop this run's remaining jobs">
+            Cancel
           </button>
+        )}
+        {poolId && (
+          <>
+            <select value={refineRule} onChange={(e) => setRefineRule(e.target.value)} disabled={running || refining} title="Refinement rule">
+              <option value="keep_strong">Keep only Strong</option>
+              <option value="drop_weak">Drop Weak &amp; Avoid</option>
+            </select>
+            <button
+              className="btn secondary"
+              onClick={refine}
+              disabled={running || refining || droppable === 0}
+              title="Refinement loop: a new pool without these companies (one iteration deeper); then retrain RL on it"
+            >
+              {refining ? "Refining..." : `Refine: drop ${droppable} → new pool`}
+            </button>
+          </>
         )}
       </div>
 
@@ -192,8 +221,10 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
         <div style={{ marginTop: 8 }}>
           {running && <div className="progress-bar"><div style={{ width: `${pct}%` }} /></div>}
           <p className="muted" style={{ margin: "4px 0" }}>
+            {run.queued && <strong>Waiting in queue behind other forecast runs · </strong>}
+            {run.cancelled && <strong>Cancelled · </strong>}
             {progressText(run)}
-            {run.finished && run.wall_seconds != null && ` · finished in ${run.wall_seconds.toFixed(1)} s`}
+            {run.finished && !run.cancelled && run.wall_seconds != null && ` · finished in ${run.wall_seconds.toFixed(1)} s`}
             {run.mean_train_seconds?.lstm != null && ` · avg LSTM ${run.mean_train_seconds.lstm.toFixed(1)} s`}
             {run.mean_train_seconds?.arima != null && ` · avg ARIMA ${run.mean_train_seconds.arima.toFixed(1)} s`}
             {` · trained on ${run.params.lookback_days} days`}
@@ -245,12 +276,12 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
                   <td><SignalBadge signal={r.signal} /></td>
                   <td><Stars stars={r.stars} /></td>
                   <td>{r.rl_weight === null || r.rl_weight === undefined ? <span className="muted">n/a</span> : `${(r.rl_weight * 100).toFixed(1)}%`}</td>
-                  {HORIZONS.map((h) => <td key={`l-${h.label}`}><Pct value={r.lstm?.horizons[h.label]?.change_pct} /></td>)}
+                  {HORIZONS.map((h) => <td key={`l-${h.label}`}><Pct point={r.lstm?.horizons[h.label]} /></td>)}
                   {HORIZONS.map((h) => {
                     const a = r.arima?.horizons[h.label];
                     return (
                       <td key={`a-${h.label}`}>
-                        <Pct value={a?.change_pct} title={a?.prob_up != null ? `P(up) = ${(a.prob_up * 100).toFixed(0)}%` : undefined} />
+                        <Pct point={a} title={a?.prob_up != null ? `P(up) = ${(a.prob_up * 100).toFixed(0)}%` : undefined} />
                       </td>
                     );
                   })}

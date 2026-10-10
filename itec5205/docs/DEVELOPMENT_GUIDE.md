@@ -27,18 +27,19 @@ academic writeup see [`paper/ITEC5205_ResearchPaper.docx`](../paper/ITEC5205_Res
                                         └──────┬──────┘
                                                │ pulls tasks
                                                ▼
-                                        ┌─────────────┐
-                                        │   Celery    │  runs: bulk Yahoo import,
-                                        │   worker    │  PPO (RL) training, LSTM training
-                                        └─────────────┘
-                                               │
-                                               ▼
-                                        yfinance (Yahoo Finance), stable-baselines3 (PPO),
-                                        PyTorch (LSTM)
+                       ┌──────────────┬───────┴──────┬──────────────┐
+                       ▼              ▼              ▼              ▼
+                 worker-import    worker-rl     worker-lstm    worker-arima     (one Celery worker
+                 queue `import`   queue `rl`    queue `lstm`   queue `arima`     per queue)
+                 yfinance         PPO (SB3)     PyTorch        statsmodels
 ```
 
-Six Docker services (`docker-compose.yml`): `arangodb`, `redis`,
-`backend`, `worker`, `flower` (Celery monitoring UI), `frontend`.
+Docker services (`docker-compose.yml`): `arangodb`, `redis`, `init-db`
+(one-shot: creates collections/indexes, then exits; everything else waits
+for it), `backend`, `worker-import`, `worker-rl`, `worker-lstm`,
+`worker-arima`, `flower` (Celery monitoring UI), `frontend`. Only
+`backend` builds the Python image (`itec5205-backend`); the workers,
+`init-db` and `flower` reuse it.
 **Both `frontend` and `backend` run nginx as their public-facing web
 server** — `frontend`'s nginx serves the built React static files and
 reverse-proxies `/api` and `/socket.io` to the `backend` container;
@@ -54,9 +55,11 @@ runs nginx in the foreground) and `backend/nginx.conf`.
 **Why a task queue at all?** Importing ~500 tickers from Yahoo Finance, or
 training a PPO/LSTM model, takes far longer than an HTTP request should
 block for. The Flask process only ever *enqueues* work (`task.delay(...)`,
-returns instantly with a `task_id`); the Celery `worker` process does the
-actual work, publishing progress back over Redis so the browser can watch
-it live instead of polling blind.
+returns instantly with a `task_id`); a Celery worker does the actual work,
+publishing progress back over Redis so the browser can watch it live
+instead of polling blind. Each job type has its own queue and worker, so a
+long RL run never blocks an import or a forecast, and each can be scaled
+independently (`docker compose up -d --scale worker-arima=3`).
 
 ## 2. Backend (`backend/`)
 
@@ -75,17 +78,22 @@ backend/
       portfolio_service.py      portfolio CRUD + return/volatility/Sharpe from historical prices
       pool_service.py            candidate-pool CRUD (search results -> saved ticker list)
       rl_service.py               builds the returns matrix, trains PPO, derives a recommended allocation
-      lstm_service.py             per-ticker LSTM price forecaster (train + recursive multi-step forecast)
+      lstm_service.py             per-ticker LSTM forecaster; also the shared lookback window + test split
+      arima_service.py            per-ticker ARIMA forecaster (AIC search over (p,q) and drift)
+      horizons.py                 the 1/2/3/4-month horizons (21/42/63/84 trading days)
+      signal_service.py           signal board: fundamentals + RL + LSTM + ARIMA -> compound signal
     rl/
       portfolio_env.py           the Gymnasium environment PPO trains against
     tasks/
       celery_app.py               Celery app (Redis broker+backend), `set_default()` (see gotcha below)
       import_tasks.py              `import_sp500_data` Celery task
       rl_tasks.py                   `train_rl_portfolio` Celery task
-      predict_tasks.py              `train_lstm_prediction` Celery task
+      predict_tasks.py              `train_lstm_prediction` Celery task (queue `lstm`)
+      arima_tasks.py                `train_arima_prediction` Celery task (queue `arima`)
     api/                        thin Flask blueprints; validate input, call services/tasks, return JSON
-      companies.py, pools.py, portfolios.py, rl.py, data.py, predictions.py
-  scripts/init_db.py         one-off: create collections + indexes
+      companies.py, pools.py, portfolios.py, rl.py, data.py, predictions.py,
+      arima.py, forecasts.py (batch LSTM+ARIMA over a pool/portfolio), signals.py
+  scripts/init_db.py         create collections + indexes (retries until ArangoDB is up; run by `init-db`)
   wsgi.py                    exposes `app`; `python wsgi.py` serves it with Waitress
   celery_worker.py            Celery worker entrypoint (`celery -A celery_worker.celery_app worker`)
   nginx.conf                  backend container's nginx config: proxy_pass -> 127.0.0.1:8000 (Waitress)
@@ -108,10 +116,12 @@ adapters around them.
 | `stock_prices`          | `TICKER_YYYY-MM-DD`   | `{ticker, date, close, previous, value_change, percentage_change}` |
 | `stock_stats`            | ticker                | latest snapshot: price, market cap, P/E, beta, dividend yield, ... |
 | `financial_ratios`        | ticker                | ROE, ROA, debt/equity, current ratio, margins, revenue growth (from Yahoo's income statement/balance sheet) |
-| `pools`                    | uuid                  | `{name, tickers[], filters, created_at}` |
-| `portfolios`                | uuid                  | `{name, method, holdings:[{ticker,weight}], expected_return, expected_volatility, sharpe_ratio}` |
+| `pools`                    | uuid                  | `{name, tickers[], filters (the screen: sector/industry/q/ranges), created_at, root_pool_id, parent_pool_id, iteration, dropped[], refine_reason}` |
+| `portfolios`                | uuid                  | `{name, method, holdings:[{ticker,weight}], source_pool_id, annual_return, expected_return, expected_volatility, sharpe_ratio}` |
 | `rl_runs`                    | uuid (= Celery task id) | PPO run metadata: hyperparams, universe, resulting portfolio id, model path |
-| `price_predictions`            | ticker                | latest LSTM forecast + test RMSE/MAE |
+| `price_predictions`            | ticker                | latest LSTM forecast (84 daily steps + `horizons`) + test RMSE/MAE |
+| `arima_predictions`            | ticker                | latest ARIMA forecast (+ 95% interval per step, order, drift) |
+| `forecast_runs`                | uuid                  | batch forecast run: tickers, params, Celery task ids per model, `finished_at`, `wall_seconds`, `cancelled_at` |
 
 `sectors`/`industries` exist as their own collections (not just distinct
 values scanned off `companies`) specifically so the Screener's dropdowns
@@ -138,12 +148,54 @@ A Gymnasium `Env` where:
   policy to the most recent window to produce today's recommended
   allocation.
 
-### The LSTM predictor (`app/services/lstm_service.py`)
+### Forecasting: LSTM and ARIMA
 
-A small 1-layer PyTorch LSTM trained per-ticker on min-max-scaled daily
-closes (80/20 chronological train/test split), evaluated with RMSE/MAE on
-the held-out tail, then used for a recursive 7-trading-day forecast
-(predict one day, feed it back in, repeat).
+Both forecasters take the same inputs and are evaluated the same way, so
+their numbers are directly comparable:
+
+- **Same window**: the most recent `lookback_days` closes (default
+  `DEFAULT_LOOKBACK_DAYS = 756`, ~3 trading years).
+- **Same test days**: `split_index()` cuts the window 80/20; both report
+  one-step-ahead RMSE/MAE on exactly the last 20%.
+- **Same horizon**: 84 daily steps (4 months); `horizons.py` picks the
+  1/2/3/4-month points (21/42/63/84 trading days) that agreement uses.
+
+**LSTM** (`lstm_service.py`): 1-layer PyTorch LSTM on 20-day windows
+expressed relative to each window's last close (in %), so 15 years of very
+different price levels share one scale. Mini-batches of 64, up to `epochs`
+(default 100) with early stopping on a validation slice (patience 10, best
+weights kept), fixed `seed` (default 42) → retraining is deterministic.
+Recursive multi-step forecast.
+
+**ARIMA** (`arima_service.py`, statsmodels): d = 1; (p, q) ∈ 0..3 and drift
+on/off chosen by AIC on the training split (32 fits). Drift matters at
+multi-month horizons — without it a d = 1 forecast flattens to a constant.
+95% intervals per step.
+
+### Signal board and refinement (`signal_service.py`)
+
+Per ticker, four stars: fundamentals (re-runs the pool's saved screen via
+`search_companies`), RL (weight > 0 in the latest portfolio with
+`source_pool_id` = the pool), LSTM up at all horizons, ARIMA up at all
+horizons. A horizon move within ±`DIRECTION_DEADBAND_PCT` (0.05%) is flat.
+Agreement is per horizon and overall (same direction at all four). Signal:
+Strong (every available star, ≥ 3 available), Avoid (both agree down), Weak
+(≤ 1 star), else Mixed. Computed on read, never stored.
+
+`POST /api/pools/<id>/refine` with `rule` `keep_strong` or `drop_weak`
+creates a child pool (`iteration + 1`, same `root_pool_id`) and records why
+each ticker was dropped; `GET /api/pools/<id>/lineage` returns every
+iteration with its latest RL portfolio's metrics.
+
+### Batch forecasting (`api/forecasts.py`)
+
+`POST /api/forecasts/batch` queues one `train_lstm_prediction` and one
+`train_arima_prediction` per ticker directly onto the `lstm`/`arima` queues
+(no orchestrating task, so nothing blocks a worker slot) and stores the task
+ids in a `forecast_runs` document. `GET /api/forecasts/batch/<id>`
+aggregates the task states; the first read that sees every task done stores
+`wall_seconds`. `queued` is true while a model has jobs waiting and none
+running (i.e. behind another run on the same queue).
 
 ### Real-time progress: Socket.IO over Redis
 
@@ -156,7 +208,7 @@ connected browser clients via Redis pub/sub, with no Socket.IO server
 running in the worker process at all). The browser joins a room named
 after the `task_id` right after triggering a job (see `app/sockets.py`'s
 `join`/`leave` handlers), then listens for `import_progress` /
-`rl_progress` / `prediction_progress` events. A DB-polling fallback
+`rl_progress` / `prediction_progress` / `arima_progress` events. A DB-polling fallback
 (`GET .../status/<task_id>`) exists for when the socket drops.
 
 ### ⚠️ A real gotcha we hit: `@shared_task` vs. `@celery_app.task`
@@ -194,8 +246,11 @@ frontend/src/
     pools/                     poolsSlice + poolsSaga (CRUD) + SavePoolForm.jsx
     portfolios/                 portfoliosSlice + portfoliosSaga (CRUD) + ManualPortfolioForm.jsx
     rl/                          rlSlice + rlSaga (train, listen) + RLTrainingPanel.jsx
-    predictions/                  predictionsSlice + predictionsSaga (train, listen) + PredictionPanel.jsx
-  pages/                    ScreenerPage, PoolsPage, PortfoliosPage, CompanyDetailPage (route targets)
+    predictions/                  predictionsSlice + predictionsSaga + PredictionPanel.jsx (LSTM),
+                                  ForecastPanels.jsx (shared Training days), ForecastTables.jsx (horizon / next-days tables)
+    arima/                        arimaSlice + arimaSaga + ArimaPanel.jsx (same pattern as predictions/)
+    signals/                      SignalBoard.jsx (batch forecast + board + refine), RefinementHistory.jsx
+  pages/                    ScreenerPage, PoolsPage, PortfoliosPage, PortfolioDetailPage, CompanyDetailPage, PredictionPage
   App.jsx, main.jsx           router + Redux <Provider>
 ```
 
@@ -234,62 +289,28 @@ container so the built app never needs to know the backend's real address.
 
 ## 4. Running it
 
-### Docker Compose (everything at once)
+### Docker Compose (the only supported way)
 
 ```
 cp .env.example .env        # set ARANGO_PASSWORD if you want something other than "root"
-mkdir -p C:\docker-data\arangodb   # the bind-mounted ArangoDB data directory (Windows path)
 docker compose up -d --build
-docker compose exec backend python scripts/init_db.py   # once, to create collections/indexes
 ```
 
-Then see [`USER_GUIDE.md`](./USER_GUIDE.md) for triggering the data import
-and using the app. `docker compose logs -f backend worker` to watch
-requests/tasks; http://localhost:5555 (Flower) to watch Celery tasks
-visually.
+That builds and starts everything in order (`arangodb` + `redis` →
+`init-db` → `backend` + workers → `flower` + `frontend`). After a code
+change run the same command again: it rebuilds and recreates what changed
+(a `backend/` change recreates the API and every worker, since they share
+the image). `docker compose logs -f backend worker-arima` to follow logs;
+http://localhost:5555 (Flower) for Celery tasks.
 
-To rebuild just one service after a code change: `docker compose build
-backend worker && docker compose up -d backend worker` (backend and
-worker share the same image/Dockerfile, so both need rebuilding whenever
-`backend/` changes — the worker is a shared codebase, not a separate app).
+**Worker capacity.** Each worker runs `--concurrency` processes (defaults:
+import 1, rl 1, lstm 2, arima 4 — override with `IMPORT_CONCURRENCY`,
+`RL_CONCURRENCY`, `LSTM_CONCURRENCY`, `ARIMA_CONCURRENCY` in `.env`), or
+scale containers: `docker compose up -d --scale worker-arima=3`.
 
-### Running services locally without Docker (faster inner loop)
-
-Backend (needs a local ArangoDB + Redis, e.g. `docker compose up -d arangodb redis`):
-
-```
-cd backend
-python -m venv env
-env\Scripts\activate   # Windows
-pip install -r requirements.txt
-set ARANGO_HOST=http://localhost:8529
-set ARANGO_PASSWORD=root
-set REDIS_URL=redis://localhost:6379/0
-python scripts/init_db.py
-python wsgi.py                       # Waitress serving Flask + Socket.IO on :5000 (no nginx needed locally)
-```
-
-In a **second terminal** (`cd backend`, activate the venv), the Celery
-worker. Environment variables are per-process/per-shell, so this terminal
-needs its own `set` calls too -- inheriting nothing from the first one:
-
-```
-set ARANGO_HOST=http://localhost:8529
-set ARANGO_PASSWORD=root
-set REDIS_URL=redis://localhost:6379/0
-celery -A celery_worker.celery_app worker --loglevel=info --pool=solo
-```
-
-(`--pool=solo` avoids multiprocessing quirks on Windows; fine for a dev
-box, not for production throughput.)
-
-Frontend:
-
-```
-cd frontend
-npm install
-npm run dev          # http://localhost:5173, VITE_API_URL defaults to http://localhost:5000
-```
+For hot-reload on React code only: with the stack running, `cd frontend &&
+npm install && npm run dev` → http://localhost:5173 (talks to
+`http://localhost:5000`).
 
 ### Environment variables reference
 
@@ -304,6 +325,8 @@ npm run dev          # http://localhost:5173, VITE_API_URL defaults to http://lo
 | `RL_MODELS_DIR` | `/data/rl_models` | backend, worker (saved PPO `.zip` / LSTM `.pt` files) |
 | `WAITRESS_HOST` / `WAITRESS_PORT` | `0.0.0.0` / `5000` (`127.0.0.1` / `8000` in Docker, set by `docker-entrypoint.sh`) | backend's `wsgi.py` only |
 | `CORS_ORIGINS` | `http://localhost:5173` | backend |
+| `IMPORT_/RL_/LSTM_/ARIMA_CONCURRENCY` | `1` / `1` / `2` / `4` | compose: processes per worker container |
+| `OMP_NUM_THREADS` / `MKL_NUM_THREADS` | `1` (compose) | math threads per process (workers run several processes) |
 | `VITE_API_URL` | `http://localhost:5000` (unset) / `""` (Docker build) | frontend |
 
 ## 5. API reference
@@ -318,43 +341,49 @@ Socket.IO room/event.
 | `GET /api/companies/sectors` | Distinct sectors |
 | `GET /api/companies/industries?sector=` | Distinct industries, optionally scoped to a sector |
 | `GET /api/companies/<ticker>` | Company + stats + ratios + full price history |
-| `POST /api/pools` `{name, tickers[]}` | Save a candidate pool |
+| `POST /api/pools` `{name, tickers[], filters?}` | Save a candidate pool (`filters` = the screen, for the fundamentals star) |
+| `POST /api/pools/<id>/refine` `{rule: keep_strong\|drop_weak}` or `{drop: []}` | Refinement loop: child pool, one iteration deeper |
+| `GET /api/pools/<id>/lineage` | Every iteration of the pool's tree + latest RL portfolio metrics |
 | `GET /api/pools`, `GET/DELETE /api/pools/<id>` | List/inspect/delete pools |
 | `POST /api/portfolios` `{name, holdings:[{ticker,weight}], method?, notes?}` | Save a portfolio (weights auto-normalized) |
 | `GET /api/portfolios`, `GET/DELETE /api/portfolios/<id>` | List/inspect/delete portfolios |
-| `POST /api/rl/train` `{pool_id \| universe[], risk_aversion?, timesteps?, window?, portfolio_name?}` | Async: train PPO, save resulting portfolio. Socket.IO event: `rl_progress` |
+| `POST /api/rl/train` `{pool_id \| universe[], risk_aversion?, timesteps?, max_volatility?, min_return?, min_companies?, max_companies?, mode?, portfolio_name?}` | Async: train PPO, save resulting portfolio. Socket.IO event: `rl_progress` |
 | `GET /api/rl/status/<task_id>` | Poll RL training status/result |
 | `POST /api/data/import` `{tickers[]?, period?, interval?}` | Async: bulk Yahoo Finance -> Arango import (defaults to the full `tickers.txt` universe). Socket.IO event: `import_progress` |
 | `GET /api/data/import/status/<task_id>` | Poll import status/result |
-| `POST /api/predictions/train` `{ticker, seq_len?, epochs?, hidden_size?, forecast_days?}` | Async: train the LSTM, store the forecast. Socket.IO event: `prediction_progress` |
+| `POST /api/predictions/train` `{ticker, lookback_days?, epochs?, seq_len?, hidden_size?}` | Async: train the LSTM (84-day forecast), store it. Socket.IO event: `prediction_progress` |
 | `GET /api/predictions/status/<task_id>` | Poll prediction training status/result |
-| `GET /api/predictions/<ticker>` | Most recently stored forecast for a ticker |
+| `GET /api/predictions/<ticker>` | Most recently stored LSTM forecast for a ticker |
+| `POST /api/arima/train` `{ticker, lookback_days?, order?: [p,d,q]}` | Async: fit ARIMA (84-day forecast), store it. Socket.IO event: `arima_progress` |
+| `GET /api/arima/status/<task_id>`, `GET /api/arima/<ticker>` | ARIMA status / stored forecast |
+| `POST /api/forecasts/batch` `{pool_id \| portfolio_id \| tickers[], lookback_days?, epochs?}` | Queue LSTM + ARIMA for every ticker; returns the run status |
+| `GET /api/forecasts/batch/<run_id>`, `GET /api/forecasts/batch?pool_id=\|portfolio_id=` | Run progress (per-model counts, errors, `queued`, `wall_seconds`) / latest run |
+| `POST /api/forecasts/batch/<run_id>/cancel` | Revoke the run's unfinished jobs |
+| `GET /api/signals?pool_id=\|portfolio_id=` | Signal board rows + summary |
 | `GET /api/health` | Liveness check |
 
 ## 6. Troubleshooting / operational gotchas
 
-- **`ArangoServerError`/`DatabaseListError: not authorized` (`[HTTP 401]
-  [ERR 11]`) when running a backend script, the Flask app, or the Celery
-  worker locally**: `ARANGO_PASSWORD` wasn't set *in that particular
-  shell*, so it defaulted to an empty string (`config.py`'s default) instead
-  of matching ArangoDB's real password (`root` by default). This is a
-  frequent trap specifically with the worker: getting the backend terminal
-  right doesn't help the *separate* worker terminal, since each `cmd`/
-  PowerShell window has its own environment -- `set ARANGO_PASSWORD=root`
-  (plus `ARANGO_HOST` and `REDIS_URL`) has to be run again in every new
-  terminal before starting `python wsgi.py` or the `celery worker` command
-  in it. A worker started without it will run fine (Redis connects, no
-  error) right up until the first task that actually touches ArangoDB,
-  where it fails.
+- **Docker Desktop crashing during builds / workers killed with signal 9**:
+  causes found so far — a missing `.dockerignore` (the multi-GB local
+  `backend/env` venv was sent as build context), the default CUDA PyTorch
+  wheel (the Dockerfile installs the CPU build), and Celery's prefork
+  default of one process per CPU core in every worker (now explicit
+  `--concurrency`). If the engine itself hangs, `docker desktop restart`.
+- **A forecast run never finishes**: jobs a worker had reserved when it was
+  killed/recreated are only redelivered by Redis after the visibility
+  timeout (1 h). Cancel the run (`POST /api/forecasts/batch/<id>/cancel`, or
+  the Cancel button). Avoid recreating `worker-lstm`/`worker-arima` while a
+  big run is in progress.
 - **`docker compose restart backend` (or rebuilding just `backend`) makes
   the app briefly 502 through port 8080, even though `curl localhost:5000`
   works**: nginx resolves a plain `proxy_pass http://backend:5000;`
   hostname to an IP **once**, when it starts. Recreating the `backend`
   container gives it a new IP, which `frontend`'s already-running nginx
-  keeps trying (and failing) until it's restarted too. Fix: `docker
-  compose restart frontend` after recreating `backend`. (`docker compose
-  up -d --build` from a clean state doesn't hit this, since everything
-  starts together.)
+  keeps trying (and failing) until it's restarted too. `frontend` declares
+  `depends_on: backend: restart: true`, so `docker compose up -d` restarts
+  it automatically; if you recreate `backend` some other way, `docker
+  compose restart frontend`.
 - **`502 Bad Gateway` from the backend's own nginx right after `docker
   compose up`**: this is likely just Waitress still mid-import of
   `torch`/`stable-baselines3` inside `create_app()` (a several-second
@@ -375,5 +404,8 @@ Socket.IO room/event.
   `celery_app.py`'s `include=[...]`, add a Flask route in `api/*.py` that
   calls `.delay(...)`, and mirror the existing `rlSlice`/`rlSaga` pattern
   on the frontend if it needs live progress.
+- **New job type with its own worker**: add a route in `celery_app.py`'s
+  `task_routes`, and a `worker-<name>` service in `docker-compose.yml`
+  (`<<: *backend`, `-Q <name> --concurrency=...`).
 - **New collection**: add it to `COLLECTIONS` in `db/arango_client.py`
-  (with any indexes), then re-run `scripts/init_db.py` (safe to re-run).
+  (with any indexes); `init-db` creates it on the next `docker compose up`.

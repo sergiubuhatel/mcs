@@ -98,7 +98,7 @@ services:
 
   worker-arima:
     <<: *backend
-    command: celery -A celery_worker.celery_app worker --loglevel=info -Q arima -n arima@%h --concurrency=${ARIMA_CONCURRENCY:-2}
+    command: celery -A celery_worker.celery_app worker --loglevel=info -Q arima -n arima@%h --concurrency=${ARIMA_CONCURRENCY:-4}
 
   flower:
     image: itec5205-backend

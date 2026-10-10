@@ -23,8 +23,8 @@ export default function RefinementHistory({ poolId, onSelectPool, refreshKey }) 
     <div className="card">
       <h3>Refinement history</h3>
       <p className="muted">
-        Each iteration drops the companies whose evidence was Weak/Avoid, then RL is retrained on what's left. Compare
-        the resulting portfolios across iterations.
+        Each iteration drops companies by the chosen rule (keep only Strong, or drop Weak &amp; Avoid), then RL is
+        retrained on what's left. Compare the resulting portfolios across iterations.
       </p>
       <table>
         <thead>
