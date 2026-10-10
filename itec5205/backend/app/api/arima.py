@@ -8,6 +8,7 @@ from celery.result import AsyncResult
 from flask import Blueprint, jsonify, request
 
 from ..db.arango_client import get_db
+from ..services.horizons import MAX_HORIZON_DAYS
 from ..services.lstm_service import DEFAULT_LOOKBACK_DAYS
 from ..tasks.arima_tasks import train_arima_prediction
 from ..tasks.celery_app import celery_app
@@ -34,7 +35,7 @@ def train():
         max_p=int(body.get("max_p", 3)),
         max_q=int(body.get("max_q", 3)),
         lookback_days=int(lookback) if lookback else None,
-        forecast_days=int(body.get("forecast_days", 7)),
+        forecast_days=max(int(body.get("forecast_days", MAX_HORIZON_DAYS)), MAX_HORIZON_DAYS),
     )
     return jsonify({"task_id": task.id}), 202
 

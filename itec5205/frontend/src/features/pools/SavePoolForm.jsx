@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { clearSelected } from "../companies/companiesSlice";
 import { describeFilters } from "../companies/filterFields";
 import { createRequested } from "./poolsSlice";
+import { screenCriteria } from "../companies/companiesSaga";
 import { BookmarkPlusIcon } from "../../layout/icons";
 
 // Name used when auto-naming is on: the screener's filled-in filters, or --
@@ -36,7 +37,7 @@ export default function SavePoolForm() {
   const submit = (e) => {
     e.preventDefault();
     if (!effectiveName.trim()) return;
-    dispatch(createRequested({ name: effectiveName.trim(), tickers, filters: { sector: filters.sector, industry: filters.industry } }));
+    dispatch(createRequested({ name: effectiveName.trim(), tickers, filters: screenCriteria(filters) }));
     setName("");
     dispatch(clearSelected());
   };

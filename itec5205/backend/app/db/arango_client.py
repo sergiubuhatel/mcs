@@ -44,11 +44,20 @@ COLLECTIONS = {
     ],
     # A named subset of tickers a user saved off a screener search, to use
     # as the candidate universe fed into RL training (search -> pool -> RL).
-    "pools": [],
-    "portfolios": [],
+    "pools": [
+        {"type": "persistent", "fields": ["root_pool_id"], "unique": False},
+    ],
+    "portfolios": [
+        {"type": "persistent", "fields": ["source_pool_id", "created_at"], "unique": False},
+    ],
     "rl_runs": [],
     "price_predictions": [],
     "arima_predictions": [],
+    # Batch LSTM+ARIMA jobs over a pool/portfolio (task ids + timing, RQ5).
+    "forecast_runs": [
+        {"type": "persistent", "fields": ["pool_id", "created_at"], "unique": False},
+        {"type": "persistent", "fields": ["portfolio_id", "created_at"], "unique": False},
+    ],
 }
 
 

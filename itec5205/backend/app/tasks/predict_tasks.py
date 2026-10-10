@@ -6,6 +6,7 @@ request/response cycle the same way import/RL jobs are.
 from ..db.arango_client import get_db
 from ..extensions import socketio
 from ..services.lstm_service import DEFAULT_LOOKBACK_DAYS, train_and_predict
+from ..services.horizons import MAX_HORIZON_DAYS
 from .celery_app import celery_app
 
 
@@ -16,7 +17,7 @@ def train_lstm_prediction(
     seq_len: int = 20,
     epochs: int = 100,
     hidden_size: int = 32,
-    forecast_days: int = 7,
+    forecast_days: int = MAX_HORIZON_DAYS,
     lookback_days: int | None = DEFAULT_LOOKBACK_DAYS,
 ):
     room = self.request.id

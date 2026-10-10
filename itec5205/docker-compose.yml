@@ -12,6 +12,10 @@ x-backend-env: &backend-env
   TICKERS_FILE: /data/tickers.txt
   RL_MODELS_DIR: /data/rl_models
   CORS_ORIGINS: http://localhost:5173,http://localhost:8080
+  # One math thread per process: workers run several processes side by side,
+  # and PyTorch/NumPy default to one thread per CPU core each.
+  OMP_NUM_THREADS: "1"
+  MKL_NUM_THREADS: "1"
 
 # Only `backend` builds the image; the workers/init-db/flower reuse it.
 # Building it once per service in parallel (7 identical PyTorch builds)
@@ -76,25 +80,25 @@ services:
       - "5000:5000"
 
   # One Celery worker per queue (see task_routes in backend/app/tasks/celery_app.py).
+  # Explicit --concurrency: Celery's prefork default is one process per CPU
+  # core (16 here), each loading PyTorch -- that exhausted Docker's memory.
+  # Raise it via .env (e.g. LSTM_CONCURRENCY=4), or scale containers out
+  # (no container_name, so: docker compose up -d --scale worker-lstm=3).
   worker-import:
     <<: *backend
-    container_name: itec5205-worker-import
-    command: celery -A celery_worker.celery_app worker --loglevel=info -Q import -n import@%h
+    command: celery -A celery_worker.celery_app worker --loglevel=info -Q import -n import@%h --concurrency=${IMPORT_CONCURRENCY:-1}
 
   worker-rl:
     <<: *backend
-    container_name: itec5205-worker-rl
-    command: celery -A celery_worker.celery_app worker --loglevel=info -Q rl -n rl@%h
+    command: celery -A celery_worker.celery_app worker --loglevel=info -Q rl -n rl@%h --concurrency=${RL_CONCURRENCY:-1}
 
-  worker-predict:
+  worker-lstm:
     <<: *backend
-    container_name: itec5205-worker-predict
-    command: celery -A celery_worker.celery_app worker --loglevel=info -Q predict -n predict@%h
+    command: celery -A celery_worker.celery_app worker --loglevel=info -Q lstm -n lstm@%h --concurrency=${LSTM_CONCURRENCY:-2}
 
   worker-arima:
     <<: *backend
-    container_name: itec5205-worker-arima
-    command: celery -A celery_worker.celery_app worker --loglevel=info -Q arima -n arima@%h
+    command: celery -A celery_worker.celery_app worker --loglevel=info -Q arima -n arima@%h --concurrency=${ARIMA_CONCURRENCY:-2}
 
   flower:
     image: itec5205-backend
@@ -124,7 +128,7 @@ services:
         condition: service_started
       worker-rl:
         condition: service_started
-      worker-predict:
+      worker-lstm:
         condition: service_started
       worker-arima:
         condition: service_started

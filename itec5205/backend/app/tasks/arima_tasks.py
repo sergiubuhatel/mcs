@@ -10,6 +10,7 @@ from ..db.arango_client import get_db
 from ..extensions import socketio
 from ..services.arima_service import train_and_predict
 from ..services.lstm_service import DEFAULT_LOOKBACK_DAYS
+from ..services.horizons import MAX_HORIZON_DAYS
 from .celery_app import celery_app
 
 
@@ -22,7 +23,7 @@ def train_arima_prediction(
     max_p: int = 3,
     max_q: int = 3,
     lookback_days: int | None = DEFAULT_LOOKBACK_DAYS,
-    forecast_days: int = 7,
+    forecast_days: int = MAX_HORIZON_DAYS,
 ):
     room = self.request.id
 

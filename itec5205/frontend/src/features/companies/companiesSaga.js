@@ -22,6 +22,20 @@ const PERCENT_RANGE_FIELDS = new Set([
   "volatility",
 ]);
 
+// The screener search in API units, saved with a pool so the backend can
+// re-check later whether each ticker still passes it (fundamentals star).
+export function screenCriteria(filters) {
+  const params = buildParams(filters);
+  const ranges = {};
+  for (const [key, value] of Object.entries(params)) {
+    const m = key.match(/^(.*)_(min|max)$/);
+    if (!m) continue;
+    ranges[m[1]] = ranges[m[1]] || [null, null];
+    ranges[m[1]][m[2] === "min" ? 0 : 1] = value;
+  }
+  return { sector: filters.sector || "", industry: filters.industry || "", q: filters.q || "", ranges };
+}
+
 function buildParams(filters) {
   const params = {
     sector: filters.sector || undefined,

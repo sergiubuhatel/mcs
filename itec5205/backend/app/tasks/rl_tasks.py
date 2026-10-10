@@ -26,6 +26,7 @@ def train_rl_portfolio(
     lookback_days: int = 252,
     max_volatility: float | None = None,
     min_return: float | None = None,
+    pool_id: str | None = None,
 ):
     """The optimizer decides how many companies to keep, within the optional
     [min_companies, max_companies] bounds (see `rl_service.select_universe`). `max_volatility` / `min_return`
@@ -79,6 +80,7 @@ def train_rl_portfolio(
         holdings=result["holdings"],
         method="rl",
         notes=notes,
+        source_pool_id=pool_id,
     )
 
     db = get_db()
@@ -98,6 +100,7 @@ def train_rl_portfolio(
             "subset_size_auto": auto_sized,
             "constraints": constraints,
             "excluded": excluded,
+            "pool_id": pool_id,
         }
     )
 

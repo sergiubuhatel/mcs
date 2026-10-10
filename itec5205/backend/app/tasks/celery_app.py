@@ -24,7 +24,7 @@ celery_app.conf.update(
     task_routes={
         "import_sp500_data": {"queue": "import"},
         "train_rl_portfolio": {"queue": "rl"},
-        "train_lstm_prediction": {"queue": "predict"},
+        "train_lstm_prediction": {"queue": "lstm"},
         "train_arima_prediction": {"queue": "arima"},
     },
 )

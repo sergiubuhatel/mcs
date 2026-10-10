@@ -129,7 +129,9 @@ def _normalize_holdings(holdings: list[dict]) -> list[dict]:
     return [{"ticker": h["ticker"].upper(), "weight": round(h["weight"] / total, 6)} for h in holdings]
 
 
-def create_portfolio(name: str, holdings: list[dict], method: str = "manual", notes: str | None = None) -> dict:
+def create_portfolio(
+    name: str, holdings: list[dict], method: str = "manual", notes: str | None = None, source_pool_id: str | None = None
+) -> dict:
     db = get_db()
     holdings = _normalize_holdings(holdings)
     metrics = compute_metrics(holdings)
@@ -140,6 +142,8 @@ def create_portfolio(name: str, holdings: list[dict], method: str = "manual", no
         "method": method,
         "holdings": holdings,
         "notes": notes,
+        # The pool an RL portfolio was trained on (signal board + refinement lineage).
+        "source_pool_id": source_pool_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
         **metrics,
     }

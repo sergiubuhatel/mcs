@@ -44,6 +44,7 @@ def train():
         lookback_days=int(body.get("lookback_days", 252)),
         max_volatility=_optional(body.get("max_volatility"), float),
         min_return=_optional(body.get("min_return"), float),
+        pool_id=pool_id,
     )
     return jsonify({"task_id": task.id}), 202
 

@@ -7,6 +7,7 @@ import { INTERVALS, filterByInterval } from "../utils/dateRanges";
 import { tooltipProps } from "../utils/chartTheme";
 import { useColumnConfig } from "../utils/useColumnConfig";
 import ColumnPicker from "../components/ColumnPicker";
+import SignalBoard from "../features/signals/SignalBoard";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -298,6 +299,8 @@ export default function PortfolioDetailPage() {
         </ResponsiveContainer>
         <p className="muted">Share of the portfolio invested in each holding, as allocated by the RL model.</p>
       </div>
+
+      <SignalBoard portfolioId={id} />
     </div>
   );
 }

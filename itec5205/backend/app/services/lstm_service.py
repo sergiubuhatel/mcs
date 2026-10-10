@@ -8,6 +8,7 @@ policy that outputs portfolio weights.
 """
 
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
@@ -16,6 +17,7 @@ from torch import nn
 
 from ..config import RL_MODELS_DIR
 from ..db.arango_client import get_db
+from .horizons import MAX_HORIZON_DAYS, horizon_points
 
 MIN_HISTORY_DAYS = 120
 # Shared by the LSTM and ARIMA forecasters so both learn from the same window
@@ -90,20 +92,25 @@ def train_and_predict(
     seq_len: int = 20,
     epochs: int = 100,
     hidden_size: int = 32,
-    forecast_days: int = 7,
+    forecast_days: int = MAX_HORIZON_DAYS,
     lookback_days: int | None = DEFAULT_LOOKBACK_DAYS,
     batch_size: int = 64,
     patience: int = 10,
     seed: int = 42,
     on_epoch=None,
+    history: tuple[list[str], np.ndarray] | None = None,
+    save_model: bool = True,
 ) -> dict:
     """`epochs` is the maximum: training stops early once validation loss
     hasn't improved for `patience` epochs, and the best-validation weights are
     kept. A fixed `seed` (weight init + batch shuffling) makes retraining on
     the same data give the same forecast. `lookback_days` keeps only the most
-    recent closes (None = full history), same as the ARIMA forecaster."""
+    recent closes (None = full history), same as the ARIMA forecaster.
+    `history=(dates, closes)` replaces the DB read (walk-forward backtests feed
+    a truncated series); `save_model=False` skips writing the .pt file."""
+    started = time.perf_counter()
     ticker = ticker.upper()
-    dates, closes = _load_closes(ticker)
+    dates, closes = history if history is not None else _load_closes(ticker)
     if lookback_days:
         dates, closes = dates[-lookback_days:], closes[-lookback_days:]
     if len(closes) < max(MIN_HISTORY_DAYS, seq_len + 30):
@@ -195,12 +202,14 @@ def train_and_predict(
         if d.weekday() < 5:  # skip weekends
             forecast_dates.append(d.strftime("%Y-%m-%d"))
 
-    os.makedirs(RL_MODELS_DIR, exist_ok=True)
-    model_path = os.path.join(RL_MODELS_DIR, f"lstm_{ticker}.pt")
-    torch.save(
-        {"state_dict": model.state_dict(), "input": "relative_window_pct", "seq_len": seq_len, "hidden_size": hidden_size},
-        model_path,
-    )
+    model_path = None
+    if save_model:
+        os.makedirs(RL_MODELS_DIR, exist_ok=True)
+        model_path = os.path.join(RL_MODELS_DIR, f"lstm_{ticker}.pt")
+        torch.save(
+            {"state_dict": model.state_dict(), "input": "relative_window_pct", "seq_len": seq_len, "hidden_size": hidden_size},
+            model_path,
+        )
 
     last_actual_close = float(closes[-1])
     forecast = []
@@ -227,8 +236,11 @@ def train_and_predict(
         "test_rmse": rmse,
         "test_mae": mae,
         "history_days": len(closes),
+        "data_end": dates[-1],
+        "train_seconds": round(time.perf_counter() - started, 3),
         "test_days": len(closes) - split_index(len(closes)),
         "last_actual_close": round(last_actual_close, 2),
         "forecast": forecast,
+        "horizons": horizon_points(forecast, last_actual_close),
         "model_path": model_path,
     }

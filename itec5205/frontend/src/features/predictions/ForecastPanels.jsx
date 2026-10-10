@@ -58,7 +58,7 @@ export default function ForecastPanels({ ticker }) {
           </div>
           <p className="muted" style={{ margin: 0 }}>
             Most recent trading days used by both LSTM and ARIMA. The last 20% ({days - Math.floor(days * 0.8)} days) are held out to
-            compute test RMSE/MAE on the same days for both models. Minimum 120.
+            compute test RMSE/MAE on the same days for both models. Minimum 120. Both forecast 1, 2, 3 and 4 months ahead.
           </p>
         </div>
       </div>

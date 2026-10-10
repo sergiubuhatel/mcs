@@ -3,6 +3,8 @@ import { useDispatch, useSelector } from "react-redux";
 import { createRequested, deleteRequested, fetchRequested, updateRequested } from "../features/pools/poolsSlice";
 import { reset as resetRl } from "../features/rl/rlSlice";
 import RLTrainingPanel from "../features/rl/RLTrainingPanel";
+import SignalBoard from "../features/signals/SignalBoard";
+import RefinementHistory from "../features/signals/RefinementHistory";
 import ActionMenu from "../components/ActionMenu";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -45,12 +47,20 @@ const POOL_COLUMNS = [
         </span>
       ),
   },
+  {
+    key: "iteration",
+    label: "Iteration",
+    width: 90,
+    render: (p) => (p.iteration ? <span title={`Refined from an earlier pool (dropped ${(p.dropped || []).join(", ")})`}>{p.iteration}</span> : "0"),
+  },
   { key: "created_at", label: "Created", width: 110, render: (p) => new Date(p.created_at).toLocaleDateString() },
 ];
 
 export default function PoolsPage() {
   const dispatch = useDispatch();
   const { items, loading } = useSelector((s) => s.pools);
+  // Changes when an RL run finishes, so the signal board / history pick up the new portfolio.
+  const rlResultId = useSelector((s) => s.rl.result?.portfolio_id);
   const [activePoolId, setActivePoolId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editMode, setEditMode] = useState("full"); // "full" | "rename"
@@ -146,7 +156,7 @@ export default function PoolsPage() {
               return (
                 <tr key={p._key}>
                   {visibleColumns.map((c) => (
-                    <td key={c.key} style={c.key !== "created_at" ? { textAlign: "left", maxWidth: 0 } : undefined}>
+                    <td key={c.key} style={c.key !== "created_at" && c.key !== "iteration" ? { textAlign: "left", maxWidth: 0 } : undefined}>
                       {c.render(p, ctx)}
                     </td>
                   ))}
@@ -172,7 +182,21 @@ export default function PoolsPage() {
         </table>
       </div>
 
-      {activePool && <RLTrainingPanel key={activePool._key} pool={activePool} />}
+      {activePool && (
+        <>
+          <SignalBoard
+            key={`signals-${activePool._key}`}
+            poolId={activePool._key}
+            refreshKey={rlResultId}
+            onRefined={(child) => {
+              dispatch(fetchRequested());
+              selectPool(child._key);
+            }}
+          />
+          <RLTrainingPanel key={activePool._key} pool={activePool} />
+          <RefinementHistory poolId={activePool._key} onSelectPool={selectPool} refreshKey={`${rlResultId}-${items.length}`} />
+        </>
+      )}
 
       <ConfirmDeleteModal
         isOpen={!!deleteTarget}

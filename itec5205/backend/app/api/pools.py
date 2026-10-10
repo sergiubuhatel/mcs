@@ -2,7 +2,8 @@
 
 from flask import Blueprint, jsonify, request
 
-from ..services.pool_service import create_pool, delete_pool, get_pool, list_pools, update_pool
+from ..services.pool_service import create_pool, delete_pool, get_pool, list_pools, pool_lineage, refine_pool, update_pool
+from ..services.signal_service import SIGNAL_AVOID, SIGNAL_WEAK, build_signals, latest_portfolio_for_pool
 
 bp = Blueprint("pools", __name__, url_prefix="/api/pools")
 
@@ -55,3 +56,37 @@ def delete(pool_id: str):
     if not delete_pool(pool_id):
         return jsonify({"error": "Pool not found"}), 404
     return jsonify({"deleted": pool_id})
+
+
+@bp.post("/<pool_id>/refine")
+def refine(pool_id: str):
+    """Refinement loop: a child pool without the given tickers. Pass
+    ``{"drop": [...]}`` explicitly, or ``{"rule": "drop_weak"}`` to drop every
+    ticker whose current compound signal is Weak or Avoid."""
+    body = request.get_json(silent=True) or {}
+    pool = get_pool(pool_id)
+    if pool is None:
+        return jsonify({"error": "Pool not found"}), 404
+
+    board = build_signals(pool["tickers"], pool=pool, portfolio=latest_portfolio_for_pool(pool_id))
+    by_ticker = {r["ticker"]: r for r in board["rows"]}
+    if body.get("rule") == "drop_weak":
+        drop = [r["ticker"] for r in board["rows"] if r["signal"] in (SIGNAL_WEAK, SIGNAL_AVOID)]
+    else:
+        drop = [t.upper() for t in body.get("drop") or []]
+    if not drop:
+        return jsonify({"error": "Nothing to drop -- no Weak/Avoid tickers, or an empty 'drop' list"}), 400
+
+    reason = {t: {k: by_ticker[t].get(k) for k in ("signal", "stars", "agreement")} for t in drop if t in by_ticker}
+    try:
+        child = refine_pool(pool_id, drop=drop, reason=reason, name=body.get("name"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(child), 201
+
+
+@bp.get("/<pool_id>/lineage")
+def lineage(pool_id: str):
+    if get_pool(pool_id) is None:
+        return jsonify({"error": "Pool not found"}), 404
+    return jsonify({"iterations": pool_lineage(pool_id)})
