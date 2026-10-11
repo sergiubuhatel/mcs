@@ -1,19 +1,32 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiClient } from "../../api/client";
-import { CloseIcon } from "../../layout/icons";
+import {
+  CheckCircleIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ClockIcon,
+  CloseIcon,
+  DatabaseIcon,
+  PieChartIcon,
+  SearchIcon,
+  SpinnerIcon,
+  TrendChartIcon,
+  WorkflowIcon,
+  XCircleIcon,
+} from "../../layout/icons";
 
 export const ACTIVE = ["queued", "running"];
 
-const STATUS_COLORS = {
-  succeeded: "#16a34a",
-  failed: "#dc2626",
-  cancelled: "var(--color-text-secondary)",
-  running: "var(--color-text-accent)",
-  queued: "var(--color-text-accent)",
+// Same icon + color per criteria kind as its sidebar group.
+export const KIND_STYLE = {
+  data: { icon: DatabaseIcon, color: "#10b981" },
+  screen: { icon: SearchIcon, color: "#3b82f6" },
+  prediction: { icon: TrendChartIcon, color: "#06b6d4" },
+  portfolio: { icon: PieChartIcon, color: "#22c55e" },
 };
-const STATUS_LABELS = { succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled", running: "Running", queued: "Queued" };
 
+const STATUS_LABELS = { succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled", running: "Running", queued: "Queued" };
 const STATUS_TONES = { succeeded: "good", failed: "bad", cancelled: "grey", running: "info", queued: "info" };
 const STATUS_MARKS = { succeeded: "✓", failed: "✕", cancelled: "–", running: "●", queued: "…" };
 
@@ -32,16 +45,16 @@ export function RunProgress({ run }) {
   if (!run || run.status === "cancelled") return <span className="muted">—</span>;
   const active = ACTIVE.includes(run.status);
   return (
-    <div style={{ minWidth: 0 }}>
+    <div style={{ minWidth: 0, flex: 1 }}>
       {active && (
-        <div className="progress-bar" style={{ margin: "2px 0" }}>
+        <div className="progress-bar thin">
           <div style={{ width: `${run.percent || 0}%` }} />
         </div>
       )}
       <span
         className={run.status === "failed" ? "error-text" : "muted"}
         title={run.message}
-        style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.78rem" }}
+        style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.72rem" }}
       >
         {active && `Step ${run.step_index} of ${run.steps_total} · `}
         {run.message}
@@ -54,16 +67,25 @@ const fmtPct = (v) => (v === null || v === undefined ? "-" : `${(Number(v) * 100
 const changeColor = (v) => (v == null || v === 0 ? "var(--color-text-primary)" : v > 0 ? "#16a34a" : "#dc2626");
 
 const STEPS = [
-  { key: "data", title: "1. Data", waiting: "Import with the data criteria" },
-  { key: "screen", title: "2. Screen", waiting: "Search by the screen criteria" },
-  { key: "forecast", title: "3. Predict", waiting: "Forecast and filter by the prediction criteria" },
-  { key: "portfolio", title: "4. Portfolio", waiting: "Build the portfolio with the portfolio criteria" },
+  { key: "data", kind: "data", title: "1. Data Import", waiting: "Import with the data criteria" },
+  { key: "screen", kind: "screen", title: "2. Screening", waiting: "Search by the screen criteria" },
+  { key: "forecast", kind: "prediction", title: "3. Prediction", waiting: "Forecast and filter by the prediction criteria" },
+  { key: "portfolio", kind: "portfolio", title: "4. Portfolio Optimization", waiting: "Build the portfolio with the portfolio criteria" },
 ];
+
+const STEP_STATES = {
+  done: { label: "Completed", color: "#16a34a", icon: CheckCircleIcon },
+  failed: { label: "Failed", color: "#dc2626", icon: XCircleIcon },
+  running: { label: "Running", color: "var(--color-text-accent)", icon: SpinnerIcon, spin: true },
+  waiting: { label: "Waiting", color: "var(--color-text-secondary)" },
+  skipped: { label: "Skipped", color: "var(--color-text-secondary)" },
+};
 
 function StepCard({ step, data, run }) {
   const status = data?.status || (ACTIVE.includes(run.status) ? "waiting" : "skipped");
-  const color = { done: "#16a34a", failed: "#dc2626", running: "var(--color-text-accent)" }[status] || "var(--color-text-secondary)";
   const current = run.step === step.key && ACTIVE.includes(run.status);
+  const state = STEP_STATES[current ? "running" : status] || STEP_STATES.waiting;
+  const { icon: KindIcon, color } = KIND_STYLE[step.kind];
   let body = step.waiting;
   if (step.key === "data" && data?.requested != null) {
     if (data.status === "done") {
@@ -80,19 +102,22 @@ function StepCard({ step, data, run }) {
     if (data.passed != null) body += ` → ${data.passed} passed`;
   }
   if (step.key === "portfolio" && data?.portfolio_id) {
-    body = (
-      <>
-        {data.holdings} companies · return {fmtPct(data.metrics?.annual_return)} · volatility {fmtPct(data.metrics?.expected_volatility)}
-      </>
-    );
+    body = `${data.holdings} companies · return ${fmtPct(data.metrics?.annual_return)} · volatility ${fmtPct(data.metrics?.expected_volatility)}`;
   } else if (current && step.key !== "data") body = run.message;
+  const StateIcon = state.icon;
   return (
-    <div className="filter-group" style={{ borderColor: current ? "var(--color-text-accent)" : undefined }}>
-      <h4 style={{ color: "var(--color-text-primary)", justifyContent: "space-between" }}>
-        {step.title}
-        <span style={{ color, fontSize: "0.75rem", fontWeight: 500 }}>{status}</span>
-      </h4>
-      <div className="muted">{body}</div>
+    <div className={`step-card ${current ? "current" : ""}`}>
+      <div className="icon-badge" style={{ background: `${color}22`, color, width: 44, height: 44 }}>
+        <KindIcon width={22} height={22} />
+      </div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div className="step-card-title">{step.title}</div>
+        <div className="muted step-card-body" title={typeof body === "string" ? body : undefined}>{body}</div>
+      </div>
+      <div className="step-card-state" style={{ color: state.color }}>
+        {StateIcon ? <StateIcon width={24} height={24} className={state.spin ? "spin" : undefined} /> : <span style={{ height: 24 }} />}
+        <span>{state.label}</span>
+      </div>
     </div>
   );
 }
@@ -102,13 +127,13 @@ function ForecastTable({ rows }) {
   const models = Object.keys(rows[0].models);
   const points = Object.keys(Object.values(rows[0].models).find(Boolean)?.changes || {});
   return (
-    <div style={{ maxHeight: 360, overflow: "auto", marginTop: 10 }}>
-      <table>
+    <div className="forecast-table">
+      <table className="compact">
         <thead>
           <tr>
-            <th>Ticker</th>
-            <th>Result</th>
-            {models.flatMap((m) => points.map((p) => <th key={`${m}${p}`}>{m.toUpperCase()} {p}</th>))}
+            <th style={{ textAlign: "left" }}>Ticker</th>
+            <th style={{ textAlign: "left" }}>Result</th>
+            {models.flatMap((m) => points.map((p) => <th key={`${m}${p}`} style={{ textAlign: "center" }}>{m.toUpperCase()} {p}</th>))}
           </tr>
         </thead>
         <tbody>
@@ -116,13 +141,13 @@ function ForecastTable({ rows }) {
             .sort((a, b) => Number(b.passed) - Number(a.passed) || a.ticker.localeCompare(b.ticker))
             .map((r) => (
               <tr key={r.ticker}>
-                <td><Link to={`/companies/${r.ticker}`}>{r.ticker}</Link></td>
-                <td style={{ color: r.passed ? "#16a34a" : "#dc2626" }} title={r.reason || ""}>{r.passed ? "passed" : r.reason}</td>
+                <td style={{ textAlign: "left" }}><Link to={`/companies/${r.ticker}`}>{r.ticker}</Link></td>
+                <td style={{ textAlign: "left", color: r.passed ? "#16a34a" : "#dc2626" }} title={r.reason || ""}>{r.passed ? "passed" : r.reason}</td>
                 {models.flatMap((m) =>
                   points.map((p) => {
                     const v = r.models[m]?.changes?.[p];
                     return (
-                      <td key={`${m}${p}`} style={{ color: changeColor(v) }}>
+                      <td key={`${m}${p}`} style={{ textAlign: "center", color: changeColor(v) }}>
                         {v == null ? "-" : `${v > 0 ? "+" : ""}${v.toFixed(2)}%`}
                       </td>
                     );
@@ -140,6 +165,7 @@ function ForecastTable({ rows }) {
 export default function PolicyRunPanel({ policy, refreshKey, onClose, onChanged }) {
   const [runs, setRuns] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
   const timer = useRef(null);
 
   useEffect(() => {
@@ -160,56 +186,81 @@ export default function PolicyRunPanel({ policy, refreshKey, onClose, onChanged 
   }, [policy._key, refreshKey]);
 
   const run = runs.find((r) => r._key === selectedId) || runs[0];
+  const active = run && ACTIVE.includes(run.status);
+  const percent = run ? (run.status === "succeeded" ? 100 : Math.round(run.percent || 0)) : 0;
 
   return (
-    <div className="card" style={{ position: "relative" }}>
-      <button className="close-btn" onClick={onClose} title="Close" aria-label="Close" style={{ position: "absolute", top: 12, right: 12 }}>
-        <CloseIcon width={18} height={18} />
-      </button>
-      <h3>{policy.name}</h3>
+    <div className="card run-panel">
+      <div className="run-panel-header">
+        <div className="icon-badge" style={{ background: "#8b5cf626", color: "#8b5cf6", width: 52, height: 52, borderRadius: 12 }}>
+          <WorkflowIcon width={26} height={26} />
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <h3 className="run-panel-title">{policy.name}</h3>
+          {run && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
+              <RunStatus run={run} />
+              <span className="muted" style={{ fontSize: "0.82rem" }}>
+                Started {new Date(run.created_at).toLocaleString()}
+                {run.wall_seconds != null && ` · took ${Math.round(run.wall_seconds)} s`}
+              </span>
+            </div>
+          )}
+        </div>
+        <button className="close-btn" onClick={onClose} title="Close" aria-label="Close" style={{ position: "static" }}>
+          <CloseIcon width={18} height={18} />
+        </button>
+      </div>
       {!run && <p className="muted">This policy hasn't been run yet — use Run in its action menu.</p>}
       {run && (
         <>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <RunStatus run={run} />
-            <span className="muted">
-              Started {new Date(run.created_at).toLocaleString()}
-              {run.wall_seconds != null && ` · took ${Math.round(run.wall_seconds)} s`}
+          <div className="progress-bar" style={{ marginTop: 14 }}>
+            <div style={{ width: `${percent}%`, background: run.status === "failed" ? "#dc2626" : undefined }} />
+          </div>
+          <div className="run-panel-progress">
+            <span className={run.status === "failed" ? "error-text" : "muted"}>
+              {active && <strong className="run-panel-step">Step {run.step_index} of {run.steps_total}</strong>}
+              {active && " · "}
+              {run.message}
             </span>
-            {run.portfolio_id && <Link to={`/portfolios/${run.portfolio_id}`}>View portfolio &rarr;</Link>}
+            <strong>{percent}%</strong>
           </div>
-          <div className="progress-bar">
-            <div style={{ width: `${run.status === "succeeded" ? 100 : run.percent || 0}%`, background: run.status === "failed" ? "#dc2626" : undefined }} />
-          </div>
-          <p className={run.status === "failed" ? "error-text" : "muted"} style={{ marginTop: 0 }}>
-            {ACTIVE.includes(run.status) && `Step ${run.step_index} of ${run.steps_total} · `}
-            {run.message}
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+          <div className="step-grid">
             {STEPS.map((s) => <StepCard key={s.key} step={s} data={run.steps?.[s.key]} run={run} />)}
           </div>
           <ForecastTable rows={run.steps?.forecast?.rows} />
         </>
       )}
-      {runs.length > 1 && (
-        <>
-          <h4 style={{ marginBottom: 4 }}>Run history</h4>
-          <table>
-            <thead>
-              <tr><th>Started</th><th>Status</th><th>Duration</th><th>Result</th></tr>
-            </thead>
-            <tbody>
-              {runs.map((r) => (
-                <tr key={r._key} onClick={() => setSelectedId(r._key)} style={{ cursor: "pointer", background: r._key === run?._key ? "var(--color-bg-tertiary)" : undefined }}>
-                  <td>{new Date(r.created_at).toLocaleString()}</td>
-                  <td style={{ textAlign: "left" }}><RunStatus run={r} /></td>
-                  <td>{r.wall_seconds != null ? `${Math.round(r.wall_seconds)} s` : "-"}</td>
-                  <td>{r.portfolio_id ? <Link to={`/portfolios/${r.portfolio_id}`} onClick={(e) => e.stopPropagation()}>Portfolio</Link> : r.error ? <span className="error-text">{r.error}</span> : "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
+      {run && showHistory && (
+        <table className="compact" style={{ marginTop: 12 }}>
+          <thead>
+            <tr><th style={{ textAlign: "left" }}>Started</th><th style={{ textAlign: "left" }}>Status</th><th>Duration</th><th style={{ textAlign: "left" }}>Result</th></tr>
+          </thead>
+          <tbody>
+            {runs.map((r) => (
+              <tr key={r._key} onClick={() => setSelectedId(r._key)} className={r._key === run?._key ? "selected" : ""} style={{ cursor: "pointer" }} title="Show this run">
+                <td style={{ textAlign: "left" }}>{new Date(r.created_at).toLocaleString()}</td>
+                <td style={{ textAlign: "left" }}><RunStatus run={r} /></td>
+                <td>{r.wall_seconds != null ? `${Math.round(r.wall_seconds)} s` : "-"}</td>
+                <td style={{ textAlign: "left" }}>{r.portfolio_id ? <Link to={`/portfolios/${r.portfolio_id}`} onClick={(e) => e.stopPropagation()}>Portfolio</Link> : r.error ? <span className="error-text">{r.error}</span> : "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {run && (
+        <div className="run-panel-footer">
+          <button className="link-btn" onClick={() => setShowHistory((s) => !s)} aria-expanded={showHistory}>
+            <ClockIcon width={15} height={15} />
+            Run history ({runs.length})
+            {showHistory ? <ChevronDownIcon width={14} height={14} /> : <ChevronRightIcon width={14} height={14} />}
+          </button>
+          {run.portfolio_id && (
+            <Link to={`/portfolios/${run.portfolio_id}`} className="btn secondary btn-sm" style={{ textDecoration: "none" }}>
+              View portfolio &rarr;
+            </Link>
+          )}
+        </div>
       )}
     </div>
   );

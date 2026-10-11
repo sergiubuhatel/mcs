@@ -339,3 +339,29 @@ tr.selected td { background: rgba(37, 99, 235, 0.10); }
 
 /* Two-line clamp for long summaries in grid cells. */
 .clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; line-height: 1.35; }
+
+/* Policies page (reference screenshot 2026-10-11): header card, boxed
+   filters, run panel with icon step cards. */
+.header-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.header-card .page-header { margin: 0; }
+.header-card .toolbar .btn { padding: 9px 18px; font-size: 0.9rem; }
+.filter-field.boxed { border: 1px solid var(--color-divider); border-radius: 10px; padding: 10px 12px; background: var(--color-bg-secondary); }
+.progress-bar.thin { height: 5px; margin: 2px 0 3px; }
+.status-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+table.compact th, table.compact td { padding: 4px 8px; }
+.run-panel-header { display: flex; align-items: center; gap: 14px; }
+.run-panel-title { margin: 0; font-size: 1.05rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.run-panel-progress { display: flex; justify-content: space-between; gap: 12px; font-size: 0.83rem; margin: -2px 0 12px; }
+.run-panel-step { color: var(--color-text-primary); font-weight: 600; }
+.step-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.step-card { display: flex; align-items: center; gap: 12px; border: 1px solid var(--color-divider); border-radius: 10px; padding: 12px 14px; background: var(--color-bg-secondary); min-width: 0; }
+.step-card.current { border-color: var(--btn-accent); box-shadow: 0 0 0 1px var(--btn-accent) inset; }
+.step-card-title { font-weight: 600; font-size: 0.9rem; color: var(--color-text-primary); }
+.step-card-body { font-size: 0.8rem; margin-top: 3px; }
+.step-card-state { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 0.7rem; font-weight: 600; flex-shrink: 0; min-width: 62px; }
+.forecast-table { max-height: 320px; overflow: auto; margin-top: 12px; border: 1px solid var(--color-divider); border-radius: 10px; }
+.forecast-table th { position: sticky; top: 0; background: var(--color-bg-secondary); }
+.forecast-table tr:last-child td { border-bottom: 0; }
+.run-panel-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; }
+.link-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; padding: 4px 0; color: var(--color-text-primary); font-size: 0.85rem; font-weight: 500; cursor: pointer; }
+.link-btn:hover { color: var(--btn-accent); }

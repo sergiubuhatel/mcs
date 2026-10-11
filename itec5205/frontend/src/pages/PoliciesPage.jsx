@@ -10,31 +10,13 @@ import Modal from "../components/Modal";
 import Req from "../components/Req";
 import { PageHeader, Pager, SearchBox, SortTh, useSort, usePager } from "../components/PageParts";
 import { useColumnConfig } from "../utils/useColumnConfig";
-import {
-  DatabaseIcon,
-  EyeIcon,
-  PieChartIcon,
-  PlayIcon,
-  PlusIcon,
-  SaveIcon,
-  SearchIcon,
-  StopIcon,
-  TrendChartIcon,
-  WorkflowIcon,
-} from "../layout/icons";
+import { EyeIcon, ListIcon, PlayIcon, PlusIcon, SaveIcon, StopIcon, WorkflowIcon } from "../layout/icons";
 import { KINDS, autoPolicyName, describeCriteria, uniqueName } from "../features/policies/criteriaConfig";
-import PolicyRunPanel, { ACTIVE, RunProgress, RunStatus } from "../features/policies/PolicyRunPanel";
+import PolicyRunPanel, { ACTIVE, KIND_STYLE, RunProgress, RunStatus } from "../features/policies/PolicyRunPanel";
 
 const apiError = (err) => err.response?.data?.error || err.message;
 const ellipsis = { display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 
-// Same icon + color per criteria kind as its sidebar group.
-const KIND_STYLE = {
-  data: { icon: DatabaseIcon, color: "#10b981" },
-  screen: { icon: SearchIcon, color: "#3b82f6" },
-  prediction: { icon: TrendChartIcon, color: "#06b6d4" },
-  portfolio: { icon: PieChartIcon, color: "#22c55e" },
-};
 const PAGE_SIZE = 10;
 const STATUS_FILTERS = { all: "All", never: "Never run", active: "Running", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled" };
 
@@ -71,7 +53,7 @@ const COLUMNS = [
     key: "name",
     label: "Name",
     locked: true,
-    width: 230,
+    width: 200,
     sortable: true,
     render: (p, ctx) => (
       <a onClick={() => ctx.select(p._key)} title={p.description || p.name} style={{ ...ellipsis, cursor: "pointer" }}>
@@ -79,17 +61,17 @@ const COLUMNS = [
       </a>
     ),
   },
-  { key: "data", label: "Data Criteria", width: 150, render: criteriaCell("data") },
-  { key: "screen", label: "Screening Criteria", width: 170, render: criteriaCell("screen") },
-  { key: "prediction", label: "Prediction Criteria", width: 170, render: criteriaCell("prediction") },
+  { key: "data", label: "Data Criteria", width: 125, render: criteriaCell("data") },
+  { key: "screen", label: "Screening Criteria", width: 135, render: criteriaCell("screen") },
+  { key: "prediction", label: "Prediction Criteria", width: 135, render: criteriaCell("prediction") },
   { key: "portfolio", label: "Portfolio Criteria", render: criteriaCell("portfolio") },
   {
     key: "status",
     label: "Status",
-    width: 150,
+    width: 210,
     sortable: true,
     render: (p) => (
-      <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
+      <div className="status-cell">
         <RunStatus run={p.last_run} />
         {["queued", "running", "failed"].includes(p.last_run?.status) && <RunProgress run={p.last_run} />}
       </div>
@@ -98,11 +80,10 @@ const COLUMNS = [
   {
     key: "result",
     label: "Portfolio",
-    width: 90,
-    hiddenByDefault: true,
+    width: 75,
     render: (p) => (p.last_run?.portfolio_id ? <Link to={`/portfolios/${p.last_run.portfolio_id}`}>Open</Link> : <span className="muted">—</span>),
   },
-  { key: "run_at", label: "Last run", width: 170, sortable: true, render: (p) => (p.last_run ? new Date(p.last_run.created_at).toLocaleString() : "—") },
+  { key: "run_at", label: "Last run", width: 165, sortable: true, render: (p) => (p.last_run ? new Date(p.last_run.created_at).toLocaleString() : "—") },
 ];
 
 const EMPTY = { name: "", description: "", data_criteria_id: "", screen_criteria_id: "", prediction_criteria_id: "", portfolio_criteria_id: "" };
@@ -273,17 +254,17 @@ export default function PoliciesPage() {
 
   return (
     <div>
-      <div className="page-header-row">
+      <div className="card header-card">
         <PageHeader
           icon={WorkflowIcon}
           color="#8b5cf6"
           title="Policies"
-          description="Saved import → screening → prediction → portfolio recipes. Run a policy to build a portfolio automatically; open one to follow its run."
+          description="Saved import → screening → prediction → portfolio recipes. Run a policy to build a portfolio automatically."
         />
         <div className="toolbar">
           <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
           <button className="btn" onClick={() => open(null)}>
-            <PlusIcon width={15} height={15} /> New policy
+            <PlusIcon width={17} height={17} /> New policy
           </button>
         </div>
       </div>
@@ -294,7 +275,7 @@ export default function PoliciesPage() {
           {Object.entries(KINDS).map(([kind, meta]) => {
             const { icon: Icon, color } = KIND_STYLE[kind];
             return (
-              <div key={kind} className="filter-field">
+              <div key={kind} className="filter-field boxed">
                 <label htmlFor={`filter-${kind}`}><Icon width={14} height={14} style={{ color }} /> {meta.title}</label>
                 <select id={`filter-${kind}`} value={filters[kind]} onChange={(e) => setFilter(kind, e.target.value)}>
                   <option value="">All</option>
@@ -304,8 +285,8 @@ export default function PoliciesPage() {
               </div>
             );
           })}
-          <div className="filter-field">
-            <label htmlFor="filter-status">Status</label>
+          <div className="filter-field boxed">
+            <label htmlFor="filter-status"><ListIcon width={14} height={14} /> Status</label>
             <select id="filter-status" value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
               {Object.entries(STATUS_FILTERS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
