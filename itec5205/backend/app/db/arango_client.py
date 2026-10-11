@@ -68,6 +68,11 @@ COLLECTIONS = {
     "policy_runs": [
         {"type": "persistent", "fields": ["policy_id", "created_at"], "unique": False},
     ],
+    # One document per import job (`_key` = Celery task id), written by the
+    # task itself so Market Data page, resumed and policy imports all appear.
+    "import_runs": [
+        {"type": "persistent", "fields": ["created_at"], "unique": False},
+    ],
 }
 
 

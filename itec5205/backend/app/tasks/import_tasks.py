@@ -20,13 +20,40 @@ never got picked up -- which is exactly what /import/resume needs.
 """
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 
+from ..db.arango_client import get_db
 from ..extensions import socketio
 from ..services.yahoo_import import import_ticker
 from .celery_app import celery_app
 from .stop_flags import clear_stop, is_stop_requested
 
 MAX_WORKERS = 6
+# Tickers listed by name on a run record (more = "N companies" only).
+MAX_LISTED_TICKERS = 25
+
+
+def _record_start(task_id: str, tickers: list[str], scope: str, source: str, options: dict) -> datetime:
+    started = datetime.now(timezone.utc)
+    get_db().collection("import_runs").insert({
+        "_key": task_id,
+        "created_at": started.isoformat(),
+        "status": "running",
+        "source": source,  # "manual" | "resume" | "policy"
+        "scope": scope,  # "all" | "specific"
+        "total": len(tickers),
+        "tickers": tickers if len(tickers) <= MAX_LISTED_TICKERS else None,
+        **options,
+    }, overwrite=True)
+    return started
+
+
+def _record_end(task_id: str, started: datetime, **patch):
+    ended = datetime.now(timezone.utc)
+    get_db().collection("import_runs").update({
+        "_key": task_id, "finished_at": ended.isoformat(),
+        "wall_seconds": round((ended - started).total_seconds(), 1), **patch,
+    })
 
 
 @celery_app.task(bind=True, name="import_sp500_data")
@@ -38,7 +65,28 @@ def import_sp500_data(
     import_history: bool = True,
     import_statistics: bool = True,
     import_calculated_stats: bool = True,
+    scope: str = "specific",
+    source: str = "manual",
 ):
+    options = {"years": years, "import_history": import_history, "import_statistics": import_statistics,
+               "import_calculated_stats": import_calculated_stats}
+    started = _record_start(self.request.id, tickers, scope, source, options)
+    try:
+        result = _run_import(self, tickers, years, interval, import_history, import_statistics, import_calculated_stats)
+    except Exception as exc:
+        _record_end(self.request.id, started, status="failed", error=str(exc))
+        raise
+    failed = result["failed"]
+    status = "stopped" if result["stopped"] else ("completed_with_failures" if failed else "completed")
+    _record_end(
+        self.request.id, started, status=status, succeeded=result["succeeded_count"], failed=len(failed),
+        failed_tickers=[f["ticker"] for f in failed][:MAX_LISTED_TICKERS], remaining=len(result["remaining_tickers"]),
+        records=result.pop("records"),
+    )
+    return result
+
+
+def _run_import(self, tickers, years, interval, import_history, import_statistics, import_calculated_stats):
     total = len(tickers)
     succeeded = []
     failed = []
@@ -81,8 +129,10 @@ def import_sp500_data(
                     if other_future.cancel():
                         pass  # not yet started -- surfaces as .cancelled() above, added to `remaining`
 
+    records = sum((s.get("history_rows") or 0) for s in succeeded)  # price rows written
     if stopping:
         result = {
+            "records": records,
             "stopped": True,
             "total": total,
             "succeeded_count": len(succeeded),
@@ -95,10 +145,11 @@ def import_sp500_data(
             "import_statistics": import_statistics,
             "import_calculated_stats": import_calculated_stats,
         }
-        socketio.emit("import_progress", {"stage": "stopped", **result}, room=room)
+        socketio.emit("import_progress", {"stage": "stopped", **{k: v for k, v in result.items() if k != "records"}}, room=room)
         return result
 
     result = {
+        "records": records,
         "stopped": False,
         "total": total,
         "succeeded_count": len(succeeded),
@@ -111,5 +162,5 @@ def import_sp500_data(
         "import_statistics": import_statistics,
         "import_calculated_stats": import_calculated_stats,
     }
-    socketio.emit("import_progress", {"stage": "done", **result}, room=room)
+    socketio.emit("import_progress", {"stage": "done", **{k: v for k, v in result.items() if k != "records"}}, room=room)
     return result

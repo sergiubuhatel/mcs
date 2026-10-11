@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { createRequested, deleteRequested, fetchRequested, updateRequested } from "../features/portfolios/portfoliosSlice";
@@ -8,43 +8,121 @@ import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import Modal from "../components/Modal";
 import LoadingSpinner from "../components/LoadingSpinner";
 import ColumnPicker from "../components/ColumnPicker";
+import { InfoPanels, PageHeader, Pager, SearchBox, SortTh, StatTiles, useSort, usePager } from "../components/PageParts";
 import { useColumnConfig } from "../utils/useColumnConfig";
-import { PlusIcon, SaveIcon } from "../layout/icons";
+import {
+  BarChartIcon,
+  BookmarkPlusIcon,
+  ClockIcon,
+  LayersIcon,
+  PieChartIcon,
+  PlusIcon,
+  SaveIcon,
+  TrendChartIcon,
+  WorkflowIcon,
+} from "../layout/icons";
+
+const PAGE_SIZE = 10;
+const PREVIEW_TICKERS = 5;
+const ellipsis = { display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const fmtDate = (iso) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+const fmtPct = (v, sign = false) => (v == null ? "–" : `${sign && v > 0 ? "+" : ""}${(v * 100).toFixed(1)}%`);
+
+// Risk band from the portfolio's annualized volatility over the past year.
+export function riskBand(vol) {
+  if (vol == null) return null;
+  if (vol < 0.2) return { label: "Low", tone: "good" };
+  if (vol < 0.35) return { label: "Medium", tone: "warn" };
+  return { label: "High", tone: "bad" };
+}
+
+const METHOD = { rl: { label: "RL optimized", icon: WorkflowIcon }, manual: { label: "Manual", icon: BookmarkPlusIcon } };
 
 const PORTFOLIO_COLUMNS = [
   {
     key: "name",
     label: "Name",
     locked: true,
-    width: 400,
+    width: 300,
+    sortable: true,
     render: (p, ctx) =>
       ctx.isEditing ? (
         <input value={ctx.editName} onChange={(e) => ctx.setEditName(e.target.value)} style={{ width: "100%" }} />
       ) : (
-        <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
-          <Link
-            to={`/portfolios/${p._key}`}
-            title={p.name}
-            style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}
-          >
-            {p.name}
-          </Link>
-        </div>
+        <Link to={`/portfolios/${p._key}`} title={p.name} style={ellipsis}>{p.name}</Link>
       ),
   },
   {
     key: "tickers",
-    label: "Tickers",
+    label: "Holdings",
     render: (p) => {
-      const tickers = p.holdings.map((h) => h.ticker).join(", ");
+      const byWeight = [...p.holdings].sort((a, b) => b.weight - a.weight);
       return (
-        <span title={tickers} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {tickers}
+        <span
+          title={byWeight.map((h) => `${h.ticker} ${(h.weight * 100).toFixed(1)}%`).join(", ")}
+          style={{ display: "flex", gap: 4, overflow: "hidden", whiteSpace: "nowrap" }}
+        >
+          {byWeight.slice(0, PREVIEW_TICKERS).map((h) => <span key={h.ticker} className="ticker-chip">{h.ticker}</span>)}
+          {byWeight.length > PREVIEW_TICKERS && <span className="ticker-chip">+{byWeight.length - PREVIEW_TICKERS}</span>}
         </span>
       );
     },
   },
-  { key: "created_at", label: "Created", width: 110, render: (p) => new Date(p.created_at).toLocaleDateString() },
+  {
+    key: "method",
+    label: "Built with",
+    width: 140,
+    sortable: true,
+    render: (p) => {
+      const m = METHOD[p.method] || { label: p.method || "–", icon: LayersIcon };
+      const Icon = m.icon;
+      return <span className="method-chip"><Icon width={12} height={12} /> {m.label}</span>;
+    },
+  },
+  {
+    key: "risk",
+    label: "Risk",
+    width: 100,
+    sortable: true,
+    render: (p) => {
+      const band = riskBand(p.expected_volatility);
+      return band ? (
+        <span className={`status-pill ${band.tone}`} title={`Volatility ${fmtPct(p.expected_volatility)} a year (low < 20%, high ≥ 35%)`}>{band.label}</span>
+      ) : "–";
+    },
+  },
+  {
+    key: "annual_return",
+    label: "Return (1Y)",
+    width: 120,
+    sortable: true,
+    render: (p) => (
+      <strong title="Past-year return of these weights" style={{ color: p.annual_return == null ? undefined : p.annual_return >= 0 ? "#16a34a" : "#dc2626" }}>
+        {fmtPct(p.annual_return, true)}
+      </strong>
+    ),
+  },
+  { key: "sharpe_ratio", label: "Sharpe", width: 90, sortable: true, hiddenByDefault: true, render: (p) => (p.sharpe_ratio == null ? "–" : p.sharpe_ratio.toFixed(2)) },
+  { key: "created_at", label: "Created", width: 120, sortable: true, render: (p) => fmtDate(p.created_at) },
+];
+
+const ABOUT = {
+  icon: PieChartIcon,
+  color: "#8b5cf6",
+  title: "About my portfolios",
+  text: "A portfolio is a set of holdings with weights. Most come from the RL builder on a stock pool or from a policy run; you can also build one by hand.",
+  features: [
+    { icon: BookmarkPlusIcon, color: "#3b82f6", title: "From a pool or policy", text: "RL portfolios keep a link to the pool they were trained on." },
+    { icon: WorkflowIcon, color: "#10b981", title: "Optimized with RL", text: "PPO weights, blended toward the optimizer when a limit would be missed." },
+    { icon: BarChartIcon, color: "#f59e0b", title: "Risk at a glance", text: "Risk is the past year's annualized volatility: low < 20%, high ≥ 35%." },
+    { icon: TrendChartIcon, color: "#06b6d4", title: "Track performance", text: "Open a portfolio for its value chart, allocation and signal board." },
+  ],
+};
+
+const TIPS = [
+  { title: "Build from a pool", text: "Stock Pools → pick a pool → train the RL portfolio, or run a policy." },
+  { title: "Compare portfolios", text: "Sort by Return (1Y) or Risk; open one to see its chart over 1M–ALL." },
+  { title: "Refine and iterate", text: "Refine the pool on its signal board and retrain to compare iterations." },
 ];
 
 export default function PortfoliosPage() {
@@ -54,28 +132,43 @@ export default function PortfoliosPage() {
   const [editName, setEditName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [buildOpen, setBuildOpen] = useState(false);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     dispatch(fetchRequested());
   }, [dispatch]);
 
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((p) => p.name.toLowerCase().includes(q) || p.holdings.some((h) => h.ticker.toLowerCase().includes(q)));
+  }, [items, query]);
+  const { sorted, sort, toggle } = useSort(
+    filtered,
+    {
+      name: (p) => p.name,
+      method: (p) => p.method || "",
+      risk: (p) => p.expected_volatility,
+      annual_return: (p) => p.annual_return,
+      sharpe_ratio: (p) => p.sharpe_ratio,
+      created_at: (p) => p.created_at,
+    },
+    { key: "created_at", dir: "desc" }
+  );
+  const pager = usePager(sorted, PAGE_SIZE);
+
   const startRename = (p) => {
     setEditingId(p._key);
     setEditName(p.name);
   };
-
-  const cancelEdit = () => setEditingId(null);
-
   const saveEdit = (id) => {
     dispatch(updateRequested({ id, name: editName.trim() }));
     setEditingId(null);
   };
-
   const confirmDelete = () => {
     dispatch(deleteRequested(deleteTarget._key));
     setDeleteTarget(null);
   };
-
   const duplicatePortfolio = (p) => {
     dispatch(
       createRequested({
@@ -86,27 +179,50 @@ export default function PortfoliosPage() {
     );
   };
 
-  const sortedItems = [...items].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
   const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("portfoliosGrid", PORTFOLIO_COLUMNS);
+
+  const latest = items.reduce((a, p) => (!a || p.created_at > a.created_at ? p : a), null);
+  const best = items.reduce((a, p) => (p.annual_return != null && (!a || p.annual_return > a.annual_return) ? p : a), null);
+  const rlCount = items.filter((p) => p.method === "rl").length;
+  const avgHoldings = items.length ? items.reduce((n, p) => n + p.holdings.length, 0) / items.length : 0;
+  const tiles = [
+    { icon: LayersIcon, color: "#8b5cf6", label: "Total portfolios", value: items.length, sub: `${rlCount} RL optimized · ${items.length - rlCount} manual` },
+    { icon: ClockIcon, color: "#10b981", label: "Last created", value: latest ? fmtDate(latest.created_at) : "–", sub: latest?.name || "none yet", title: latest?.name },
+    { icon: TrendChartIcon, color: "#16a34a", label: "Best return (1Y)", value: best ? fmtPct(best.annual_return, true) : "–", sub: best?.name || "–", title: best?.name },
+    { icon: BarChartIcon, color: "#3b82f6", label: "Average holdings", value: avgHoldings ? avgHoldings.toFixed(1) : "–", sub: "companies per portfolio" },
+  ];
+  const leftAligned = (key) => ["name", "tickers", "method", "risk"].includes(key);
 
   return (
     <div>
+      <PageHeader
+        icon={PieChartIcon}
+        color="#3b82f6"
+        title="My portfolios"
+        description="Saved portfolio allocations: RL-optimized ones from stock pools and policy runs, and portfolios you built by hand."
+      />
+      <StatTiles tiles={tiles} />
+
       <div className="card">
-        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
-          <button
-            className="close-btn"
-            style={{ position: "static" }}
-            onClick={() => setBuildOpen(true)}
-            title="Build a manual portfolio"
-            aria-label="Build a manual portfolio"
-          >
-            <PlusIcon width={18} height={18} />
-          </button>
+        <div className="card-header" style={{ flexWrap: "wrap" }}>
+          <div className="icon-badge" style={{ background: "#3b82f622", color: "#3b82f6" }}>
+            <PieChartIcon width={18} height={18} />
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h3 style={{ margin: 0 }}>Portfolio library</h3>
+            <p className="muted" style={{ margin: 0 }}>Holdings, how each was built, risk and the past year's return.</p>
+          </div>
+          <div className="toolbar">
+            <SearchBox id="search-portfolios" value={query} onChange={setQuery} placeholder="Search by name or ticker…" />
+            <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
+            <button className="btn" onClick={() => setBuildOpen(true)}>
+              <PlusIcon width={15} height={15} /> New portfolio
+            </button>
+          </div>
         </div>
         {loading && <LoadingSpinner />}
         {items.length === 0 && !loading && <p className="muted">No portfolios yet.</p>}
+        {items.length > 0 && filtered.length === 0 && <p className="muted">No portfolio matches "{query}".</p>}
         <table style={{ tableLayout: "fixed", width: "100%" }}>
           <colgroup>
             {visibleColumns.map((c) => (
@@ -117,19 +233,27 @@ export default function PortfoliosPage() {
           <thead>
             <tr>
               {visibleColumns.map((c) => (
-                <th key={c.key}>{c.label}</th>
+                <SortTh
+                  key={c.key}
+                  label={c.label}
+                  colKey={c.key}
+                  sortable={c.sortable}
+                  sort={sort}
+                  onSort={toggle}
+                  style={leftAligned(c.key) ? { textAlign: "left" } : undefined}
+                />
               ))}
               <th>Action</th>
             </tr>
           </thead>
           <tbody>
-            {sortedItems.map((p) => {
+            {pager.rows.map((p) => {
               const isEditing = editingId === p._key;
               const ctx = { isEditing, editName, setEditName };
               return (
                 <tr key={p._key}>
                   {visibleColumns.map((c) => (
-                    <td key={c.key} style={c.key !== "created_at" ? { textAlign: "left", maxWidth: 0 } : undefined}>
+                    <td key={c.key} style={leftAligned(c.key) ? { textAlign: "left", maxWidth: 0 } : undefined}>
                       {c.render(p, ctx)}
                     </td>
                   ))}
@@ -137,7 +261,7 @@ export default function PortfoliosPage() {
                     {isEditing ? (
                       <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
                         <button className="btn" onClick={() => saveEdit(p._key)}>Save</button>
-                        <button className="btn secondary" onClick={cancelEdit}>Cancel</button>
+                        <button className="btn secondary" onClick={() => setEditingId(null)}>Cancel</button>
                       </div>
                     ) : (
                       <ActionMenu onRename={() => startRename(p)} onDuplicate={() => duplicatePortfolio(p)} onDelete={() => setDeleteTarget(p)} />
@@ -148,7 +272,10 @@ export default function PortfoliosPage() {
             })}
           </tbody>
         </table>
+        {filtered.length > 0 && <Pager pager={pager} total={filtered.length} noun="portfolios" />}
       </div>
+
+      <InfoPanels about={ABOUT} tips={TIPS} />
 
       <ConfirmDeleteModal
         isOpen={!!deleteTarget}

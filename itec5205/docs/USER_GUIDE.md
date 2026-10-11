@@ -51,7 +51,11 @@ The database starts empty. Open **Market Data** (sidebar, Data section)
 and click **Start Import** to load the S&P 500 (~500
 companies, price history + fundamentals from Yahoo Finance; it takes several
 minutes — progress shows on the Market Data page and in the bottom bar on every
-other page, and Stop/Resume work). Re-running the import refreshes the data.
+other page, and Stop/Resume work). Re-running the import refreshes the data. The page also lists
+**Recent imports** (from this page, a resume or a policy run: companies,
+options, status, new price rows, duration) and **What's stored** (S&P 500
+tickers imported, daily prices, history range, how many tickers are up to
+date with the last trading day).
 
 ## Policies (`/policies`) and Criteria (`/criteria/...`)
 
@@ -67,7 +71,10 @@ A **policy** = an optional *Data Criteria* + one *Screening Criteria* + one
 with a red star). Each criteria is saved on its own page, in its
 step of the sidebar, so several policies can share them. Every grid has a **+**
 button (new) and a **⋮** menu per row (Edit, Duplicate, Delete; policies also
-**Run** / **Cancel run**). A criteria used by a policy can't be deleted.
+**Run** / **Cancel run**). A criteria used by a policy can't be deleted. **⋯ → Set as default** marks one criteria per kind as the
+default: new policies start with it selected. Each criteria page shows how
+many saved sets there are, which policies use them, and the default; its
+grid can be searched and sorted (Name, Used by, Updated).
 
 - **Data Criteria** (optional) — the same options as the **Market Data** page's
   import: all S&P 500 or specific tickers, how many years of history, what to

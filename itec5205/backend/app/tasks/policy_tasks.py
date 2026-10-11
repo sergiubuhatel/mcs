@@ -107,6 +107,7 @@ def run_policy(self, run_id: str):
                 imp = import_sp500_data.delay(
                     tickers=to_import, years=data_c["years"], import_history=data_c["import_history"],
                     import_statistics=data_c["import_statistics"], import_calculated_stats=data_c["import_calculated_stats"],
+                    scope=data_c["scope"], source="policy",
                 )
                 children.append(imp.id)
                 while True:

@@ -14,10 +14,14 @@ const STATUS_COLORS = {
 };
 const STATUS_LABELS = { succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled", running: "Running", queued: "Queued" };
 
+const STATUS_TONES = { succeeded: "good", failed: "bad", cancelled: "grey", running: "info", queued: "info" };
+const STATUS_MARKS = { succeeded: "✓", failed: "✕", cancelled: "–", running: "●", queued: "…" };
+
 export function RunStatus({ run }) {
   if (!run) return <span className="muted">Never run</span>;
   return (
-    <span className="pill" style={{ color: STATUS_COLORS[run.status], background: "var(--color-bg-tertiary)" }}>
+    <span className={`status-pill ${STATUS_TONES[run.status] || "info"}`} style={{ justifySelf: "start" }}>
+      {STATUS_MARKS[run.status] ? `${STATUS_MARKS[run.status]} ` : ""}
       {STATUS_LABELS[run.status] || run.status}
     </span>
   );

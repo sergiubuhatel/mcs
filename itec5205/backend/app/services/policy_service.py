@@ -217,11 +217,25 @@ def update_criteria(kind: str, criteria_id: str, body: dict) -> dict | None:
     return get_criteria(kind, criteria_id)
 
 
+def set_default_criteria(kind: str, criteria_id: str, is_default: bool = True) -> dict | None:
+    """At most one default per kind: new policies start with it selected."""
+    if get_criteria(kind, criteria_id) is None:
+        return None
+    db = get_db()
+    if is_default:
+        db.aql.execute(
+            "FOR c IN criteria FILTER c.kind == @kind AND c.is_default == true UPDATE c WITH {is_default: false} IN criteria",
+            bind_vars={"kind": kind},
+        )
+    db.collection("criteria").update({"_key": criteria_id, "is_default": bool(is_default)})
+    return get_criteria(kind, criteria_id)
+
+
 def duplicate_criteria(kind: str, criteria_id: str) -> dict | None:
     current = get_criteria(kind, criteria_id)
     if current is None:
         return None
-    return create_criteria(kind, {**current, "name": f"{current['name']} (copy)"})
+    return create_criteria(kind, {**current, "name": f"{current['name']} (copy)"})  # create_criteria drops is_default
 
 
 def policies_using(kind: str, criteria_id: str) -> list[dict]:

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { apiClient } from "../api/client";
@@ -8,8 +8,10 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import ColumnPicker from "../components/ColumnPicker";
 import Modal from "../components/Modal";
 import Req from "../components/Req";
+import { InfoPanels, PageHeader, SearchBox, SortTh, StatTiles, useSort } from "../components/PageParts";
 import { useColumnConfig } from "../utils/useColumnConfig";
-import { PlusIcon, SaveIcon } from "../layout/icons";
+import { ClockIcon, LayersIcon, PlusIcon, SaveIcon, SlidersIcon, StarIcon, WorkflowIcon } from "../layout/icons";
+import { CRITERIA_PAGES } from "../features/policies/criteriaPageInfo";
 import { screenCriteria } from "../features/companies/companiesSaga";
 import { DEFAULTS, KINDS, autoCriteriaName, blankToNull, describeCriteria, nullToBlank, uniqueName } from "../features/policies/criteriaConfig";
 import ScreenCriteriaForm from "../features/policies/ScreenCriteriaForm";
@@ -71,24 +73,56 @@ function DataCriteriaForm({ value, onChange }) {
 
 const FORMS = { data: DataCriteriaForm, screen: ScreenCriteriaForm, prediction: PredictionCriteriaForm, portfolio: PortfolioCriteriaForm };
 
+const ellipsis = { display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const fmtDate = (iso) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+
 const COLUMNS = [
   {
     key: "name",
     label: "Name",
     locked: true,
-    width: 280,
+    width: 340,
+    sortable: true,
     render: (c, ctx) => (
-      <a onClick={() => ctx.edit(c)} title={c.name} style={{ cursor: "pointer", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {c.name}
-      </a>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        <span className="row-icon"><LayersIcon width={15} height={15} /></span>
+        <a onClick={() => ctx.edit(c)} title={c.name} style={{ ...ellipsis, cursor: "pointer", minWidth: 0 }}>{c.name}</a>
+        {c.is_default && <span className="default-badge" title="New policies start with this one selected"><StarIcon width={11} height={11} /> Default</span>}
+      </div>
     ),
   },
   {
     key: "summary",
-    label: "Criteria",
+    label: "Criteria summary",
     render: (c, ctx) => {
       const text = describeCriteria(ctx.kind, c);
-      return <span title={text} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>;
+      return <span title={text} className="clamp-2">{text}</span>;
+    },
+  },
+  {
+    // Prediction criteria only (see `kinds`): one chip per forecast point.
+    key: "horizons",
+    label: "Horizons",
+    width: 190,
+    kinds: ["prediction"],
+    render: (c) => (
+      <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+        {(c.horizons || []).map((h) => (
+          <span key={`${h.value}${h.unit}`} className="count-badge" title={`${h.value} ${h.unit}`}>
+            {h.value}{{ days: "D", weeks: "W", months: "M", years: "Y" }[h.unit]}
+          </span>
+        ))}
+      </span>
+    ),
+  },
+  {
+    key: "used",
+    label: "Used by",
+    width: 110,
+    sortable: true,
+    render: (c, ctx) => {
+      const n = ctx.usage[c._key] || 0;
+      return <span className={`count-badge ${n ? "" : "grey"}`} title={n ? `Used by ${n} polic${n === 1 ? "y" : "ies"}` : "Not used by any policy"}>{n} {n === 1 ? "policy" : "policies"}</span>;
     },
   },
   {
@@ -96,9 +130,9 @@ const COLUMNS = [
     label: "Description",
     width: 220,
     hiddenByDefault: true,
-    render: (c) => <span title={c.description} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.description}</span>,
+    render: (c) => <span title={c.description} style={ellipsis}>{c.description}</span>,
   },
-  { key: "updated_at", label: "Updated", width: 110, render: (c) => new Date(c.updated_at).toLocaleDateString() },
+  { key: "updated_at", label: "Updated", width: 130, sortable: true, render: (c) => fmtDate(c.updated_at) },
 ];
 
 function CriteriaGrid({ kind }) {
@@ -110,7 +144,13 @@ function CriteriaGrid({ kind }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig(`criteriaGrid.${kind}`, COLUMNS);
+  const [query, setQuery] = useState("");
+  const [usage, setUsage] = useState({}); // criteria id -> number of policies using it
+  const page = CRITERIA_PAGES[kind];
+  const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig(
+    `criteriaGrid.${kind}`,
+    COLUMNS.filter((c) => !c.kinds || c.kinds.includes(kind))
+  );
 
   const load = useCallback(() => {
     apiClient
@@ -118,7 +158,38 @@ function CriteriaGrid({ kind }) {
       .then((r) => setItems(r.data.criteria))
       .catch((err) => toast.error(apiError(err)))
       .finally(() => setLoading(false));
+    apiClient
+      .get("/api/policies")
+      .then((r) => {
+        const counts = {};
+        for (const p of r.data.policies) {
+          const id = p[`${kind}_criteria_id`];
+          if (id) counts[id] = (counts[id] || 0) + 1;
+        }
+        setUsage(counts);
+      })
+      .catch(() => {});
   }, [kind]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((c) => `${c.name} ${describeCriteria(kind, c)} ${c.description || ""}`.toLowerCase().includes(q));
+  }, [items, query, kind]);
+  const { sorted, sort, toggle } = useSort(filtered, {
+    name: (c) => c.name,
+    used: (c) => usage[c._key] || 0,
+    updated_at: (c) => c.updated_at,
+  }, { key: "updated_at", dir: "desc" });
+
+  const setDefault = (c, isDefault) =>
+    apiClient
+      .post(`/api/criteria/${kind}/${c._key}/default`, { is_default: isDefault })
+      .then(() => {
+        toast.success(isDefault ? `"${c.name}" is now the default` : "Default removed");
+        load();
+      })
+      .catch((err) => toast.error(apiError(err)));
 
   useEffect(load, [load]);
 
@@ -182,25 +253,49 @@ function CriteriaGrid({ kind }) {
       .catch((err) => toast.error(apiError(err)));
   };
 
-  const ctx = { kind, edit: open };
+  const ctx = { kind, edit: open, usage };
+  const latest = items.reduce((a, c) => (!a || c.updated_at > a.updated_at ? c : a), null);
+  const defaultItem = items.find((c) => c.is_default);
+  const usedCount = items.filter((c) => usage[c._key]).length;
+  const tiles = [
+    { icon: LayersIcon, color: "#8b5cf6", label: "Saved criteria", value: items.length, sub: `${meta.title.toLowerCase()} you can reuse` },
+    { icon: ClockIcon, color: "#10b981", label: "Last updated", value: latest ? fmtDate(latest.updated_at) : "–", sub: latest ? latest.name : "nothing saved yet", title: latest?.name },
+    { icon: WorkflowIcon, color: "#3b82f6", label: "In use", value: `${usedCount} / ${items.length}`, sub: "used by at least one policy" },
+    {
+      icon: StarIcon,
+      color: "#f59e0b",
+      label: "Default",
+      value: defaultItem ? defaultItem.name : "None set",
+      sub: defaultItem ? "selected for new policies" : "⋯ → Set as default",
+      title: defaultItem?.name,
+    },
+  ];
 
   return (
     <div>
+      <PageHeader icon={SlidersIcon} color={page.color} title={meta.title} description={page.description} />
+      <StatTiles tiles={tiles} />
+
       <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <div>
-            <h3 style={{ margin: 0 }}>{meta.title}</h3>
+        <div className="card-header" style={{ flexWrap: "wrap" }}>
+          <div className="icon-badge" style={{ background: `${page.color}22`, color: page.color }}>
+            <LayersIcon width={18} height={18} />
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h3 style={{ margin: 0 }}>Criteria sets</h3>
             <p className="muted" style={{ margin: 0 }}>{meta.blurb}</p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="toolbar">
+            <SearchBox id={`search-${kind}`} value={query} onChange={setQuery} placeholder="Search criteria…" />
             <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
-            <button className="close-btn" style={{ position: "static" }} onClick={() => open(null)} title={`New ${meta.singular}`} aria-label={`New ${meta.singular}`}>
-              <PlusIcon width={18} height={18} />
+            <button className="btn" onClick={() => open(null)}>
+              <PlusIcon width={15} height={15} /> New criteria
             </button>
           </div>
         </div>
         {loading && <LoadingSpinner />}
-        {!loading && items.length === 0 && <p className="muted">No {meta.singular} yet — click + to create one.</p>}
+        {!loading && items.length === 0 && <p className="muted">No {meta.singular} yet — click New criteria to create one.</p>}
+        {!loading && items.length > 0 && filtered.length === 0 && <p className="muted">Nothing matches "{query}".</p>}
         <table style={{ tableLayout: "fixed", width: "100%" }}>
           <colgroup>
             {visibleColumns.map((c) => <col key={c.key} style={c.width ? { width: c.width } : undefined} />)}
@@ -208,24 +303,45 @@ function CriteriaGrid({ kind }) {
           </colgroup>
           <thead>
             <tr>
-              {visibleColumns.map((c) => <th key={c.key} style={c.key !== "updated_at" ? { textAlign: "left" } : undefined}>{c.label}</th>)}
+              {visibleColumns.map((c) => (
+                <SortTh
+                  key={c.key}
+                  label={c.label}
+                  colKey={c.key}
+                  sortable={c.sortable}
+                  sort={sort}
+                  onSort={toggle}
+                  style={c.key !== "updated_at" ? { textAlign: "left" } : undefined}
+                />
+              ))}
               <th>Action</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
+            {sorted.map((item) => (
               <tr key={item._key}>
                 {visibleColumns.map((c) => (
                   <td key={c.key} style={c.key !== "updated_at" ? { textAlign: "left", maxWidth: 0 } : undefined}>{c.render(item, ctx)}</td>
                 ))}
                 <td>
-                  <ActionMenu onEdit={() => open(item)} onDuplicate={() => duplicate(item)} onDelete={() => setDeleteTarget(item)} />
+                  <ActionMenu
+                    extraItems={[
+                      item.is_default
+                        ? { label: "Remove default", icon: StarIcon, onClick: () => setDefault(item, false) }
+                        : { label: "Set as default", icon: StarIcon, onClick: () => setDefault(item, true) },
+                    ]}
+                    onEdit={() => open(item)}
+                    onDuplicate={() => duplicate(item)}
+                    onDelete={() => setDeleteTarget(item)}
+                  />
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <InfoPanels about={page.about} tips={page.tips} />
 
       <ConfirmDeleteModal
         isOpen={!!deleteTarget}

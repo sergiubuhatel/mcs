@@ -3,6 +3,7 @@
     /api/criteria/<kind>                 GET list, POST create   (kind = data | screen | prediction | portfolio)
     /api/criteria/<kind>/<id>            GET, PUT, DELETE
     /api/criteria/<kind>/<id>/duplicate  POST
+    /api/criteria/<kind>/<id>/default    POST {is_default}
     /api/policies                        GET list (each with its last run), POST create
     /api/policies/<id>                   GET, PUT, DELETE
     /api/policies/<id>/duplicate         POST
@@ -69,6 +70,16 @@ def criteria_update(kind, criteria_id):
         doc = svc.update_criteria(kind, criteria_id, request.get_json(silent=True) or {})
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    return jsonify(doc) if doc else (jsonify({"error": "Criteria not found"}), 404)
+
+
+@bp.post("/api/criteria/<kind>/<criteria_id>/default")
+def criteria_set_default(kind, criteria_id):
+    """``{"is_default": true|false}`` (default true) -- one default per kind."""
+    if err := _kind_or_404(kind):
+        return err
+    body = request.get_json(silent=True) or {}
+    doc = svc.set_default_criteria(kind, criteria_id, bool(body.get("is_default", True)))
     return jsonify(doc) if doc else (jsonify({"error": "Criteria not found"}), 404)
 
 

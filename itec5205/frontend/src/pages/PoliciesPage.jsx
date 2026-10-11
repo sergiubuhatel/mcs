@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { apiClient } from "../api/client";
@@ -8,23 +8,59 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import ColumnPicker from "../components/ColumnPicker";
 import Modal from "../components/Modal";
 import Req from "../components/Req";
+import { PageHeader, Pager, SearchBox, SortTh, useSort, usePager } from "../components/PageParts";
 import { useColumnConfig } from "../utils/useColumnConfig";
-import { PlayIcon, PlusIcon, SaveIcon, StopIcon } from "../layout/icons";
+import {
+  DatabaseIcon,
+  EyeIcon,
+  PieChartIcon,
+  PlayIcon,
+  PlusIcon,
+  SaveIcon,
+  SearchIcon,
+  StopIcon,
+  TrendChartIcon,
+  WorkflowIcon,
+} from "../layout/icons";
 import { KINDS, autoPolicyName, describeCriteria, uniqueName } from "../features/policies/criteriaConfig";
 import PolicyRunPanel, { ACTIVE, RunProgress, RunStatus } from "../features/policies/PolicyRunPanel";
 
 const apiError = (err) => err.response?.data?.error || err.message;
 const ellipsis = { display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 
+// Same icon + color per criteria kind as its sidebar group.
+const KIND_STYLE = {
+  data: { icon: DatabaseIcon, color: "#10b981" },
+  screen: { icon: SearchIcon, color: "#3b82f6" },
+  prediction: { icon: TrendChartIcon, color: "#06b6d4" },
+  portfolio: { icon: PieChartIcon, color: "#22c55e" },
+};
+const PAGE_SIZE = 10;
+const STATUS_FILTERS = { all: "All", never: "Never run", active: "Running", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled" };
+
+function runState(p) {
+  const st = p.last_run?.status;
+  if (!st) return "never";
+  return ACTIVE.includes(st) ? "active" : st;
+}
+
 function criteriaCell(kind) {
   return (p, ctx) => {
+    const { icon: Icon, color } = KIND_STYLE[kind];
     const id = p[`${kind}_criteria_id`];
-    if (!id && KINDS[kind].optional) return <span className="muted">none</span>;
+    if (!id && KINDS[kind].optional) {
+      return (
+        <span className="crit-chip none" title="No data criteria: the run uses the data already stored">
+          <Icon width={13} height={13} /> None
+        </span>
+      );
+    }
     const c = ctx.criteria[kind]?.[id];
     if (!c) return <span className="error-text">missing</span>;
     return (
-      <Link to={`/criteria/${kind}`} title={describeCriteria(kind, c)} style={ellipsis}>
-        {c.name}
+      <Link to={`/criteria/${kind}`} className="crit-chip" title={`${c.name}\n${describeCriteria(kind, c)}`}>
+        <Icon width={13} height={13} style={{ color }} />
+        <span className="crit-chip-label">{c.name}</span>
       </Link>
     );
   };
@@ -35,24 +71,27 @@ const COLUMNS = [
     key: "name",
     label: "Name",
     locked: true,
-    width: 240,
+    width: 230,
+    sortable: true,
     render: (p, ctx) => (
       <a onClick={() => ctx.select(p._key)} title={p.description || p.name} style={{ ...ellipsis, cursor: "pointer" }}>
         {p.name}
       </a>
     ),
   },
-  { key: "data", label: "Data Criteria", width: 140, render: criteriaCell("data") },
+  { key: "data", label: "Data Criteria", width: 150, render: criteriaCell("data") },
   { key: "screen", label: "Screening Criteria", width: 170, render: criteriaCell("screen") },
   { key: "prediction", label: "Prediction Criteria", width: 170, render: criteriaCell("prediction") },
-  { key: "portfolio", label: "Portfolio Criteria", width: 170, render: criteriaCell("portfolio") },
+  { key: "portfolio", label: "Portfolio Criteria", render: criteriaCell("portfolio") },
   {
     key: "status",
-    label: "Last run",
+    label: "Status",
+    width: 150,
+    sortable: true,
     render: (p) => (
-      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+      <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
         <RunStatus run={p.last_run} />
-        {["queued", "running", "failed"].includes(p.last_run?.status) && <div style={{ flex: 1, minWidth: 0 }}><RunProgress run={p.last_run} /></div>}
+        {["queued", "running", "failed"].includes(p.last_run?.status) && <RunProgress run={p.last_run} />}
       </div>
     ),
   },
@@ -60,9 +99,10 @@ const COLUMNS = [
     key: "result",
     label: "Portfolio",
     width: 90,
-    render: (p) => (p.last_run?.portfolio_id ? <Link to={`/portfolios/${p.last_run.portfolio_id}`}>View</Link> : <span className="muted">—</span>),
+    hiddenByDefault: true,
+    render: (p) => (p.last_run?.portfolio_id ? <Link to={`/portfolios/${p.last_run.portfolio_id}`}>Open</Link> : <span className="muted">—</span>),
   },
-  { key: "run_at", label: "Run at", width: 150, render: (p) => (p.last_run ? new Date(p.last_run.created_at).toLocaleString() : "—") },
+  { key: "run_at", label: "Last run", width: 170, sortable: true, render: (p) => (p.last_run ? new Date(p.last_run.created_at).toLocaleString() : "—") },
 ];
 
 const EMPTY = { name: "", description: "", data_criteria_id: "", screen_criteria_id: "", prediction_criteria_id: "", portfolio_criteria_id: "" };
@@ -77,6 +117,8 @@ export default function PoliciesPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [activeId, setActiveId] = useState(null);
   const [runKey, setRunKey] = useState(0); // bumps the run panel after Run/Cancel
+  const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState({ data: "", screen: "", prediction: "", portfolio: "", status: "all" }); // "" = all, "none" = no data criteria
   const timer = useRef(null);
   const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("policiesGrid", COLUMNS);
 
@@ -120,11 +162,14 @@ export default function PoliciesPage() {
       setEditor({ id: p._key, form: { ...EMPTY, ...p }, autoName: false });
       return;
     }
-    // A new policy starts with the only criteria of a kind when there's just one.
+    // A new policy starts with each kind's default criteria, or with the
+    // only one when there's just one. Data criteria stays optional: only a
+    // default pre-selects it.
     const form = { ...EMPTY };
     for (const k of Object.keys(KINDS)) {
-      const options = Object.keys(criteria[k]);
-      if (options.length === 1) form[`${k}_criteria_id`] = options[0];
+      const options = Object.values(criteria[k]);
+      const preset = options.find((c) => c.is_default) || (options.length === 1 && !KINDS[k].optional ? options[0] : null);
+      if (preset) form[`${k}_criteria_id`] = preset._key;
     }
     setEditor({ id: null, form: { ...form, name: generatedName(form, null) }, autoName: true });
   };
@@ -187,6 +232,30 @@ export default function PoliciesPage() {
   };
 
   const ctx = { criteria, select: setActiveId };
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return policies.filter((p) => {
+      for (const k of Object.keys(KINDS)) {
+        const want = filters[k];
+        if (!want) continue;
+        const id = p[`${k}_criteria_id`] || "";
+        if (want === "none" ? id !== "" : id !== want) return false;
+      }
+      if (filters.status !== "all" && runState(p) !== filters.status) return false;
+      if (!q) return true;
+      const names = Object.keys(KINDS).map((k) => criteria[k][p[`${k}_criteria_id`]]?.name || "").join(" ");
+      return `${p.name} ${p.description || ""} ${names}`.toLowerCase().includes(q);
+    });
+  }, [policies, filters, query, criteria]);
+  const { sorted, sort, toggle } = useSort(
+    filtered,
+    { name: (p) => p.name, status: (p) => runState(p), run_at: (p) => p.last_run?.created_at },
+    { key: "run_at", dir: "desc" }
+  );
+  const pager = usePager(sorted, PAGE_SIZE);
+  const setFilter = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
+  const filtersOn = query.trim() || filters.status !== "all" || Object.keys(KINDS).some((k) => filters[k]);
   const activePolicy = policies.find((p) => p._key === activeId);
   const setField = (k, v) =>
     setEditor((ed) => {
@@ -204,59 +273,107 @@ export default function PoliciesPage() {
 
   return (
     <div>
-      <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <div>
-            <h3 style={{ margin: 0 }}>Policies</h3>
-            <p className="muted" style={{ margin: 0 }}>
-              Run = import with the data criteria → search by the screen criteria → forecast and filter by the prediction criteria → build the RL portfolio with the portfolio criteria.
-            </p>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
-            <button className="close-btn" style={{ position: "static" }} onClick={() => open(null)} title="New policy" aria-label="New policy">
-              <PlusIcon width={18} height={18} />
-            </button>
+      <div className="page-header-row">
+        <PageHeader
+          icon={WorkflowIcon}
+          color="#8b5cf6"
+          title="Policies"
+          description="Saved import → screening → prediction → portfolio recipes. Run a policy to build a portfolio automatically; open one to follow its run."
+        />
+        <div className="toolbar">
+          <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
+          <button className="btn" onClick={() => open(null)}>
+            <PlusIcon width={15} height={15} /> New policy
+          </button>
+        </div>
+      </div>
+
+      <div className="card filter-card">
+        <SearchBox id="search-policies" value={query} onChange={setQuery} placeholder="Search policies by name, criteria or description…" />
+        <div className="filter-row">
+          {Object.entries(KINDS).map(([kind, meta]) => {
+            const { icon: Icon, color } = KIND_STYLE[kind];
+            return (
+              <div key={kind} className="filter-field">
+                <label htmlFor={`filter-${kind}`}><Icon width={14} height={14} style={{ color }} /> {meta.title}</label>
+                <select id={`filter-${kind}`} value={filters[kind]} onChange={(e) => setFilter(kind, e.target.value)}>
+                  <option value="">All</option>
+                  {meta.optional && <option value="none">None</option>}
+                  {Object.values(criteria[kind]).map((c) => <option key={c._key} value={c._key}>{c.name}</option>)}
+                </select>
+              </div>
+            );
+          })}
+          <div className="filter-field">
+            <label htmlFor="filter-status">Status</label>
+            <select id="filter-status" value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
+              {Object.entries(STATUS_FILTERS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
           </div>
         </div>
+      </div>
+
+      <div className="card">
         {loading && <LoadingSpinner />}
-        {!loading && policies.length === 0 && <p className="muted">No policies yet — click + to create one.</p>}
+        {!loading && policies.length === 0 && <p className="muted">No policies yet — click New policy to create one.</p>}
+        {!loading && policies.length > 0 && filtered.length === 0 && (
+          <p className="muted">
+            No policy matches these filters.{" "}
+            <a style={{ cursor: "pointer" }} onClick={() => { setQuery(""); setFilters({ data: "", screen: "", prediction: "", portfolio: "", status: "all" }); }}>Clear filters</a>
+          </p>
+        )}
         <table style={{ tableLayout: "fixed", width: "100%" }}>
           <colgroup>
             {visibleColumns.map((c) => <col key={c.key} style={c.width ? { width: c.width } : undefined} />)}
-            <col style={{ width: 70 }} />
+            <col style={{ width: 130 }} />
           </colgroup>
           <thead>
             <tr>
-              {visibleColumns.map((c) => <th key={c.key} style={c.key !== "run_at" ? { textAlign: "left" } : undefined}>{c.label}</th>)}
-              <th>Action</th>
+              {visibleColumns.map((c) => (
+                <SortTh
+                  key={c.key}
+                  label={c.label}
+                  colKey={c.key}
+                  sortable={c.sortable}
+                  sort={sort}
+                  onSort={toggle}
+                  style={c.key !== "run_at" ? { textAlign: "left" } : undefined}
+                />
+              ))}
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {policies.map((p) => {
+            {pager.rows.map((p) => {
               const active = ACTIVE.includes(p.last_run?.status);
               return (
-                <tr key={p._key} style={p._key === activeId ? { background: "var(--color-bg-tertiary)" } : undefined}>
+                <tr key={p._key} className={p._key === activeId ? "selected" : ""}>
                   {visibleColumns.map((c) => (
                     <td key={c.key} style={c.key !== "run_at" ? { textAlign: "left", maxWidth: 0 } : undefined}>{c.render(p, ctx)}</td>
                   ))}
                   <td>
-                    <ActionMenu
-                      extraItems={[
-                        active
-                          ? { label: "Cancel run", icon: StopIcon, onClick: () => cancel(p) }
-                          : { label: "Run", icon: PlayIcon, onClick: () => run(p) },
-                      ]}
-                      onEdit={() => open(p)}
-                      onDuplicate={() => duplicate(p)}
-                      onDelete={() => setDeleteTarget(p)}
-                    />
+                    <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center" }}>
+                      <button className="btn secondary btn-sm" onClick={() => setActiveId(p._key)} title="Show the last run and run history">
+                        <EyeIcon width={14} height={14} /> View
+                      </button>
+                      <ActionMenu
+                        extraItems={[
+                          active
+                            ? { label: "Cancel run", icon: StopIcon, onClick: () => cancel(p) }
+                            : { label: "Run", icon: PlayIcon, onClick: () => run(p) },
+                        ]}
+                        onEdit={() => open(p)}
+                        onDuplicate={() => duplicate(p)}
+                        onDelete={() => setDeleteTarget(p)}
+                      />
+                    </div>
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+        {filtered.length > 0 && <Pager pager={pager} total={filtered.length} noun={filtersOn ? "matching policies" : "policies"} />}
       </div>
 
       {activePolicy && (

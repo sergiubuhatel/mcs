@@ -142,12 +142,26 @@ export const importOptionsInvalid = (v) =>
 
 const checkLabel = { display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" };
 
+// Checkbox with a one-line description under its label.
+function OptionCheck({ checked, onChange, disabled, label, help }) {
+  return (
+    <label className="option-check" style={{ opacity: disabled ? 0.55 : 1 }}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <span>
+        <span className="option-check-label">{label}</span>
+        <span className="option-check-help">{help}</span>
+      </span>
+    </label>
+  );
+}
+
 /** The import option fields, shared by the Market Data page and Data Criteria. */
 export function ImportOptionsFields({ value, onChange, name = "import-scope" }) {
   const set = (patch) => onChange({ ...value, ...patch });
   return (
-    <div>
-      <div style={{ display: "flex", gap: 16, margin: "8px 0" }}>
+    <div className="import-fields">
+      <div className="import-fields-title">Select companies</div>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", margin: "4px 0 10px" }}>
         <label style={checkLabel}>
           <input type="radio" name={name} checked={value.scope === "all"} onChange={() => set({ scope: "all" })} />
           All S&amp;P 500 companies (~503 tickers)
@@ -176,34 +190,35 @@ export function ImportOptionsFields({ value, onChange, name = "import-scope" }) 
           </select>
         </div>
       </div>
-      <div style={{ display: "flex", gap: 16, margin: "8px 0" }}>
-        <label style={checkLabel}>
-          <input type="checkbox" checked={value.import_history} onChange={(e) => set({ import_history: e.target.checked })} />
-          Import history
-        </label>
-        <label style={checkLabel}>
-          <input type="checkbox" checked={value.import_statistics} onChange={(e) => set({ import_statistics: e.target.checked })} />
-          Import statistics
-        </label>
-        <label style={checkLabel}>
-          <input
-            type="checkbox"
-            checked={value.import_calculated_stats}
-            onChange={(e) => set({ import_calculated_stats: e.target.checked })}
-          />
-          Import calculated statistics
-        </label>
+      <div className="import-fields-title" style={{ borderTop: "1px solid var(--color-divider)", paddingTop: 12 }}>Import options</div>
+      <div className="option-grid">
+        <OptionCheck
+          checked={value.import_history}
+          onChange={(v) => set({ import_history: v })}
+          label="Import history"
+          help="Daily closing prices since the chosen year"
+        />
+        <OptionCheck
+          checked={value.import_statistics}
+          onChange={(v) => set({ import_statistics: v })}
+          label="Import statistics"
+          help="Price, market cap, valuation ratios, margins"
+        />
+        <OptionCheck
+          checked={value.import_calculated_stats}
+          onChange={(v) => set({ import_calculated_stats: v })}
+          label="Import calculated statistics"
+          help="1-year change and volatility from the prices"
+        />
       </div>
       {value.scope === "all" ? (
-        <label style={{ ...checkLabel, margin: "8px 0" }}>
-          <input
-            type="checkbox"
-            checked={value.only_missing}
-            disabled={!value.import_history}
-            onChange={(e) => set({ only_missing: e.target.checked })}
-          />
-          Only import what's missing (skip tickers that are already fully up to date)
-        </label>
+        <OptionCheck
+          checked={value.only_missing}
+          disabled={!value.import_history}
+          onChange={(v) => set({ only_missing: v })}
+          label="Only import what's missing"
+          help="Skip tickers already up to date with the last trading day"
+        />
       ) : (
         <p className="muted" style={{ margin: "8px 0" }}>Specific tickers are always re-fetched and will overwrite any existing data for them.</p>
       )}
@@ -239,8 +254,8 @@ export function ImportPanel() {
   return (
     <div>
       <ImportOptionsFields value={options} onChange={setOptions} />
-      <button className="btn" onClick={submit} disabled={importActive || importOptionsInvalid(options)}>
-        <DownloadIcon /> {importActive ? "Importing..." : "Start Import"}
+      <button className="btn btn-lg" style={{ marginTop: 14 }} onClick={submit} disabled={importActive || importOptionsInvalid(options)}>
+        <DownloadIcon width={18} height={18} /> {importActive ? "Importing..." : "Start Import"}
       </button>
     </div>
   );

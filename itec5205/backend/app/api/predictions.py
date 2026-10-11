@@ -48,6 +48,40 @@ def status(task_id: str):
     return jsonify(payload)
 
 
+@bp.get("/recent")
+def recent_predictions():
+    """Tickers with a stored LSTM and/or ARIMA forecast, most recently
+    trained first (``?limit=``, default 8, max 600), with each model's
+    per-horizon changes -- for the Price Forecasts page's history list."""
+    limit = max(1, min(int(request.args.get("limit", 8)), 600))
+    rows = list(get_db().aql.execute(
+        """
+        LET tickers = UNION_DISTINCT(
+            (FOR p IN price_predictions RETURN p._key),
+            (FOR a IN arima_predictions RETURN a._key)
+        )
+        FOR t IN tickers
+            LET l = DOCUMENT("price_predictions", t)
+            LET a = DOCUMENT("arima_predictions", t)
+            LET trained_at = MAX([l.trained_at, a.trained_at])
+            SORT trained_at DESC
+            LIMIT @n
+            RETURN {
+                ticker: t,
+                name: DOCUMENT("companies", t).name,
+                trained_at,
+                lstm: l == null ? null : {trained_at: l.trained_at, horizons: l.horizons},
+                arima: a == null ? null : {trained_at: a.trained_at, horizons: a.horizons}
+            }
+        """,
+        bind_vars={"n": limit},
+    ))
+    total = next(iter(get_db().aql.execute(
+        "RETURN LENGTH(UNION_DISTINCT((FOR p IN price_predictions RETURN p._key), (FOR a IN arima_predictions RETURN a._key)))"
+    )))
+    return jsonify({"predictions": rows, "total": total})
+
+
 @bp.get("/<ticker>")
 def get_prediction(ticker: str):
     db = get_db()
