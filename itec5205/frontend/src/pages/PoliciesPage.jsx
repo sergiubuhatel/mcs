@@ -306,7 +306,7 @@ export default function PoliciesPage() {
         <table style={{ tableLayout: "fixed", width: "100%" }}>
           <colgroup>
             {visibleColumns.map((c) => <col key={c.key} style={c.width ? { width: c.width } : undefined} />)}
-            <col style={{ width: 130 }} />
+            <col style={{ width: 70 }} />
           </colgroup>
           <thead>
             <tr>
@@ -334,14 +334,12 @@ export default function PoliciesPage() {
                   ))}
                   <td>
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center" }}>
-                      <button className="btn secondary btn-sm" onClick={() => setActiveId(p._key)} title="Show the last run and run history">
-                        <EyeIcon width={14} height={14} /> View
-                      </button>
                       <ActionMenu
                         extraItems={[
                           active
                             ? { label: "Cancel run", icon: StopIcon, onClick: () => cancel(p) }
                             : { label: "Run", icon: PlayIcon, onClick: () => run(p) },
+                          { label: "View", icon: EyeIcon, onClick: () => setActiveId(p._key) },
                         ]}
                         onEdit={() => open(p)}
                         onDuplicate={() => duplicate(p)}
