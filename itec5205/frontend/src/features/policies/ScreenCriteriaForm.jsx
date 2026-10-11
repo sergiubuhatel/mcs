@@ -54,8 +54,8 @@ export default function ScreenCriteriaForm({ filters, onChange }) {
         <span className="muted">
           {matches == null ? "Counting matches..." : <>Matches <strong>{matches}</strong> companies today</>}
         </span>
-        <button type="button" className="btn secondary" onClick={copyFromScreener} title="Use the search currently filled in on Fundamental Analysis">
-          Copy current Fundamental Analysis search
+        <button type="button" className="btn secondary" onClick={copyFromScreener} title="Use the search currently filled in on the Stock Screener">
+          Copy current Stock Screener search
         </button>
       </div>
       <div className="filters-grid">

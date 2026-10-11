@@ -142,7 +142,7 @@ export const importOptionsInvalid = (v) =>
 
 const checkLabel = { display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" };
 
-/** The import option fields, shared by the Data page and Data Criteria. */
+/** The import option fields, shared by the Market Data page and Data Criteria. */
 export function ImportOptionsFields({ value, onChange, name = "import-scope" }) {
   const set = (patch) => onChange({ ...value, ...patch });
   return (
@@ -216,7 +216,7 @@ export function ImportOptionsFields({ value, onChange, name = "import-scope" }) 
   );
 }
 
-/** The import form (Data page). Progress, Stop and Resume are in ImportStatus. */
+/** The import form (Market Data page). Progress, Stop and Resume are in ImportStatus. */
 export function ImportPanel() {
   const dispatch = useDispatch();
   const importActive = useSelector((s) => ["starting", "running", "stopping"].includes(s.dataImport.status));

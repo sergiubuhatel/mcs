@@ -9,7 +9,7 @@ export const KINDS = {
     optional: true, // a policy without one skips the import and uses the stored data
     blurb: "The Yahoo Finance import a policy can run first, so it screens and forecasts on fresh data.",
   },
-  screen: { title: "Screen Criteria", singular: "screen criteria", blurb: "The Fundamental Analysis search: which companies a policy starts from." },
+  screen: { title: "Screening Criteria", singular: "screening criteria", blurb: "The Stock Screener search: which companies a policy starts from." },
   prediction: {
     title: "Prediction Criteria",
     singular: "prediction criteria",

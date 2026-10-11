@@ -47,27 +47,34 @@ The database setup runs automatically (`init-db`).
 
 ### First use: load the data
 
-The database starts empty. Open **Data** (first in the sidebar, above
-Fundamental Analysis) and click **Start Import** to load the S&P 500 (~500
+The database starts empty. Open **Market Data** (sidebar, Data section)
+and click **Start Import** to load the S&P 500 (~500
 companies, price history + fundamentals from Yahoo Finance; it takes several
-minutes — progress shows on the Data page and in the bottom bar on every
+minutes — progress shows on the Market Data page and in the bottom bar on every
 other page, and Stop/Resume work). Re-running the import refreshes the data.
 
 ## Policies (`/policies`) and Criteria (`/criteria/...`)
 
-A **policy** = an optional *Data Criteria* + one *Screen Criteria* + one
+The sidebar follows the order a policy runs: **Data** (Market Data, Data
+Criteria), **Screening** (Stock Screener, Screening Criteria, Stock Pools),
+**Prediction** (Price Forecasts, Prediction Criteria), **Portfolio** (My
+Portfolios, Portfolio Criteria), then **Policies**, which runs them all (its
+badge shows how many policies are running). Pages with the sliders icon hold
+saved criteria.
+
+A **policy** = an optional *Data Criteria* + one *Screening Criteria* + one
 *Prediction Criteria* + one *Portfolio Criteria* (required fields are marked
-with a red star). Each criteria is saved on its own (sidebar ->
-**Criteria**) so several policies can share them. Every grid has a **+**
+with a red star). Each criteria is saved on its own page, in its
+step of the sidebar, so several policies can share them. Every grid has a **+**
 button (new) and a **⋮** menu per row (Edit, Duplicate, Delete; policies also
 **Run** / **Cancel run**). A criteria used by a policy can't be deleted.
 
-- **Data Criteria** (optional) — the same options as the **Data** page's
+- **Data Criteria** (optional) — the same options as the **Market Data** page's
   import: all S&P 500 or specific tickers, how many years of history, what to
   import, and "only what's missing". A policy with one imports first; a
   policy without one uses the data already stored.
-- **Screen Criteria** — the same fields as Fundamental Analysis. The editor
-  shows how many companies match today; *Copy current Fundamental Analysis
+- **Screening Criteria** — the same fields as the Stock Screener. The editor
+  shows how many companies match today; *Copy current Stock Screener
   search* takes over whatever is filled in on the screener.
 - **Prediction Criteria** — the points in time to predict (any list: 3 days,
   1 week, 1, 2, 3, 4 months, ...; in business days: week = 5, month = 21,

@@ -141,6 +141,34 @@ tr:hover td { background: var(--color-bg-hover); }
 /* Mandatory-field marker; a lighter red on dark backgrounds stays readable. */
 .req { color: #dc2626; margin-left: 3px; font-weight: 600; }
 .dark .req { color: #f87171; }
+
+/* Sidebar: one group per workflow step -- a heading with a colored icon,
+   its pages indented below, dividers between groups. The active page gets
+   the solid button blue (same in both themes, like .btn). */
+.nav-group + .nav-group { border-top: 1px solid var(--color-divider); margin-top: 6px; padding-top: 6px; }
+.nav-section {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px 4px;
+  font-size: 0.95rem; font-weight: 700; color: var(--color-text-primary);
+}
+.nav-section svg { width: 18px; height: 18px; flex-shrink: 0; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px 7px 38px; border-radius: 7px;
+  font-size: 0.875rem; font-weight: 500; color: var(--color-text-primary); text-decoration: none;
+}
+.nav-item svg { color: var(--color-text-secondary); flex-shrink: 0; }
+.nav-item:hover { background: var(--color-bg-hover); text-decoration: none; }
+.nav-item.collapsed { justify-content: center; padding: 8px; }
+.nav-item.active { background: var(--btn-accent); color: #ffffff; font-weight: 600; }
+.nav-item.active svg { color: #ffffff; }
+.nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.nav-count {
+  margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  display: inline-grid; place-items: center; font-size: 0.7rem; font-weight: 600;
+  background: var(--btn-accent); color: #ffffff;
+}
+.nav-item.active .nav-count { background: #ffffff; color: var(--btn-accent); }
+.nav-item.collapsed .nav-count { position: absolute; margin: 0; transform: translate(11px, -9px); min-width: 15px; height: 15px; font-size: 0.6rem; }
+.nav-item.collapsed { position: relative; }
 .muted { color: var(--color-text-secondary); font-size: 0.82rem; }
 .progress-bar { height: 8px; background: var(--color-bg-tertiary); border-radius: 4px; overflow: hidden; margin: 8px 0; }
 .progress-bar > div { height: 100%; background: var(--color-text-accent); transition: width 0.2s; }

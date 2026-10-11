@@ -43,7 +43,7 @@ const COLUMNS = [
     ),
   },
   { key: "data", label: "Data Criteria", width: 140, render: criteriaCell("data") },
-  { key: "screen", label: "Screen Criteria", width: 170, render: criteriaCell("screen") },
+  { key: "screen", label: "Screening Criteria", width: 170, render: criteriaCell("screen") },
   { key: "prediction", label: "Prediction Criteria", width: 170, render: criteriaCell("prediction") },
   { key: "portfolio", label: "Portfolio Criteria", width: 170, render: criteriaCell("portfolio") },
   {

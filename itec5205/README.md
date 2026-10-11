@@ -44,7 +44,7 @@ proxying `/api` to the backend). Check it's ready with
 doesn't load, run `docker compose ps` — every service should be `Up`
 (`init-db` shows `Exited (0)`, which is expected).
 
-On first use the database is empty: open **Data** in the sidebar and click
+On first use the database is empty: open **Market Data** in the sidebar and click
 **Start Import** to load S&P 500 data, then see the User's Guide for the Screener / Pools /
 Portfolios / Prediction pages.
 
