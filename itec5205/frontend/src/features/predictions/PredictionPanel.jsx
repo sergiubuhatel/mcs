@@ -3,11 +3,12 @@ import { useDispatch, useSelector } from "react-redux";
 import { fetchExistingRequested, trainRequested } from "./predictionsSlice";
 import { TrendChartIcon } from "../../layout/icons";
 import { HorizonTable, NextDaysTable, money } from "./ForecastTables";
+import { getSettings } from "../settings/settings";
 
 export default function PredictionPanel({ ticker, lookbackDays }) {
   const dispatch = useDispatch();
   const { status, progress, result, error } = useSelector((s) => s.predictions);
-  const [epochs, setEpochs] = useState(100);
+  const [epochs, setEpochs] = useState(() => getSettings().forecast.lstm_epochs);
 
   useEffect(() => {
     dispatch(fetchExistingRequested(ticker));

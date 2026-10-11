@@ -4,16 +4,29 @@ import { clearFilters, fetchIndustriesRequested, fetchRequested, fetchSectorsReq
 import BackButton from "../../layout/BackButton";
 import { ChevronDownIcon, CloseIcon, EraserIcon, SearchIcon, SlidersIcon } from "../../layout/icons";
 import { FILTER_GROUPS, UNIT_LABELS, UNIT_MULTIPLIERS, activeFilters } from "./filterFields";
+import { getSettings } from "../settings/settings";
 
 const EMPTY_UNIT_VALUES = { market_cap: ["", ""], free_cash_flow: ["", ""] };
+const defaultUnits = () => ({ market_cap: getSettings().screening.market_cap_unit, free_cash_flow: getSettings().screening.fcf_unit });
 const COLLAPSED_KEY = "screenerCollapsedGroups";
 const filled = (v) => v !== "" && v !== null && v !== undefined;
 
 export default function CompanyFilters() {
   const dispatch = useDispatch();
   const { filters, sectors, industries } = useSelector((s) => s.companies);
-  const [units, setUnits] = useState({ market_cap: "B", free_cash_flow: "B" });
-  const [rawUnitValues, setRawUnitValues] = useState(EMPTY_UNIT_VALUES);
+  const [units, setUnits] = useState(() => ({ ...defaultUnits(), ...(filters.units || {}) }));
+  // Typed values in the picked unit, rebuilt from the stored-unit ranges
+  // (e.g. a start criteria from the settings, or coming back to the page).
+  const [rawUnitValues, setRawUnitValues] = useState(() =>
+    Object.fromEntries(
+      Object.keys(EMPTY_UNIT_VALUES).map((key) => {
+        const unit = { ...defaultUnits(), ...(filters.units || {}) }[key];
+        const toRaw = (v) => (v === "" || v == null ? "" : Number(v) / UNIT_MULTIPLIERS[key][unit]);
+        const [min, max] = filters.ranges[key] || ["", ""];
+        return [key, [toRaw(min), toRaw(max)]];
+      })
+    )
+  );
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem(COLLAPSED_KEY) || "{}");
@@ -41,7 +54,7 @@ export default function CompanyFilters() {
 
   const clear = () => {
     dispatch(clearFilters());
-    setUnits({ market_cap: "B", free_cash_flow: "B" });
+    setUnits(defaultUnits());
     setRawUnitValues(EMPTY_UNIT_VALUES);
     dispatch(fetchIndustriesRequested()); // sector is cleared -> all industries again
     dispatch(fetchRequested());

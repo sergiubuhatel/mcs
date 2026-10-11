@@ -14,6 +14,7 @@ import {
 } from "../layout/icons";
 import { tooltipProps } from "../utils/chartTheme";
 import { filterByInterval } from "../utils/dateRanges";
+import { getSettings, tickerList } from "../features/settings/settings";
 
 // Trading days per horizon -- matches backend services/horizons.py (1-4M)
 // plus the short 1-day / 1-week points shown in the predicted-prices table.
@@ -27,8 +28,6 @@ const TABLE_HORIZONS = [{ key: "1D", name: "1 day", days: 1 }, { key: "1W", name
 const CHART_RANGES = ["1M", "3M", "6M", "1Y", "ALL"];
 // Same dead band as the signal board (signal_service.DIRECTION_DEADBAND_PCT).
 const DEADBAND_PCT = 0.05;
-const DEFAULT_TICKERS = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"];
-const TRAINING_DAYS = 2515;
 const COLORS = { history: "#2563eb", lstm: "#16a34a", arima: "#a855f7" };
 
 const money = (v) => (v == null ? "–" : `$${Number(v).toFixed(2)}`);
@@ -370,8 +369,8 @@ const TIPS = [
 export default function PredictionPage() {
   const [input, setInput] = useState(() => localStorage.getItem("forecastTicker") || "AAPL");
   const [ticker, setTicker] = useState(input);
-  const [horizonKey, setHorizonKey] = useState("3M");
-  const [range, setRange] = useState("6M");
+  const [horizonKey, setHorizonKey] = useState(() => getSettings().forecast.horizon);
+  const [range, setRange] = useState(() => getSettings().forecast.chart_range);
   const [recentTickers, setRecentTickers] = useState([]);
   const [run, setRun] = useState(null);
   const [runError, setRunError] = useState(null);
@@ -410,7 +409,7 @@ export default function PredictionPage() {
   const forecastNow = () => {
     setRunError(null);
     apiClient
-      .post("/api/forecasts/batch", { tickers: [ticker], lookback_days: TRAINING_DAYS, epochs: 100 })
+      .post("/api/forecasts/batch", { tickers: [ticker], lookback_days: Number(getSettings().forecast.training_days), epochs: Number(getSettings().forecast.lstm_epochs) })
       .then((r) => {
         setRun(r.data);
         poll(r.data.run_id);
@@ -425,7 +424,7 @@ export default function PredictionPage() {
   const lastRow = history[history.length - 1];
   const running = run && !run.finished;
   const done = run?.counts ? run.counts.lstm.done + run.counts.arima.done + run.counts.lstm.failed + run.counts.arima.failed : 0;
-  const quick = (recentTickers.length ? recentTickers.map((r) => r.ticker) : DEFAULT_TICKERS).slice(0, 5);
+  const quick = (recentTickers.length ? recentTickers.map((r) => r.ticker) : tickerList(getSettings().forecast.quick_tickers)).slice(0, 5);
 
   return (
     <div>

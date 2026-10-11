@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { apiClient } from "../../api/client";
 import { TrendChartIcon } from "../../layout/icons";
 import { HORIZONS } from "../predictions/ForecastTables";
+import { getSettings } from "../settings/settings";
 
 const SIGNAL_STYLE = {
   Strong: { background: "#16a34a", color: "#fff" },
@@ -91,8 +92,8 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
   const [board, setBoard] = useState(null);
   const [error, setError] = useState(null);
   const [run, setRun] = useState(null);
-  const [trainingDays, setTrainingDays] = useState(2515);
-  const [epochs, setEpochs] = useState(100);
+  const [trainingDays, setTrainingDays] = useState(() => getSettings().forecast.training_days);
+  const [epochs, setEpochs] = useState(() => getSettings().forecast.lstm_epochs);
   const [refining, setRefining] = useState(false);
   const [refineRule, setRefineRule] = useState("keep_strong"); // "keep_strong" | "drop_weak"
   const [sortBy, setSortBy] = useState(null); // "signal" | "stars" | "rl_weight" | "lstm:1M" ...; null = backend order

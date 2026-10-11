@@ -21,8 +21,8 @@ import {
   TrendChartIcon,
   WorkflowIcon,
 } from "../layout/icons";
+import { getSettings } from "../features/settings/settings";
 
-const PAGE_SIZE = 10;
 const PREVIEW_TICKERS = 5;
 const ellipsis = { display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const fmtDate = (iso) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -155,7 +155,7 @@ export default function PortfoliosPage() {
     },
     { key: "created_at", dir: "desc" }
   );
-  const pager = usePager(sorted, PAGE_SIZE);
+  const pager = usePager(sorted, Number(getSettings().general.list_page_size));
 
   const startRename = (p) => {
     setEditingId(p._key);

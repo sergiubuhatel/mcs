@@ -1,5 +1,6 @@
 import { describeFilters } from "../companies/filterFields";
-import { DEFAULT_IMPORT_OPTIONS } from "../dataImport/ImportControls";
+import { defaultImportOptions } from "../dataImport/ImportControls";
+import { getSettings } from "../settings/settings";
 
 // In run order: a policy imports (data), screens, predicts, then builds the portfolio.
 export const KINDS = {
@@ -31,33 +32,42 @@ export const MODEL_RULES = {
   arima: "ARIMA forecasts up (LSTM not run)",
 };
 
-export const DEFAULTS = {
-  data: { name: "", description: "", ...DEFAULT_IMPORT_OPTIONS },
-  screen: { name: "", description: "", filters: { sector: "", industry: "", q: "", ranges: {}, units: {} } },
-  prediction: {
-    name: "",
-    description: "",
-    horizons: [1, 2, 3, 4].map((value) => ({ value, unit: "months" })),
-    training: { value: 10, unit: "years" },
-    models: "both",
-    min_change_pct: "",
-    epochs: 100,
-    reuse_forecasts: true,
-  },
-  portfolio: {
-    name: "",
-    description: "",
-    mode: "full",
-    trend_window_days: 252,
-    risk_aversion: 1,
-    timesteps: 20000,
-    max_volatility_pct: "",
-    min_return_pct: "",
-    max_weight_range_pct: "",
-    min_companies: "",
-    max_companies: "",
-  },
-};
+/** What a new criteria starts with: the Settings page's defaults. */
+export function criteriaDefaults() {
+  const { forecast: f, portfolio: p, screening: s } = getSettings();
+  return {
+    data: { name: "", description: "", ...defaultImportOptions() },
+    screen: {
+      name: "",
+      description: "",
+      filters: { sector: "", industry: "", q: "", ranges: {}, units: { market_cap: s.market_cap_unit, free_cash_flow: s.fcf_unit } },
+    },
+    prediction: {
+      name: "",
+      description: "",
+      horizons: [1, 2, 3, 4].map((value) => ({ value, unit: "months" })),
+      training: { value: f.training_value, unit: f.training_unit },
+      models: f.models,
+      min_change_pct: f.min_change_pct,
+      epochs: f.lstm_epochs,
+      reuse_forecasts: f.reuse_forecasts,
+    },
+    portfolio: {
+      name: "",
+      description: "",
+      // Criteria support full / subset only (no "strong" -- a policy has no signal board).
+      mode: p.mode === "subset" ? "subset" : "full",
+      trend_window_days: p.trend_window_days,
+      risk_aversion: p.risk_aversion,
+      timesteps: p.timesteps,
+      max_volatility_pct: p.max_volatility_pct,
+      min_return_pct: p.min_return_pct,
+      max_weight_range_pct: p.max_weight_range_pct,
+      min_companies: p.min_companies,
+      max_companies: p.max_companies,
+    },
+  };
+}
 
 const plural = (value, unit) => `${value} ${Number(value) === 1 ? unit.replace(/s$/, "") : unit}`;
 const isSet = (v) => v !== null && v !== undefined && v !== "";

@@ -6,6 +6,7 @@ const initialState = {
     industry: "",
     q: "",
     ranges: {}, // { roe: [min, max], trailing_pe: [min, max], ... }
+    units: {}, // Million/Billion/Trillion picked per unit field (market_cap, free_cash_flow)
     signal: "", // "" = any; else only results rated "Strong" / "Mixed" / "Weak" / "Avoid"
     sortBy: "market_cap",
     sortDir: "desc",
@@ -39,6 +40,7 @@ const companiesSlice = createSlice({
         q: initialState.filters.q,
         ranges: initialState.filters.ranges,
         signal: initialState.filters.signal,
+        units: initialState.filters.units,
         offset: 0,
       };
     },

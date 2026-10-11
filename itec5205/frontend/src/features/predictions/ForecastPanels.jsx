@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { apiClient } from "../../api/client";
 import PredictionPanel from "./PredictionPanel";
 import ArimaPanel from "../arima/ArimaPanel";
+import { getSettings } from "../settings/settings";
 
 // Matches DEFAULT_LOOKBACK_DAYS in backend/app/services/lstm_service.py (~10 trading years).
-const DEFAULT_TRAINING_DAYS = 2515;
 
 function changeColor(value) {
   if (value === null || value === undefined || value === 0) return "var(--color-text-primary)";
@@ -14,7 +14,7 @@ function changeColor(value) {
 // One "Training days" value drives both models, so the LSTM and ARIMA always
 // learn from the same window and are scored on the same held-out days.
 export default function ForecastPanels({ ticker }) {
-  const [trainingDays, setTrainingDays] = useState(DEFAULT_TRAINING_DAYS);
+  const [trainingDays, setTrainingDays] = useState(() => getSettings().forecast.training_days);
   const days = Math.max(0, Number(trainingDays) || 0);
   // Last stored daily close (the price both models forecast from) and its % move vs. the previous day.
   const [lastClose, setLastClose] = useState(null);

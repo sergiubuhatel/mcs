@@ -5,6 +5,7 @@ import { trainRequested, reset } from "./rlSlice";
 import { fetchRequested as fetchPortfoliosRequested } from "../portfolios/portfoliosSlice";
 import { PieChartIcon } from "../../layout/icons";
 import Req from "../../components/Req";
+import { getSettings } from "../settings/settings";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -36,15 +37,17 @@ function pctOrNull(v) {
 export default function RLTrainingPanel({ pool }) {
   const dispatch = useDispatch();
   const { status, progress, result, error } = useSelector((s) => s.rl);
-  const [riskAversion, setRiskAversion] = useState(1.0);
-  const [timesteps, setTimesteps] = useState(20000);
-  const [mode, setMode] = useState("full"); // "full" | "subset" | "strong"
-  const [minCompanies, setMinCompanies] = useState(""); // blank = no lower bound (auto)
-  const [maxCompanies, setMaxCompanies] = useState(""); // blank = no upper bound (auto)
-  const [maxVolatility, setMaxVolatility] = useState(""); // annual %, blank = no ceiling
-  const [minReturn, setMinReturn] = useState(""); // realized past-year return %, blank = no floor
-  const [maxWeightRange, setMaxWeightRange] = useState(""); // max(w) - min(w) in % points, blank = no cap
-  const [lookbackDays, setLookbackDays] = useState(252); // trading days the trend line is fit over
+  // Initial values from the Settings page (portfolio defaults).
+  const [defaults] = useState(() => getSettings().portfolio);
+  const [riskAversion, setRiskAversion] = useState(defaults.risk_aversion);
+  const [timesteps, setTimesteps] = useState(defaults.timesteps);
+  const [mode, setMode] = useState(defaults.mode); // "full" | "subset" | "strong"
+  const [minCompanies, setMinCompanies] = useState(defaults.min_companies); // blank = no lower bound (auto)
+  const [maxCompanies, setMaxCompanies] = useState(defaults.max_companies); // blank = no upper bound (auto)
+  const [maxVolatility, setMaxVolatility] = useState(defaults.max_volatility_pct); // annual %, blank = no ceiling
+  const [minReturn, setMinReturn] = useState(defaults.min_return_pct); // realized past-year return %, blank = no floor
+  const [maxWeightRange, setMaxWeightRange] = useState(defaults.max_weight_range_pct); // max(w) - min(w) in % points, blank = no cap
+  const [lookbackDays, setLookbackDays] = useState(defaults.trend_window_days); // trading days the trend line is fit over
 
   const start = () => {
     dispatch(

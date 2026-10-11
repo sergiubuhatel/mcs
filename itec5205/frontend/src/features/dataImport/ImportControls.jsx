@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { importRequested, reset as resetImport, resumeRequested, stopRequested } from "./dataImportSlice";
 import Req from "../../components/Req";
 import { CloseIcon, DatabaseIcon, DownloadIcon, StopIcon } from "../../layout/icons";
+import { getSettings } from "../settings/settings";
 
 function pct(progress) {
   if (!progress || !progress.total) return 0;
@@ -133,6 +134,9 @@ export const DEFAULT_IMPORT_OPTIONS = {
   import_calculated_stats: true,
 };
 
+/** Import options to start from: the Settings page's data defaults. */
+export const defaultImportOptions = () => ({ ...DEFAULT_IMPORT_OPTIONS, ...getSettings().data });
+
 export const parseTickers = (text) =>
   (text || "").split(",").map((t) => t.trim().toUpperCase()).filter(Boolean);
 
@@ -235,7 +239,7 @@ export function ImportOptionsFields({ value, onChange, name = "import-scope" }) 
 export function ImportPanel() {
   const dispatch = useDispatch();
   const importActive = useSelector((s) => ["starting", "running", "stopping"].includes(s.dataImport.status));
-  const [options, setOptions] = useState(DEFAULT_IMPORT_OPTIONS);
+  const [options, setOptions] = useState(defaultImportOptions);
 
   const submit = () => {
     // "Only missing" only makes sense for the full-universe scope; typing

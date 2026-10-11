@@ -1,4 +1,6 @@
 import { useDispatch, useSelector } from "react-redux";
+import { NavLink } from "react-router-dom";
+import { GearIcon } from "./icons";
 import { toggleDarkMode } from "../features/theme/themeSlice";
 
 function SunIcon() {
@@ -61,6 +63,11 @@ export default function TopBar({ sidebarCollapsed, onToggleSidebar }) {
         </div>
       </div>
       </div>
+      <div className="flex shrink-0 items-center gap-3">
+      <NavLink to="/settings" className={({ isActive }) => `theme-toggle ${isActive ? "active" : ""}`} title="Initial values for every page">
+        <span className="theme-toggle-icon"><GearIcon width={18} height={18} /></span>
+        Settings
+      </NavLink>
       <button
         className="theme-toggle"
         onClick={() => dispatch(toggleDarkMode())}
@@ -69,6 +76,7 @@ export default function TopBar({ sidebarCollapsed, onToggleSidebar }) {
         <span className={darkMode ? "theme-toggle-icon sun" : "theme-toggle-icon moon"}>{darkMode ? <SunIcon /> : <MoonIcon />}</span>
         {darkMode ? "Light Mode" : "Dark Mode"}
       </button>
+      </div>
     </header>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getSettings } from "../settings/settings";
 
 export function changeColor(value) {
   if (value === null || value === undefined || value === 0) return "var(--color-text-primary)";
@@ -78,7 +79,7 @@ export function HorizonTable({ result, withInterval = false }) {
 // N daily forecast steps, each colored vs. the day before.
 export function NextDaysTable({ result, withInterval = false }) {
   const [open, setOpen] = useState(false);
-  const [days, setDays] = useState(5);
+  const [days, setDays] = useState(() => getSettings().general.next_days);
   const forecast = result.forecast || [];
   const n = Math.max(1, Math.min(forecast.length, Number(days) || 1));
   const rows = forecast.slice(0, n).map((f, i) => {

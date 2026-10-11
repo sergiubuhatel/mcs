@@ -13,7 +13,7 @@ import { useColumnConfig } from "../utils/useColumnConfig";
 import { ClockIcon, LayersIcon, PlusIcon, SaveIcon, SlidersIcon, StarIcon, WorkflowIcon } from "../layout/icons";
 import { CRITERIA_PAGES } from "../features/policies/criteriaPageInfo";
 import { screenCriteria } from "../features/companies/companiesSaga";
-import { DEFAULTS, KINDS, autoCriteriaName, blankToNull, describeCriteria, nullToBlank, uniqueName } from "../features/policies/criteriaConfig";
+import { KINDS, criteriaDefaults, autoCriteriaName, blankToNull, describeCriteria, nullToBlank, uniqueName } from "../features/policies/criteriaConfig";
 import ScreenCriteriaForm from "../features/policies/ScreenCriteriaForm";
 import PredictionCriteriaForm from "../features/policies/PredictionCriteriaForm";
 import PortfolioCriteriaForm from "../features/policies/PortfolioCriteriaForm";
@@ -25,7 +25,8 @@ const PORTFOLIO_OPTIONAL = ["max_volatility_pct", "min_return_pct", "max_weight_
 
 // Stored document -> editor state (blank strings for "not set").
 function toForm(kind, doc) {
-  const base = { ...DEFAULTS[kind], ...(doc || {}) };
+  const defaults = criteriaDefaults();
+  const base = { ...defaults[kind], ...(doc || {}) };
   if (kind === "data") return { ...base, tickers: Array.isArray(base.tickers) ? base.tickers.join(", ") : base.tickers || "" };
   if (kind === "prediction") return { ...base, min_change_pct: nullToBlank(base.min_change_pct) };
   if (kind === "portfolio") {
@@ -33,7 +34,7 @@ function toForm(kind, doc) {
     for (const k of PORTFOLIO_OPTIONAL) out[k] = nullToBlank(out[k]);
     return out;
   }
-  return { ...base, filters: { ...DEFAULTS.screen.filters, ...(base.filters || {}) } };
+  return { ...base, filters: { ...defaults.screen.filters, ...(base.filters || {}) } };
 }
 
 // Editor state -> API payload.

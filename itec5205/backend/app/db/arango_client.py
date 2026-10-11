@@ -73,6 +73,8 @@ COLLECTIONS = {
     "import_runs": [
         {"type": "persistent", "fields": ["created_at"], "unique": False},
     ],
+    # App-wide initial values (Settings page): one document, `_key` "app".
+    "settings": [],
 }
 
 

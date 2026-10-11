@@ -8,6 +8,7 @@ import { useColumnConfig } from "../utils/useColumnConfig";
 import ColumnPicker from "../components/ColumnPicker";
 import SignalBoard from "../features/signals/SignalBoard";
 import BackButton from "../layout/BackButton";
+import { getSettings } from "../features/settings/settings";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -114,7 +115,7 @@ export default function PortfolioDetailPage() {
   const [portfolio, setPortfolio] = useState(null);
   const [series, setSeries] = useState(null);
   const [error, setError] = useState(null);
-  const [range, setRange] = useState("1Y");
+  const [range, setRange] = useState(() => getSettings().general.chart_range);
   const [sortBy, setSortBy] = useState("weight");
   const [sortDir, setSortDir] = useState("desc");
   const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("portfolioHoldings", HOLDINGS_COLUMNS);

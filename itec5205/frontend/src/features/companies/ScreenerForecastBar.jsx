@@ -5,6 +5,7 @@ import { ArrowDownRightIcon, BarChartIcon, CheckIcon, MixedIcon, TrendDownIcon, 
 import { progressText } from "../signals/SignalBoard";
 import { buildParams, screenCriteria } from "./companiesSaga";
 import { fetchRequested, selectTickers, setFilters, setSignals } from "./companiesSlice";
+import { getSettings } from "../settings/settings";
 
 const RUN_KEY = "screenerForecastRun";
 
@@ -33,8 +34,8 @@ export default function ScreenerForecastBar() {
   const [summary, setSummary] = useState(null);
   const [run, setRun] = useState(null);
   const [error, setError] = useState(null);
-  const [trainingDays, setTrainingDays] = useState(2515);
-  const [epochs, setEpochs] = useState(100);
+  const [trainingDays, setTrainingDays] = useState(() => getSettings().forecast.training_days);
+  const [epochs, setEpochs] = useState(() => getSettings().forecast.lstm_epochs);
   const pollRef = useRef(null);
   const loadedKey = useRef(null);
   const filtersRef = useRef(filters);

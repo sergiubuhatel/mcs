@@ -6,6 +6,7 @@ import ForecastPanels from "../features/predictions/ForecastPanels";
 import { INTERVALS, filterByInterval } from "../utils/dateRanges";
 import { tooltipProps } from "../utils/chartTheme";
 import BackButton from "../layout/BackButton";
+import { getSettings } from "../features/settings/settings";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -48,7 +49,7 @@ export default function CompanyDetailPage() {
   const { ticker } = useParams();
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState(null);
-  const [range, setRange] = useState("1Y");
+  const [range, setRange] = useState(() => getSettings().general.chart_range);
 
   useEffect(() => {
     setDetail(null);

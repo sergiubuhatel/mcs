@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -17,10 +17,21 @@ import PortfolioDetailPage from "./pages/PortfolioDetailPage";
 import PoliciesPage from "./pages/PoliciesPage";
 import CriteriaPage from "./pages/CriteriaPage";
 import DataPage from "./pages/DataPage";
+import SettingsPage from "./pages/SettingsPage";
+import LoadingSpinner from "./components/LoadingSpinner";
+import { loadSettings } from "./features/settings/settings";
 
 export default function App() {
   const darkMode = useSelector((s) => s.theme.darkMode);
   const [collapsed, setCollapsed] = useState(false);
+  const dispatch = useDispatch();
+  // Pages read their initial values from the Settings page, so they render
+  // only once those are loaded (built-in defaults if the backend is down).
+  const [settingsReady, setSettingsReady] = useState(false);
+
+  useEffect(() => {
+    loadSettings(dispatch).finally(() => setSettingsReady(true));
+  }, [dispatch]);
 
   useEffect(() => {
     document.body.classList.toggle("dark", darkMode);
@@ -34,6 +45,9 @@ export default function App() {
         <TopBar sidebarCollapsed={collapsed} onToggleSidebar={() => setCollapsed((c) => !c)} />
 
         <main className="min-h-0 flex-1 overflow-auto p-4">
+          {!settingsReady ? (
+            <LoadingSpinner />
+          ) : (
           <Routes>
             <Route path="/" element={<ScreenerPage />} />
             <Route path="/data" element={<DataPage />} />
@@ -44,9 +58,11 @@ export default function App() {
             <Route path="/prediction" element={<PredictionPage />} />
             <Route path="/companies/:ticker" element={<CompanyDetailPage />} />
             <Route path="/portfolios/:id" element={<PortfolioDetailPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             {/* Home is the Stock Screener; unknown URLs go there instead of a blank page. */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          )}
         </main>
 
         <BottomBar />

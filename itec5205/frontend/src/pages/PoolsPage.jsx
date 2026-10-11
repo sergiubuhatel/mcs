@@ -23,8 +23,8 @@ import {
   TrendChartIcon,
   WorkflowIcon,
 } from "../layout/icons";
+import { getSettings } from "../features/settings/settings";
 
-const PAGE_SIZE = 10;
 const PREVIEW_TICKERS = 5;
 const ellipsis = { display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const fmtDate = (iso) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -132,7 +132,7 @@ export default function PoolsPage() {
     { name: (p) => p.name, size: (p) => p.tickers.length, created_at: (p) => p.created_at, iteration: (p) => p.iteration || 0 },
     { key: "created_at", dir: "desc" }
   );
-  const pager = usePager(sorted, PAGE_SIZE);
+  const pager = usePager(sorted, Number(getSettings().general.list_page_size));
 
   const selectPool = (id) => {
     dispatch(resetRl());

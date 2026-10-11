@@ -13,11 +13,11 @@ import { useColumnConfig } from "../utils/useColumnConfig";
 import { EyeIcon, ListIcon, PlayIcon, PlusIcon, SaveIcon, StopIcon, WorkflowIcon } from "../layout/icons";
 import { KINDS, autoPolicyName, describeCriteria, uniqueName } from "../features/policies/criteriaConfig";
 import PolicyRunPanel, { ACTIVE, KIND_STYLE, RunProgress, RunStatus } from "../features/policies/PolicyRunPanel";
+import { getSettings } from "../features/settings/settings";
 
 const apiError = (err) => err.response?.data?.error || err.message;
 const ellipsis = { display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 
-const PAGE_SIZE = 10;
 const STATUS_FILTERS = { all: "All", never: "Never run", active: "Running", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled" };
 
 function runState(p) {
@@ -234,7 +234,7 @@ export default function PoliciesPage() {
     { name: (p) => p.name, status: (p) => runState(p), run_at: (p) => p.last_run?.created_at },
     { key: "run_at", dir: "desc" }
   );
-  const pager = usePager(sorted, PAGE_SIZE);
+  const pager = usePager(sorted, Number(getSettings().general.list_page_size));
   const setFilter = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
   const filtersOn = query.trim() || filters.status !== "all" || Object.keys(KINDS).some((k) => filters[k]);
   const activePolicy = policies.find((p) => p._key === activeId);
