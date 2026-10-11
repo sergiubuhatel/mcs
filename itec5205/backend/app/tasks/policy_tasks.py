@@ -53,6 +53,15 @@ class PolicyRunError(Exception):
     pass
 
 
+def _snapshot(task_id):
+    """(state, payload) of a child task from ONE result-backend read. Reading
+    ``res.state`` and then ``res.info`` fetches twice, so a task finishing in
+    between pairs a PROGRESS state with the final result dict (which has no
+    "completed") -> KeyError: 'completed'."""
+    meta = celery_app.backend.get_task_meta(task_id)
+    return meta.get("status"), meta.get("result")
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -111,29 +120,29 @@ def run_policy(self, run_id: str):
                 )
                 children.append(imp.id)
                 while True:
-                    res = AsyncResult(imp.id, app=celery_app)
-                    if res.state == "SUCCESS":
+                    state, payload = _snapshot(imp.id)
+                    if state == "SUCCESS":
                         break
-                    if res.state in ("FAILURE", "REVOKED"):
-                        raise PolicyRunError(f"Import failed: {res.info}")
-                    info = res.info if res.state == "PROGRESS" and isinstance(res.info, dict) else {}
-                    if info.get("total"):
+                    if state in ("FAILURE", "REVOKED"):
+                        raise PolicyRunError(f"Import failed: {payload}")
+                    info = payload if state == "PROGRESS" and isinstance(payload, dict) else {}
+                    if info.get("total") and "completed" in info:
                         step("data", info["completed"] / info["total"],
                              f"Importing · {info['completed']}/{info['total']} ({info.get('ticker', '')})",
                              requested=len(wanted), up_to_date=skipped, completed=info["completed"], total=info["total"])
                     else:
                         step("data", 0, f"Waiting for the import worker · {len(to_import)} companies to import",
                              requested=len(wanted), up_to_date=skipped, completed=0, total=len(to_import))
-                check_stop()
-                time.sleep(POLL_SECONDS)
-            r = res.result
-            if r.get("stopped"):
-                raise PolicyRunError("The import was stopped")
-            step(
-                "data", 1, f"Imported {r['succeeded_count']} companies" + (f", {r['failed_count']} failed" if r["failed_count"] else ""),
-                status="done", requested=len(wanted), up_to_date=skipped, imported=r["succeeded_count"],
-                failed=r["failed_count"], completed=r["total"], total=r["total"],
-            )
+                    check_stop()
+                    time.sleep(POLL_SECONDS)
+                r = payload
+                if r.get("stopped"):
+                    raise PolicyRunError("The import was stopped")
+                step(
+                    "data", 1, f"Imported {r['succeeded_count']} companies" + (f", {r['failed_count']} failed" if r["failed_count"] else ""),
+                    status="done", requested=len(wanted), up_to_date=skipped, imported=r["succeeded_count"],
+                    failed=r["failed_count"], completed=r["total"], total=r["total"],
+                )
         check_stop()
 
         # ---- 2. screen -------------------------------------------------
@@ -246,12 +255,12 @@ def run_policy(self, run_id: str):
         )
         children.append(rl.id)
         while True:
-            res = AsyncResult(rl.id, app=celery_app)
-            if res.state == "SUCCESS":
+            state, payload = _snapshot(rl.id)
+            if state == "SUCCESS":
                 break
-            if res.state in ("FAILURE", "REVOKED"):
-                raise PolicyRunError(f"RL training failed: {res.info}")
-            info = res.info if res.state == "PROGRESS" and isinstance(res.info, dict) else {}
+            if state in ("FAILURE", "REVOKED"):
+                raise PolicyRunError(f"RL training failed: {payload}")
+            info = payload if state == "PROGRESS" and isinstance(payload, dict) else {}
             if info.get("stage") == "selecting":
                 step("portfolio", 0.02, "Selecting companies with the portfolio criteria...")
             elif info.get("total"):
@@ -260,7 +269,7 @@ def run_policy(self, run_id: str):
             check_stop()
             time.sleep(POLL_SECONDS)
 
-        result = res.result
+        result = payload
         step(
             "portfolio", 1, f"Portfolio created with {len(result['holdings'])} companies",
             status="done", portfolio_id=result["portfolio_id"], metrics=result["metrics"],
