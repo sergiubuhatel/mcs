@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { trainRequested, reset } from "./rlSlice";
 import { fetchRequested as fetchPortfoliosRequested } from "../portfolios/portfoliosSlice";
 import { PieChartIcon } from "../../layout/icons";
+import Req from "../../components/Req";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -42,6 +43,7 @@ export default function RLTrainingPanel({ pool }) {
   const [maxCompanies, setMaxCompanies] = useState(""); // blank = no upper bound (auto)
   const [maxVolatility, setMaxVolatility] = useState(""); // annual %, blank = no ceiling
   const [minReturn, setMinReturn] = useState(""); // realized past-year return %, blank = no floor
+  const [maxWeightRange, setMaxWeightRange] = useState(""); // max(w) - min(w) in % points, blank = no cap
   const [lookbackDays, setLookbackDays] = useState(252); // trading days the trend line is fit over
 
   const start = () => {
@@ -57,6 +59,7 @@ export default function RLTrainingPanel({ pool }) {
         lookback_days: Number(lookbackDays),
         max_volatility: pctOrNull(maxVolatility),
         min_return: pctOrNull(minReturn),
+        max_weight_range: pctOrNull(maxWeightRange),
       })
     );
   };
@@ -87,15 +90,15 @@ export default function RLTrainingPanel({ pool }) {
 
       <div className="filters-grid">
         <div>
-          <label>Risk aversion (higher = more conservative)</label>
+          <label>Risk aversion (higher = more conservative)<Req /></label>
           <input type="number" step="0.1" value={riskAversion} onChange={(e) => setRiskAversion(e.target.value)} disabled={training} />
         </div>
         <div>
-          <label>Training timesteps</label>
+          <label>Training timesteps<Req /></label>
           <input type="number" step="1000" value={timesteps} onChange={(e) => setTimesteps(e.target.value)} disabled={training} />
         </div>
         <div>
-          <label>Max volatility, annual % (optional)</label>
+          <label>Max volatility, annual %</label>
           <input
             type="number"
             step="1"
@@ -107,13 +110,27 @@ export default function RLTrainingPanel({ pool }) {
           />
         </div>
         <div>
-          <label>Min annual return % (optional)</label>
+          <label>Min annual return %</label>
           <input
             type="number"
             step="1"
             placeholder="no minimum (e.g. 20)"
             value={minReturn}
             onChange={(e) => setMinReturn(e.target.value)}
+            disabled={training}
+          />
+        </div>
+        <div>
+          <label title="max − min weight across the holdings, in percentage points">Max weight range %</label>
+          <input
+            type="number"
+            step="1"
+            min="0"
+            max="100"
+            placeholder="no limit (e.g. 10)"
+            title="max − min weight across the holdings, in percentage points"
+            value={maxWeightRange}
+            onChange={(e) => setMaxWeightRange(e.target.value)}
             disabled={training}
           />
         </div>
@@ -147,7 +164,7 @@ export default function RLTrainingPanel({ pool }) {
         </div>
         {mode === "subset" && (
           <div>
-            <label>Trend window (how far back to check for a straight line)</label>
+            <label>Trend window (how far back to check for a straight line)<Req /></label>
             <select value={lookbackDays} onChange={(e) => setLookbackDays(e.target.value)} disabled={training}>
               <option value={63}>3 months</option>
               <option value={126}>6 months</option>
@@ -242,12 +259,17 @@ export default function RLTrainingPanel({ pool }) {
               Constraints ({[
                 result.constraints.max_volatility != null && `volatility ≤ ${fmtPct(result.constraints.max_volatility)}`,
                 result.constraints.min_return != null && `annual return ≥ ${fmtPct(result.constraints.min_return)}`,
+                result.constraints.max_weight_range != null &&
+                  `weight range ≤ ${fmtPct(result.constraints.max_weight_range)} (now ${fmtPct(result.constraints.weight_range)})`,
               ]
                 .filter(Boolean)
                 .join(", ")}
               ): {result.constraints.satisfied ? "met" : "not met"}
               {result.constraints.blend > 0 &&
                 ` (RL weights blended ${fmtPct(result.constraints.blend)} toward the optimizer allocation)`}
+              {result.constraints.max_weight_range != null &&
+                result.constraints.learned_weight_range > result.constraints.max_weight_range &&
+                ` (the agent's weights ranged ${fmtPct(result.constraints.learned_weight_range)}; moved toward equal weights to fit)`}
               {result.constraints.feasible === false &&
                 ` — no long-only mix of this pool reached them over the past year; best achievable: ${fmtPct(
                   result.constraints.best_achievable?.annual_return

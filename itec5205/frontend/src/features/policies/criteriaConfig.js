@@ -7,7 +7,7 @@ export const KINDS = {
     title: "Data Criteria",
     singular: "data criteria",
     optional: true, // a policy without one skips the import and uses the stored data
-    blurb: "The Yahoo Finance import a policy runs first (optional), so it screens and forecasts on fresh data.",
+    blurb: "The Yahoo Finance import a policy can run first, so it screens and forecasts on fresh data.",
   },
   screen: { title: "Screen Criteria", singular: "screen criteria", blurb: "The Fundamental Analysis search: which companies a policy starts from." },
   prediction: {
@@ -53,6 +53,7 @@ export const DEFAULTS = {
     timesteps: 20000,
     max_volatility_pct: "",
     min_return_pct: "",
+    max_weight_range_pct: "",
     min_companies: "",
     max_companies: "",
   },
@@ -86,6 +87,7 @@ export function autoCriteriaName(kind, c) {
   const parts = [];
   if (isSet(c.max_volatility_pct)) parts.push(`Vol ≤ ${c.max_volatility_pct}%`);
   if (isSet(c.min_return_pct)) parts.push(`Return ≥ ${c.min_return_pct}%`);
+  if (isSet(c.max_weight_range_pct)) parts.push(`Range ≤ ${c.max_weight_range_pct}%`);
   const min = c.min_companies;
   const max = c.max_companies;
   if (isSet(min) && min === max) parts.push(`${min} companies`);
@@ -133,6 +135,7 @@ export function describeCriteria(kind, c) {
   const parts = [c.mode === "subset" ? "Steady upward trend only" : "Whole pool"];
   if (c.max_volatility_pct != null && c.max_volatility_pct !== "") parts.push(`volatility ≤ ${c.max_volatility_pct}%`);
   if (c.min_return_pct != null && c.min_return_pct !== "") parts.push(`annual return ≥ ${c.min_return_pct}%`);
+  if (isSet(c.max_weight_range_pct)) parts.push(`weight range ≤ ${c.max_weight_range_pct} pts`);
   const min = c.min_companies ?? "";
   const max = c.max_companies ?? "";
   if (min !== "" || max !== "") parts.push(`${min === "" ? "auto" : min}–${max === "" ? "auto" : max} companies`);

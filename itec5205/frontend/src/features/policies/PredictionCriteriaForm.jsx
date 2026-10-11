@@ -84,7 +84,7 @@ export default function PredictionCriteriaForm({ value, onChange }) {
           </select>
         </div>
         <div>
-          <label>Min forecast change % at every point (optional)</label>
+          <label>Min forecast change % at every point</label>
           <input type="number" step="0.1" placeholder="any rise" value={value.min_change_pct} onChange={(e) => set({ min_change_pct: e.target.value })} />
         </div>
         <div>

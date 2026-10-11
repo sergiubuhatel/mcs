@@ -390,12 +390,32 @@ def select_universe(
     return {"tickers": optimizer["tickers"], "selection": selection, "optimizer": optimizer}
 
 
+def weight_range(weights) -> float:
+    """Range of an allocation: max(w_i) - min(w_i)."""
+    w = np.asarray(weights, dtype=np.float64)
+    return float(w.max() - w.min()) if len(w) else 0.0
+
+
+def _cap_weight_range(weights: np.ndarray, max_range: float | None) -> tuple[np.ndarray, float]:
+    """Enforce max(w) - min(w) <= max_range by blending toward equal weights
+    with the smallest share a that does it: the range scales by (1 - a), so
+    a = 1 - max_range / range. Equal weights have range 0, so this is always
+    reachable; the ordering of the weights is kept and they still sum to 1.
+    Returns (weights, a)."""
+    spread = weight_range(weights)
+    if max_range is None or spread <= max_range + 1e-12:
+        return weights, 0.0
+    a = 1.0 - max_range / spread
+    return (1.0 - a) * weights + a * np.full(len(weights), 1.0 / len(weights)), a
+
+
 def _enforce_constraints(
     tickers: list[str],
     weights: np.ndarray,
     max_volatility: float | None,
     min_return: float | None,
     anchor: dict[str, float] | None = None,
+    max_weight_range: float | None = None,
 ) -> tuple[np.ndarray, float]:
     """The env's constraint penalty is soft, so the learned weights can
     still miss the target. If they do, blend them toward an anchor
@@ -404,7 +424,10 @@ def _enforce_constraints(
     using the smallest blend that satisfies the constraints, so the result
     stays as close to the RL policy as possible. Returns (weights, blend)
     where blend is the anchor's share (0 = RL weights unchanged). If no
-    blend is feasible, the closest one is returned."""
+    blend is feasible, the closest one is returned. With `max_weight_range`,
+    every candidate is range-capped first (`_cap_weight_range`), so the
+    volatility/return limits are judged on what will actually be returned."""
+    cap = lambda w: _cap_weight_range(w, max_weight_range)[0]  # noqa: E731
     returns_df = returns_past_year(tickers).reindex(columns=tickers).fillna(0.0)
     if returns_df.empty:
         return weights, 0.0
@@ -420,13 +443,13 @@ def _enforce_constraints(
         if optimal.sum() > 0:
             anchors.insert(0, optimal / optimal.sum())
 
-    best_weights, best_blend = weights, 0.0
-    best_key = _candidate_rank(metrics_from_returns(returns, weights), max_volatility, min_return)
+    best_weights, best_blend = cap(weights), 0.0
+    best_key = _candidate_rank(metrics_from_returns(returns, best_weights), max_volatility, min_return)
     for blend in BLEND_STEPS[1:]:
         if not best_key[0]:
             break  # smallest feasible blend found
         for candidate_anchor in anchors:
-            candidate = (1 - blend) * weights + blend * candidate_anchor
+            candidate = cap((1 - blend) * weights + blend * candidate_anchor)
             key = _candidate_rank(metrics_from_returns(returns, candidate), max_volatility, min_return)
             if key < best_key:
                 best_weights, best_blend, best_key = candidate, blend, key
@@ -443,7 +466,10 @@ def train_and_recommend(
     max_volatility: float | None = None,
     min_return: float | None = None,
     anchor: dict[str, float] | None = None,
+    max_weight_range: float | None = None,
 ) -> dict:
+    """`max_weight_range` (optional, fraction): cap on max(w) - min(w) across
+    the holdings, applied to the learned weights (see `_cap_weight_range`)."""
     tickers = universe or default_universe()
     if len(tickers) < 2:
         raise ValueError("Need at least 2 tickers to build a portfolio")
@@ -478,17 +504,26 @@ def train_and_recommend(
 
     constrained = max_volatility is not None or min_return is not None
     blend = 0.0
+    learned_range = weight_range(weights)
     if constrained:
-        weights, blend = _enforce_constraints(used_tickers, weights, max_volatility, min_return, anchor)
+        weights, blend = _enforce_constraints(
+            used_tickers, weights, max_volatility, min_return, anchor, max_weight_range=max_weight_range
+        )
+    weights, _ = _cap_weight_range(weights, max_weight_range)  # no-op when already within the range
 
     holdings = [{"ticker": ticker, "weight": float(weight)} for ticker, weight in zip(used_tickers, weights)]
     metrics = compute_metrics(holdings)
     constraints = None
-    if constrained:
+    if constrained or max_weight_range is not None:
+        final_range = weight_range(weights)
+        range_ok = max_weight_range is None or final_range <= max_weight_range + 1e-9
         constraints = {
             "max_volatility": max_volatility,
             "min_return": min_return,
-            "satisfied": constraint_violation(metrics, max_volatility, min_return) == 0,
+            "max_weight_range": max_weight_range,
+            "weight_range": round(final_range, 4),
+            "learned_weight_range": round(learned_range, 4),
+            "satisfied": constraint_violation(metrics, max_volatility, min_return) == 0 and range_ok,
             "blend": round(blend, 2),
         }
 
@@ -511,5 +546,6 @@ def train_and_recommend(
             "window": window,
             "max_volatility": max_volatility,
             "min_return": min_return,
+            "max_weight_range": max_weight_range,
         },
     }

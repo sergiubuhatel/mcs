@@ -27,10 +27,12 @@ def train_rl_portfolio(
     max_volatility: float | None = None,
     min_return: float | None = None,
     pool_id: str | None = None,
+    max_weight_range: float | None = None,
 ):
     """The optimizer decides how many companies to keep, within the optional
     [min_companies, max_companies] bounds (see `rl_service.select_universe`). `max_volatility` / `min_return`
-    are annualized fractions (0.25 = 25%)."""
+    are annualized fractions (0.25 = 25%); `max_weight_range` caps
+    max(weight) - min(weight) across the holdings (0.10 = 10 points)."""
     room = self.request.id
     requested = universe or default_universe()
 
@@ -49,7 +51,7 @@ def train_rl_portfolio(
     result = train_and_recommend(
         universe=universe, risk_aversion=risk_aversion, timesteps=timesteps, window=window,
         progress_room=room, progress_task=self, max_volatility=max_volatility, min_return=min_return,
-        anchor=optimizer["weights"] if optimizer else None,
+        anchor=optimizer["weights"] if optimizer else None, max_weight_range=max_weight_range,
     )
     constraints = result["constraints"]
     excluded = excluded_for_history(requested, result["tickers"], mode, optimizer is not None, lookback_days)
@@ -71,6 +73,8 @@ def train_rl_portfolio(
         notes += f", max volatility={max_volatility:.0%}"
     if min_return is not None:
         notes += f", min annual return={min_return:.0%}"
+    if max_weight_range is not None:
+        notes += f", max weight range={max_weight_range:.1%}"
     if excluded:
         notes += ", left out for too little price history: " + ", ".join(
             f"{row['ticker']} ({row['days']} days)" for row in excluded

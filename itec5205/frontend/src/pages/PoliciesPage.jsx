@@ -298,7 +298,7 @@ export default function PoliciesPage() {
               {editor.autoName && <span className="muted">Named automatically from the criteria — type to rename.</span>}
             </div>
             <div>
-              <label>Description (optional)</label>
+              <label>Description</label>
               <input value={editor.form.description} onChange={(e) => setField("description", e.target.value)} />
             </div>
             {Object.entries(KINDS).map(([kind, meta]) => {
@@ -307,14 +307,14 @@ export default function PoliciesPage() {
               const chosen = criteria[kind][editor.form[field]];
               return (
                 <div key={kind}>
-                  <label>{meta.title}{meta.optional ? " (optional)" : <Req />}</label>
+                  <label>{meta.title}{!meta.optional && <Req />}</label>
                   <select value={editor.form[field]} onChange={(e) => setField(field, e.target.value)}>
                     <option value="">{meta.optional ? "— none (don't import, use the stored data) —" : "— pick one —"}</option>
                     {options.map((c) => <option key={c._key} value={c._key}>{c.name}</option>)}
                   </select>
                   <p className="muted" style={{ margin: "3px 0 0" }}>
                     {chosen ? describeCriteria(kind, chosen) : meta.optional ? (
-                      "Optional — without it, the run screens and forecasts on the data already imported."
+                      "Without one, the run screens and forecasts on the data already imported."
                     ) : options.length === 0 ? (
                       <>None yet — <Link to={`/criteria/${kind}`}>create {meta.singular}</Link>.</>
                     ) : meta.blurb}

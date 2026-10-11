@@ -78,7 +78,7 @@ button (new) and a **⋮** menu per row (Edit, Duplicate, Delete; policies also
   same data (much faster re-runs).
 - **Portfolio Criteria** — the options of *Generate low-risk / high-return
   portfolio with RL*: whole pool or steady-trend only, max volatility, min
-  annual return, min/max companies, risk aversion, timesteps.
+  annual return, max weight range, min/max companies, risk aversion, timesteps.
 
 **Running** a policy (⋮ -> Run): (1) import with the data criteria (skipped
 without one, or when everything is already up to date), (2) search with the
@@ -126,7 +126,10 @@ Click a pool's name to open three panels for it.
 ### RL portfolio
 
 Set the limits you need (blank = none): max volatility, min annual return,
-min/max number of companies, risk aversion, timesteps. **Train** — progress
+**max weight range** (max − min weight across the holdings, in percentage
+points: 10 = no two companies more than 10 points apart; the agent's weights
+are moved toward equal weights just enough to fit), min/max number of
+companies, risk aversion, timesteps. **Train** — progress
 streams live, and the result is saved on the Portfolios page and feeds the
 RL star on the signal board.
 

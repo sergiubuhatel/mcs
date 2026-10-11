@@ -240,6 +240,7 @@ def run_policy(self, run_id: str):
             lookback_days=port_c["trend_window_days"],
             max_volatility=pct(port_c["max_volatility_pct"]),
             min_return=pct(port_c["min_return_pct"]),
+            max_weight_range=pct(port_c.get("max_weight_range_pct")),
             pool_id=pool["_key"],
         )
         children.append(rl.id)

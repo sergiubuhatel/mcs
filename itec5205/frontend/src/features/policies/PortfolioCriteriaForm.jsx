@@ -21,12 +21,24 @@ export default function PortfolioCriteriaForm({ value, onChange }) {
       </div>
       <div className="filters-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
         <div>
-          <label>Max volatility, annual % (optional)</label>
+          <label>Max volatility, annual %</label>
           <input type="number" min="0" placeholder="no limit (e.g. 25)" value={value.max_volatility_pct} onChange={(e) => set({ max_volatility_pct: e.target.value })} />
         </div>
         <div>
-          <label>Min annual return % (optional)</label>
+          <label>Min annual return %</label>
           <input type="number" placeholder="no minimum (e.g. 20)" value={value.min_return_pct} onChange={(e) => set({ min_return_pct: e.target.value })} />
+        </div>
+        <div>
+          <label title="max − min weight across the holdings, in percentage points">Max weight range %</label>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            placeholder="no limit (e.g. 10)"
+            title="max − min weight across the holdings, in percentage points"
+            value={value.max_weight_range_pct}
+            onChange={(e) => set({ max_weight_range_pct: e.target.value })}
+          />
         </div>
         <div>
           <label>Min companies (blank = auto)</label>
@@ -60,7 +72,8 @@ export default function PortfolioCriteriaForm({ value, onChange }) {
       {countsInvalid && <p className="error-text" style={{ margin: 0 }}>Min companies can't be greater than max companies.</p>}
       <p className="muted" style={{ margin: 0 }}>
         With any limit or company count set, a mean-variance optimizer picks the companies first; the PPO agent then trains on
-        them, and its weights are blended toward the optimizer's allocation if they miss a limit.
+        them, and its weights are blended toward the optimizer's allocation if they miss a limit. Max weight range caps
+        max(weight) − min(weight), e.g. 10 = no two holdings more than 10 percentage points apart.
       </p>
     </div>
   );

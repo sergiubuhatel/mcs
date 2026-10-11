@@ -18,6 +18,8 @@ import PortfolioCriteriaForm from "../features/policies/PortfolioCriteriaForm";
 import { ImportOptionsFields, importOptionsInvalid, parseTickers } from "../features/dataImport/ImportControls";
 
 const apiError = (err) => err.response?.data?.error || err.message;
+// Portfolio criteria fields where blank = no limit / auto.
+const PORTFOLIO_OPTIONAL = ["max_volatility_pct", "min_return_pct", "max_weight_range_pct", "min_companies", "max_companies"];
 
 // Stored document -> editor state (blank strings for "not set").
 function toForm(kind, doc) {
@@ -26,7 +28,7 @@ function toForm(kind, doc) {
   if (kind === "prediction") return { ...base, min_change_pct: nullToBlank(base.min_change_pct) };
   if (kind === "portfolio") {
     const out = { ...base };
-    for (const k of ["max_volatility_pct", "min_return_pct", "min_companies", "max_companies"]) out[k] = nullToBlank(out[k]);
+    for (const k of PORTFOLIO_OPTIONAL) out[k] = nullToBlank(out[k]);
     return out;
   }
   return { ...base, filters: { ...DEFAULTS.screen.filters, ...(base.filters || {}) } };
@@ -52,7 +54,7 @@ function toPayload(kind, form) {
     };
   }
   const out = { ...common, mode: form.mode, trend_window_days: Number(form.trend_window_days), risk_aversion: form.risk_aversion, timesteps: form.timesteps };
-  for (const k of ["max_volatility_pct", "min_return_pct", "min_companies", "max_companies"]) out[k] = blankToNull(form[k]);
+  for (const k of PORTFOLIO_OPTIONAL) out[k] = blankToNull(form[k]);
   return out;
 }
 
@@ -261,7 +263,7 @@ function CriteriaGrid({ kind }) {
                 {editor.autoName && <span className="muted">Named automatically from the settings — type to rename.</span>}
               </div>
               <div style={{ gridColumn: "span 2" }}>
-                <label>Description (optional)</label>
+                <label>Description</label>
                 <input value={editor.form.description} onChange={(e) => setEditor((ed) => ({ ...ed, form: { ...ed.form, description: e.target.value } }))} />
               </div>
             </div>

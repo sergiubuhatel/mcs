@@ -156,6 +156,8 @@ def _normalize_portfolio(body: dict) -> dict:
         "timesteps": _num(body.get("timesteps"), int, 1000, field="timesteps") or 20_000,
         "max_volatility_pct": _num(body.get("max_volatility_pct"), float, 0, field="max volatility"),
         "min_return_pct": _num(body.get("min_return_pct"), field="min annual return"),
+        # Optional cap on max(weight) - min(weight), in percentage points.
+        "max_weight_range_pct": _num(body.get("max_weight_range_pct"), float, 0, 100, field="max weight range"),
         "min_companies": min_c,
         "max_companies": max_c,
     }
