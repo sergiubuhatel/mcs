@@ -15,6 +15,7 @@ import {
   WorkflowIcon,
   XCircleIcon,
 } from "../../layout/icons";
+import { getSettings } from "../settings/settings";
 
 export const ACTIVE = ["queued", "running"];
 
@@ -174,7 +175,7 @@ export default function PolicyRunPanel({ policy, refreshKey, onClose, onChanged 
       apiClient.get(`/api/policies/${policy._key}/runs`).then((r) => {
         if (!alive) return;
         setRuns(r.data.runs);
-        if (r.data.runs.some((x) => ACTIVE.includes(x.status))) timer.current = setTimeout(load, 2000);
+        if (r.data.runs.some((x) => ACTIVE.includes(x.status))) timer.current = setTimeout(load, getSettings().automation.refresh_seconds * 1000);
         else onChanged?.();
       });
     load();

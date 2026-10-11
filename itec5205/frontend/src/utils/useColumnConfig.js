@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getSettings } from "../features/settings/settings";
 
 // Manages a grid's column visibility + order, persisted per-viewer in
 // localStorage. `defaultColumns` (the grid's own ordered column defs) is
@@ -19,9 +20,11 @@ export function useColumnConfig(storageKey, defaultColumns) {
   // computed once (order/hidden below both need it) so a column newly
   // added to the grid's defs picks up its own `hiddenByDefault` instead of
   // silently becoming visible just because it's absent from a stale save.
+  // Settings → Automation: "Remember grid columns" off = always the defaults.
+  const remember = getSettings().automation.remember_columns;
   let savedOrderRaw = null;
   try {
-    savedOrderRaw = JSON.parse(localStorage.getItem(orderKey) || "null");
+    savedOrderRaw = remember ? JSON.parse(localStorage.getItem(orderKey) || "null") : null;
   } catch {
     savedOrderRaw = null;
   }
@@ -46,7 +49,7 @@ export function useColumnConfig(storageKey, defaultColumns) {
 
   const [hidden, setHidden] = useState(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(hiddenKey) || "null");
+      const saved = remember ? JSON.parse(localStorage.getItem(hiddenKey) || "null") : null;
       if (Array.isArray(saved)) {
         const known = saved.filter((k) => defaultOrder.includes(k));
         const newlyHidden = newlySeenKeys.filter((k) => defaultHiddenByKey[k]);
@@ -59,20 +62,22 @@ export function useColumnConfig(storageKey, defaultColumns) {
   });
 
   useEffect(() => {
+    if (!remember) return;
     try {
       localStorage.setItem(orderKey, JSON.stringify(order));
     } catch {
       // ignore -- just won't persist across reloads
     }
-  }, [orderKey, order]);
+  }, [orderKey, order, remember]);
 
   useEffect(() => {
+    if (!remember) return;
     try {
       localStorage.setItem(hiddenKey, JSON.stringify(hidden));
     } catch {
       // ignore
     }
-  }, [hiddenKey, hidden]);
+  }, [hiddenKey, hidden, remember]);
 
   const byKey = Object.fromEntries(reorderableColumns.map((c) => [c.key, c]));
   const orderedReorderable = order.map((k) => byKey[k]).filter(Boolean);

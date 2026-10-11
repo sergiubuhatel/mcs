@@ -39,6 +39,13 @@ export const DEFAULT_SETTINGS = {
     min_change_pct: "",
     reuse_forecasts: true,
   },
+  automation: {
+    refresh_seconds: 2, // Policies grid + run panel polling while a run is active
+    open_run_panel: true, // show the run details after clicking Run
+    remember_screener: false, // reopen the screener with the last applied search
+    remember_columns: true, // keep grid column order / visibility in this browser
+    show_tips: true, // About / Quick tips panels on the list pages
+  },
   portfolio: {
     mode: "full",
     risk_aversion: 1,
@@ -75,8 +82,35 @@ function setCurrent(raw) {
   current = mergeSettings(saved);
 }
 
-// Screener grid + search start state from the screening settings.
+const SCREENER_KEY = "screenerSearch";
+
+/** Called after every applied screener search (companiesSaga). */
+export function rememberScreener(filters) {
+  if (!current.automation.remember_screener) return;
+  try {
+    localStorage.setItem(SCREENER_KEY, JSON.stringify({ ...filters, offset: 0 }));
+  } catch {
+    // storage full / blocked: just don't remember
+  }
+}
+
+function rememberedScreener() {
+  if (!current.automation.remember_screener) return null;
+  try {
+    return JSON.parse(localStorage.getItem(SCREENER_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+// Screener grid + search start state: the remembered search if that's on,
+// else the screening settings (page size, sort, optional start criteria).
 async function applyScreening(dispatch, s) {
+  const remembered = rememberedScreener();
+  if (remembered) {
+    dispatch(setFilters(remembered));
+    return;
+  }
   const filters = { limit: Number(s.page_size), sortBy: s.sort_by, sortDir: s.sort_dir, offset: 0 };
   if (s.start_criteria_id) {
     try {

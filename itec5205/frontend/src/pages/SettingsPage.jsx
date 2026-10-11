@@ -5,6 +5,7 @@ import { apiClient } from "../api/client";
 import { PageHeader } from "../components/PageParts";
 import {
   CandlestickIcon,
+  WorkflowIcon,
   DatabaseIcon,
   GearIcon,
   PieChartIcon,
@@ -119,6 +120,20 @@ const SECTIONS = [
       { key: "max_weight_range_pct", label: "Max weight range", type: "number", blank: "no cap", suffix: "%", help: "Largest minus smallest holding weight (blank = none)." },
       { key: "min_companies", label: "Min companies", type: "number", blank: "auto", min: 1, help: "Fewest holdings (blank = auto)." },
       { key: "max_companies", label: "Max companies", type: "number", blank: "auto", min: 1, help: "Most holdings (blank = auto)." },
+    ],
+  },
+  {
+    key: "automation",
+    title: "Automation Defaults",
+    icon: WorkflowIcon,
+    color: "#14b8a6",
+    text: "Policies and how pages behave between visits.",
+    fields: [
+      { key: "refresh_seconds", label: "Live progress refresh", type: "number", min: 1, max: 60, suffix: "s", help: "How often the Policies grid and run details refresh while a policy is running." },
+      { key: "open_run_panel", label: "Open run details after Run", type: "toggle", help: "Show the step-by-step run panel as soon as a policy starts." },
+      { key: "remember_screener", label: "Remember screener search", type: "toggle", help: "Reopen the Stock Screener with the last applied search (instead of the screening defaults) in this browser." },
+      { key: "remember_columns", label: "Remember grid columns", type: "toggle", help: "Keep each grid's column order and hidden columns in this browser; off = always the default columns." },
+      { key: "show_tips", label: "Show help panels", type: "toggle", help: "The About and Quick tips panels at the bottom of the list pages." },
     ],
   },
 ];
@@ -253,7 +268,7 @@ export default function SettingsPage() {
           icon={GearIcon}
           color="#3b82f6"
           title="Settings"
-          description="Initial values every page opens with. Saved for everyone using this app."
+          description="Configure the initial values every page opens with. Saved for everyone using this app."
           actions={
             <div className="toolbar">
               <button className="btn secondary" onClick={() => setForm(structuredClone(DEFAULT_SETTINGS))} title="Fill the form with the built-in defaults (Save to keep them)">
@@ -270,10 +285,9 @@ export default function SettingsPage() {
       <div className="info-banner">
         <span className="info-banner-icon">i</span>
         <span>
-          These settings are the starting values of the Data, Screening, Forecasting, Portfolio and Automation pages
-          and of new criteria. Saved criteria, policies and anything you change on a page are not affected.
-          {customized > 0 ? ` ${customized} value${customized === 1 ? "" : "s"} saved.` : " All values are the built-in defaults."}
-          {" "}A dot marks a value that differs from the built-in default.
+          The initial values of the Data, Screening, Forecasting, Portfolio and Automation pages and of new criteria —
+          saved criteria and policies are not changed.
+          {customized > 0 ? ` ${customized} value${customized === 1 ? "" : "s"} customized` : " All built-in defaults"}; a dot marks a changed value.
         </span>
       </div>
       {error && <p className="error-text" role="alert">{error}</p>}
@@ -283,8 +297,8 @@ export default function SettingsPage() {
           const Icon = section.icon;
           return (
             <section key={section.key} className="card settings-card">
-              <div className="card-header" style={{ alignItems: "flex-start", marginBottom: 10 }}>
-                <div className="icon-badge" style={{ background: `${section.color}22`, color: section.color, width: 42, height: 42 }}>
+              <div className="card-header settings-card-header">
+                <div className="icon-badge" style={{ background: `${section.color}22`, color: section.color, width: 42, height: 42, borderRadius: 11 }}>
                   <Icon width={22} height={22} />
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>

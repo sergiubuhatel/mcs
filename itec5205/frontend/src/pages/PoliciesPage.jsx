@@ -110,7 +110,7 @@ export default function PoliciesPage() {
       .then((r) => {
         setPolicies(r.data.policies);
         // Keep the grid's progress live while any policy is running.
-        if (r.data.policies.some((p) => ACTIVE.includes(p.last_run?.status))) timer.current = setTimeout(loadPolicies, 2000);
+        if (r.data.policies.some((p) => ACTIVE.includes(p.last_run?.status))) timer.current = setTimeout(loadPolicies, getSettings().automation.refresh_seconds * 1000);
       })
       .catch((err) => toast.error(apiError(err)))
       .finally(() => setLoading(false));
@@ -179,7 +179,7 @@ export default function PoliciesPage() {
       .post(`/api/policies/${p._key}/run`)
       .then(() => {
         toast.info(`Running "${p.name}"`);
-        setActiveId(p._key);
+        if (getSettings().automation.open_run_panel) setActiveId(p._key);
         setRunKey((k) => k + 1);
         loadPolicies();
       })

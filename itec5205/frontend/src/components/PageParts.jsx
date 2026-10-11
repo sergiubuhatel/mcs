@@ -4,6 +4,7 @@
 import { useMemo, useState } from "react";
 import BackButton from "../layout/BackButton";
 import { LightbulbIcon, SearchIcon } from "../layout/icons";
+import { getSettings } from "../features/settings/settings";
 
 /** Page title row; `actions` (e.g. New buttons) sit right, just before the back X. */
 export function PageHeader({ icon: Icon, color = "#3b82f6", title, description, breadcrumb, actions }) {
@@ -128,6 +129,7 @@ export function Pager({ pager, total, noun }) {
 
 /** "About" card with feature tiles + "Quick tips" card with numbered steps. */
 export function InfoPanels({ about, tips }) {
+  if (!getSettings().automation.show_tips) return null; // Settings → Automation
   const AboutIcon = about.icon;
   return (
     <div className="info-grid">
@@ -180,6 +182,7 @@ export function InfoPanels({ about, tips }) {
 
 /** One-row "Quick tips" strip: [{title, text}] as numbered steps. */
 export function QuickTipsBar({ title = "Quick tips", subtitle, tips }) {
+  if (!getSettings().automation.show_tips) return null; // Settings → Automation
   return (
     <div className="card tips-bar">
       <div className="card-header" style={{ marginBottom: 0 }}>

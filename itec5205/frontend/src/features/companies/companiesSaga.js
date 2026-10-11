@@ -10,6 +10,7 @@ import {
   fetchStarted,
   fetchSucceeded,
 } from "./companiesSlice";
+import { rememberScreener } from "../settings/settings";
 
 // Fields where the UI takes a plain percentage (e.g. 20 for 20%) but the
 // stored/filtered value is the decimal fraction (0.20) yfinance returns --
@@ -77,10 +78,12 @@ function* handleFetch() {
           .map(([r]) => r);
       }
       yield put(fetchSucceeded({ ...data, total: rows.length, results: rows.slice(filters.offset, filters.offset + filters.limit) }));
+      rememberScreener(filters);
       return;
     }
     const { data } = yield call(apiClient.get, "/api/companies", { params: buildParams(filters) });
     yield put(fetchSucceeded(data));
+    rememberScreener(filters);
   } catch (err) {
     yield put(fetchFailed(err.message));
   }
