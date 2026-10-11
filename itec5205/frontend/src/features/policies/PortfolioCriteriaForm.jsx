@@ -1,3 +1,5 @@
+import Req from "../../components/Req";
+
 // The same options as "Generate low-risk / high-return portfolio with RL"
 // (RLTrainingPanel), saved. Blank limits / counts = no limit / auto.
 export default function PortfolioCriteriaForm({ value, onChange }) {
@@ -35,16 +37,16 @@ export default function PortfolioCriteriaForm({ value, onChange }) {
           <input type="number" min="2" placeholder="auto" value={value.max_companies} onChange={(e) => set({ max_companies: e.target.value })} />
         </div>
         <div>
-          <label>Risk aversion (higher = more conservative)</label>
+          <label>Risk aversion (higher = more conservative)<Req /></label>
           <input type="number" step="0.1" value={value.risk_aversion} onChange={(e) => set({ risk_aversion: e.target.value })} />
         </div>
         <div>
-          <label>Training timesteps</label>
+          <label>Training timesteps<Req /></label>
           <input type="number" step="1000" value={value.timesteps} onChange={(e) => set({ timesteps: e.target.value })} />
         </div>
         {value.mode === "subset" && (
           <div>
-            <label>Trend window</label>
+            <label>Trend window<Req /></label>
             <select value={value.trend_window_days} onChange={(e) => set({ trend_window_days: Number(e.target.value) })}>
               <option value={63}>3 months</option>
               <option value={126}>6 months</option>

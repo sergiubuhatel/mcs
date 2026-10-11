@@ -16,6 +16,7 @@ import CompanyDetailPage from "./pages/CompanyDetailPage";
 import PortfolioDetailPage from "./pages/PortfolioDetailPage";
 import PoliciesPage from "./pages/PoliciesPage";
 import CriteriaPage from "./pages/CriteriaPage";
+import DataPage from "./pages/DataPage";
 
 export default function App() {
   const darkMode = useSelector((s) => s.theme.darkMode);
@@ -35,6 +36,7 @@ export default function App() {
         <main className="min-h-0 flex-1 overflow-auto p-4">
           <Routes>
             <Route path="/" element={<ScreenerPage />} />
+            <Route path="/data" element={<DataPage />} />
             <Route path="/policies" element={<PoliciesPage />} />
             <Route path="/criteria/:kind" element={<CriteriaPage />} />
             <Route path="/pools" element={<PoolsPage />} />

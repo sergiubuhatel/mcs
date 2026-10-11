@@ -7,6 +7,7 @@ import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import LoadingSpinner from "../components/LoadingSpinner";
 import ColumnPicker from "../components/ColumnPicker";
 import Modal from "../components/Modal";
+import Req from "../components/Req";
 import { useColumnConfig } from "../utils/useColumnConfig";
 import { PlusIcon, SaveIcon } from "../layout/icons";
 import { screenCriteria } from "../features/companies/companiesSaga";
@@ -14,12 +15,14 @@ import { DEFAULTS, KINDS, autoCriteriaName, blankToNull, describeCriteria, nullT
 import ScreenCriteriaForm from "../features/policies/ScreenCriteriaForm";
 import PredictionCriteriaForm from "../features/policies/PredictionCriteriaForm";
 import PortfolioCriteriaForm from "../features/policies/PortfolioCriteriaForm";
+import { ImportOptionsFields, importOptionsInvalid, parseTickers } from "../features/dataImport/ImportControls";
 
 const apiError = (err) => err.response?.data?.error || err.message;
 
 // Stored document -> editor state (blank strings for "not set").
 function toForm(kind, doc) {
   const base = { ...DEFAULTS[kind], ...(doc || {}) };
+  if (kind === "data") return { ...base, tickers: Array.isArray(base.tickers) ? base.tickers.join(", ") : base.tickers || "" };
   if (kind === "prediction") return { ...base, min_change_pct: nullToBlank(base.min_change_pct) };
   if (kind === "portfolio") {
     const out = { ...base };
@@ -33,6 +36,10 @@ function toForm(kind, doc) {
 function toPayload(kind, form) {
   const common = { name: form.name.trim(), description: form.description || "" };
   if (kind === "screen") return { ...common, filters: form.filters, screen: screenCriteria(form.filters) };
+  if (kind === "data") {
+    const { scope, years, only_missing, import_history, import_statistics, import_calculated_stats } = form;
+    return { ...common, scope, tickers: parseTickers(form.tickers), years, only_missing, import_history, import_statistics, import_calculated_stats };
+  }
   if (kind === "prediction") {
     return {
       ...common,
@@ -49,7 +56,18 @@ function toPayload(kind, form) {
   return out;
 }
 
-const FORMS = { screen: ScreenCriteriaForm, prediction: PredictionCriteriaForm, portfolio: PortfolioCriteriaForm };
+function DataCriteriaForm({ value, onChange }) {
+  return (
+    <div>
+      <ImportOptionsFields value={value} onChange={onChange} name="data-criteria-scope" />
+      <p className="muted" style={{ margin: 0 }}>
+        Runs as step 1 of every policy that uses it; with "only what's missing", a run on already up-to-date data skips the import.
+      </p>
+    </div>
+  );
+}
+
+const FORMS = { data: DataCriteriaForm, screen: ScreenCriteriaForm, prediction: PredictionCriteriaForm, portfolio: PortfolioCriteriaForm };
 
 const COLUMNS = [
   {
@@ -125,6 +143,10 @@ function CriteriaGrid({ kind }) {
     e.preventDefault();
     if (!editor.form.name.trim()) {
       setError("Give it a name.");
+      return;
+    }
+    if (kind === "data" && importOptionsInvalid(editor.form)) {
+      setError("Fix the import options first.");
       return;
     }
     setSaving(true);
@@ -234,7 +256,7 @@ function CriteriaGrid({ kind }) {
           <form id="criteria-form" onSubmit={save}>
             <div className="filters-grid">
               <div>
-                <label>Name</label>
+                <label>Name<Req /></label>
                 <input value={editor.form.name} onChange={(e) => setName(e.target.value)} autoFocus />
                 {editor.autoName && <span className="muted">Named automatically from the settings — type to rename.</span>}
               </div>

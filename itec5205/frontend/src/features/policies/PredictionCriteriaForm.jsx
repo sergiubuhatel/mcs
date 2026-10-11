@@ -1,3 +1,4 @@
+import Req from "../../components/Req";
 import { CloseIcon, PlusIcon } from "../../layout/icons";
 import { HORIZON_UNITS, MODEL_RULES, TRAINING_UNITS } from "./criteriaConfig";
 
@@ -22,7 +23,7 @@ export default function PredictionCriteriaForm({ value, onChange }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div className="filter-group">
-        <h4 style={{ color: "var(--color-text-primary)" }}>Predict at these points in time</h4>
+        <h4 style={{ color: "var(--color-text-primary)", gap: 0 }}>Predict at these points in time<Req /></h4>
         <p className="muted" style={{ marginTop: 0 }}>
           Counted in business days from the last close (1 week = 5, 1 month = 21, 1 year = 252).
         </p>
@@ -62,7 +63,7 @@ export default function PredictionCriteriaForm({ value, onChange }) {
 
       <div className="filters-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
         <div>
-          <label>Training window (business days)</label>
+          <label>Training window (business days)<Req /></label>
           <div style={{ display: "flex", gap: 4 }}>
             <input
               type="number"
@@ -77,7 +78,7 @@ export default function PredictionCriteriaForm({ value, onChange }) {
           </div>
         </div>
         <div>
-          <label>A company passes when</label>
+          <label>A company passes when<Req /></label>
           <select value={value.models} onChange={(e) => set({ models: e.target.value })}>
             {Object.entries(MODEL_RULES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
@@ -87,7 +88,7 @@ export default function PredictionCriteriaForm({ value, onChange }) {
           <input type="number" step="0.1" placeholder="any rise" value={value.min_change_pct} onChange={(e) => set({ min_change_pct: e.target.value })} />
         </div>
         <div>
-          <label>LSTM max epochs</label>
+          <label>LSTM max epochs{value.models !== "arima" && <Req />}</label>
           <input type="number" min={1} value={value.epochs} onChange={(e) => set({ epochs: e.target.value })} disabled={value.models === "arima"} />
         </div>
       </div>

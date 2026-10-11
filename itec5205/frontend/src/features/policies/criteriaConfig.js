@@ -1,6 +1,14 @@
 import { describeFilters } from "../companies/filterFields";
+import { DEFAULT_IMPORT_OPTIONS } from "../dataImport/ImportControls";
 
+// In run order: a policy imports (data), screens, predicts, then builds the portfolio.
 export const KINDS = {
+  data: {
+    title: "Data Criteria",
+    singular: "data criteria",
+    optional: true, // a policy without one skips the import and uses the stored data
+    blurb: "The Yahoo Finance import a policy runs first (optional), so it screens and forecasts on fresh data.",
+  },
   screen: { title: "Screen Criteria", singular: "screen criteria", blurb: "The Fundamental Analysis search: which companies a policy starts from." },
   prediction: {
     title: "Prediction Criteria",
@@ -24,6 +32,7 @@ export const MODEL_RULES = {
 };
 
 export const DEFAULTS = {
+  data: { name: "", description: "", ...DEFAULT_IMPORT_OPTIONS },
   screen: { name: "", description: "", filters: { sector: "", industry: "", q: "", ranges: {}, units: {} } },
   prediction: {
     name: "",
@@ -59,6 +68,11 @@ const RULE_SHORT = { both: "LSTM + ARIMA up", either: "LSTM or ARIMA up", lstm: 
 /** A readable default name generated from the criteria's own settings,
  * e.g. "Technology, P/E ≤ 30" or "LSTM + ARIMA up at 1M, 3M · 10Y training". */
 export function autoCriteriaName(kind, c) {
+  if (kind === "data") {
+    const d = describeData(c);
+    const full = c.import_history && c.import_statistics && c.import_calculated_stats;
+    return `${d.scope} · ${d.years} history${full ? "" : ` · ${d.what}`}${d.missing ? " · only missing" : ""}`;
+  }
   if (kind === "screen") return describeFilters(c.filters || {}) || "All companies";
   if (kind === "prediction") {
     const days = (h) => Number(h.value) * { days: 1, weeks: 5, months: 21, years: 252 }[h.unit];
@@ -82,9 +96,10 @@ export function autoCriteriaName(kind, c) {
   return parts.length ? parts.join(", ") : "Whole pool, no limits";
 }
 
-/** Policy name from its three criteria's names. */
-export function autoPolicyName(screen, prediction, portfolio) {
-  return [screen, prediction, portfolio].filter(Boolean).map((c) => c.name).join(" → ");
+/** Policy name from its criteria's names (screen, prediction, portfolio --
+ * the data criteria is left out: it's usually the same for every policy). */
+export function autoPolicyName(chosen) {
+  return ["screen", "prediction", "portfolio"].map((k) => chosen[k]).filter(Boolean).map((c) => c.name).join(" → ");
 }
 
 /** `name`, or "name (2)", "name (3)", ... if another item already has it. */
@@ -96,8 +111,19 @@ export function uniqueName(name, items, ownId = null) {
   return `${name} (${n})`;
 }
 
+function describeData(c) {
+  const what = [c.import_history && "history", c.import_statistics && "statistics", c.import_calculated_stats && "calculated stats"].filter(Boolean);
+  const tickers = Array.isArray(c.tickers) ? c.tickers.join(", ") : c.tickers;
+  const scope = c.scope === "specific" ? tickers || "no tickers" : "All S&P 500";
+  return { scope, years: `${c.years}Y`, what: what.join(" + ") || "nothing", missing: c.scope === "all" && c.only_missing && c.import_history };
+}
+
 export function describeCriteria(kind, c) {
   if (!c) return "";
+  if (kind === "data") {
+    const d = describeData(c);
+    return `${d.scope}: ${d.what} since ${c.years} year${Number(c.years) === 1 ? "" : "s"} ago${d.missing ? ", only what's missing" : ", always re-fetched"}`;
+  }
   if (kind === "screen") return describeFilters(c.filters || {}) || "All companies (no filters)";
   if (kind === "prediction") {
     const points = (c.horizons || []).map((h) => plural(h.value, h.unit)).join(", ");

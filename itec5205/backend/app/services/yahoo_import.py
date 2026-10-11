@@ -28,13 +28,15 @@ _MARKET_CLOSE_HOUR = 16
 
 def _last_closed_session_date() -> date:
     """Most recent calendar date whose regular session has already
-    finished. Before today's close this is yesterday; a weekend/holiday in
-    between is harmless since yfinance never returns a row for a non-
-    trading day anyway."""
+    finished. Before today's close this is yesterday. Weekends step back to
+    Friday -- a Saturday cutoff has no close to reach, so "only what's
+    missing" would re-import every ticker all weekend. (Market holidays
+    aren't known here; on one, every ticker still looks one day behind.)"""
     now_et = datetime.now(_MARKET_TZ)
-    if now_et.hour < _MARKET_CLOSE_HOUR:
-        return now_et.date() - timedelta(days=1)
-    return now_et.date()
+    day = now_et.date() - timedelta(days=1) if now_et.hour < _MARKET_CLOSE_HOUR else now_et.date()
+    while day.weekday() >= 5:  # Saturday, Sunday
+        day -= timedelta(days=1)
+    return day
 
 
 def _slugify_key(value: str) -> str:

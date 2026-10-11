@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import CarletonLogo from "./CarletonLogo";
-import { BookmarkPlusIcon, CandlestickIcon, PieChartIcon, SearchIcon, SlidersIcon, TrendChartIcon, WorkflowIcon } from "./icons";
+import { BookmarkPlusIcon, CandlestickIcon, DatabaseIcon, PieChartIcon, SearchIcon, SlidersIcon, TrendChartIcon, WorkflowIcon } from "./icons";
 import { APP_VERSION, APP_VERSION_DATE } from "../version";
 
 const NAV_ITEMS = [
@@ -10,11 +10,13 @@ const NAV_ITEMS = [
     label: "Criteria",
     icon: SlidersIcon,
     children: [
+      { to: "/criteria/data", label: "Data Criteria", icon: DatabaseIcon },
       { to: "/criteria/screen", label: "Screen Criteria", icon: SearchIcon },
       { to: "/criteria/prediction", label: "Prediction Criteria", icon: TrendChartIcon },
       { to: "/criteria/portfolio", label: "Portfolio Criteria", icon: PieChartIcon },
     ],
   },
+  { to: "/data", label: "Data", icon: DatabaseIcon },
   { to: "/", label: "Fundamental Analysis", end: true, icon: SearchIcon },
   {
     label: "Technical Analysis",

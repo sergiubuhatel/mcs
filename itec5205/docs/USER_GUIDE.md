@@ -22,8 +22,9 @@ The workflow from the project proposal, as one loop:
 6. **Refine**: create a new pool without the companies whose evidence doesn't
    line up, retrain RL on it, and compare iterations.
 
-**Policies** automate steps 1-4: save the screen, the forecast rules and the
-RL options once, then run them in one click to get a portfolio.
+**Policies** automate the data import and steps 1-4: save the import, the
+screen, the forecast rules and the RL options once, then run them in one
+click to get a portfolio.
 
 ## 1. Starting the system
 
@@ -46,19 +47,25 @@ The database setup runs automatically (`init-db`).
 
 ### First use: load the data
 
-The database starts empty. Click **Import** in the bottom bar to load the
-S&P 500 (~500 companies, price history + fundamentals from Yahoo Finance; it
-takes several minutes — progress shows in the bottom bar, and Stop/Resume
-work). Re-running the import refreshes the data.
+The database starts empty. Open **Data** (first in the sidebar, above
+Fundamental Analysis) and click **Start Import** to load the S&P 500 (~500
+companies, price history + fundamentals from Yahoo Finance; it takes several
+minutes — progress shows on the Data page and in the bottom bar on every
+other page, and Stop/Resume work). Re-running the import refreshes the data.
 
 ## Policies (`/policies`) and Criteria (`/criteria/...`)
 
-A **policy** = one *Screen Criteria* + one *Prediction Criteria* + one
-*Portfolio Criteria*. Each criteria is saved on its own (sidebar ->
+A **policy** = an optional *Data Criteria* + one *Screen Criteria* + one
+*Prediction Criteria* + one *Portfolio Criteria* (required fields are marked
+with a red star). Each criteria is saved on its own (sidebar ->
 **Criteria**) so several policies can share them. Every grid has a **+**
 button (new) and a **⋮** menu per row (Edit, Duplicate, Delete; policies also
 **Run** / **Cancel run**). A criteria used by a policy can't be deleted.
 
+- **Data Criteria** (optional) — the same options as the **Data** page's
+  import: all S&P 500 or specific tickers, how many years of history, what to
+  import, and "only what's missing". A policy with one imports first; a
+  policy without one uses the data already stored.
 - **Screen Criteria** — the same fields as Fundamental Analysis. The editor
   shows how many companies match today; *Copy current Fundamental Analysis
   search* takes over whatever is filled in on the screener.
@@ -73,11 +80,13 @@ button (new) and a **⋮** menu per row (Edit, Duplicate, Delete; policies also
   portfolio with RL*: whole pool or steady-trend only, max volatility, min
   annual return, min/max companies, risk aversion, timesteps.
 
-**Running** a policy (⋮ -> Run): (1) search with the screen criteria, (2)
-forecast every match and keep the companies whose forecasts rise at
-*every* point, (3) train RL on them with the portfolio criteria. The result
+**Running** a policy (⋮ -> Run): (1) import with the data criteria (skipped
+without one, or when everything is already up to date), (2) search with the
+screen criteria, (3) forecast every match and keep the companies whose
+forecasts rise at *every* point, (4) train RL on them with the portfolio
+criteria. The result
 is a new portfolio (plus the pools from steps 1 and 2 under Pools). The
-progress bar and *Step x of 3* line show what it is waiting for; click the
+progress bar and *Step x of 4* line show what it is waiting for; click the
 policy name for the step cards, each company's forecast at each point and
 why it passed or not, and the run history.
 

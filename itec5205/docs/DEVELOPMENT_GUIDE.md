@@ -125,9 +125,9 @@ adapters around them.
 | `price_predictions`            | ticker                | latest LSTM forecast (84 daily steps + `horizons`) + test RMSE/MAE |
 | `arima_predictions`            | ticker                | latest ARIMA forecast (+ 95% interval per step, order, drift) |
 | `forecast_runs`                | uuid                  | batch forecast run: tickers, params, Celery task ids per model, `finished_at`, `wall_seconds`, `cancelled_at` |
-| `criteria`                     | uuid                  | `{kind: screen\|prediction\|portfolio, name, description, ...}` -- screen: `filters` (form state) + `screen` (API units); prediction: `horizons[{value,unit}]`, `training{value,unit}`, `models`, `min_change_pct`, `epochs`, `reuse_forecasts`; portfolio: the RL options |
-| `policies`                     | uuid                  | `{name, description, screen_criteria_id, prediction_criteria_id, portfolio_criteria_id}` |
-| `policy_runs`                  | uuid                  | one run: criteria snapshot, `status` (queued/running/succeeded/failed/cancelled), `step`, `percent`, `message`, `steps.{screen,forecast,portfolio}` (counts, per-ticker forecast rows), `pool_id`, `portfolio_id`, `wall_seconds` |
+| `criteria`                     | uuid                  | `{kind: data\|screen\|prediction\|portfolio, name, description, ...}` -- data: `scope`, `tickers[]`, `years`, `only_missing`, `import_history/statistics/calculated_stats`; screen: `filters` (form state) + `screen` (API units); prediction: `horizons[{value,unit}]`, `training{value,unit}`, `models`, `min_change_pct`, `epochs`, `reuse_forecasts`; portfolio: the RL options |
+| `policies`                     | uuid                  | `{name, description, data_criteria_id (optional, null = no import), screen_criteria_id, prediction_criteria_id, portfolio_criteria_id}` |
+| `policy_runs`                  | uuid                  | one run: criteria snapshot, `status` (queued/running/succeeded/failed/cancelled), `step`, `percent`, `message`, `steps.{data,screen,forecast,portfolio}` (counts, per-ticker forecast rows), `pool_id`, `portfolio_id`, `wall_seconds` |
 
 `sectors`/`industries` exist as their own collections (not just distinct
 values scanned off `companies`) specifically so the Screener's dropdowns
@@ -205,10 +205,15 @@ running (i.e. behind another run on the same queue).
 
 ### Policies (`policy_service.py`, `tasks/policy_tasks.py`)
 
-A policy names one criteria of each kind; `POST /api/policies/<id>/run`
-snapshots the three criteria into a `policy_runs` document and queues
-`run_policy` on the `policy` queue. The task:
+A policy names one screen, prediction and portfolio criteria and optionally
+a data criteria; `POST /api/policies/<id>/run` snapshots them into a
+`policy_runs` document and queues `run_policy` on the `policy` queue. The
+task:
 
+0. **Data** (only with a data criteria) -- `import_sp500_data` on the
+   `import` queue with the criteria's options; with `only_missing` the
+   tickers `get_up_to_date_tickers()` reports current are skipped (nothing
+   left = no import).
 1. **Screen** -- `search_companies` with the screen criteria, saved as a pool
    (`<policy> · <date>`).
 2. **Predict** -- training window = N business days, or for months/years the
@@ -224,8 +229,8 @@ snapshots the three criteria into a `policy_runs` document and queues
 
 It waits on its child jobs by polling their states (never `.get()` inside
 a task), which is why it has its own worker -- on the lstm/arima/rl workers
-it would hold the slot its children need. Progress (`percent`: screen
-0-5, predict 5-70, portfolio 70-100) is written to the run document every
+it would hold the slot its children need. Progress (`percent`: data 0-25,
+screen 25-28, predict 28-75, portfolio 75-100) is written to the run document every
 2 s and polled by the UI. Cancel sets the Redis stop flag; the task revokes
 its unfinished child jobs. A run whose task died is marked failed on read.
 
@@ -392,7 +397,7 @@ Socket.IO room/event.
 | `GET /api/forecasts/batch/<run_id>`, `GET /api/forecasts/batch?pool_id=\|portfolio_id=` | Run progress (per-model counts, errors, `queued`, `wall_seconds`) / latest run |
 | `POST /api/forecasts/batch/<run_id>/cancel` | Revoke the run's unfinished jobs |
 | `GET /api/signals?pool_id=\|portfolio_id=` | Signal board rows + summary |
-| `GET/POST /api/criteria/<kind>`, `GET/PUT/DELETE /api/criteria/<kind>/<id>`, `POST .../<id>/duplicate` | Screen / prediction / portfolio criteria CRUD (`kind` = `screen`\|`prediction`\|`portfolio`); DELETE returns 409 while a policy uses it |
+| `GET/POST /api/criteria/<kind>`, `GET/PUT/DELETE /api/criteria/<kind>/<id>`, `POST .../<id>/duplicate` | Screen / prediction / portfolio criteria CRUD (`kind` = `data`\|`screen`\|`prediction`\|`portfolio`); DELETE returns 409 while a policy uses it |
 | `GET/POST /api/policies`, `GET/PUT/DELETE /api/policies/<id>`, `POST .../<id>/duplicate` | Policy CRUD (the list includes each policy's last run) |
 | `POST /api/policies/<id>/run`, `GET /api/policies/<id>/runs` | Start a run (409 if one is active) / run history |
 | `GET /api/policies/runs/<run_id>`, `POST /api/policies/runs/<run_id>/cancel` | Run progress / cancel |

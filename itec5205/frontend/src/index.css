@@ -138,6 +138,9 @@ tr:hover td { background: var(--color-bg-hover); }
 
 .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--color-bg-tertiary); color: var(--color-text-accent); font-size: 0.72rem; }
 .error-text { color: #dc2626; font-size: 0.85rem; }
+/* Mandatory-field marker; a lighter red on dark backgrounds stays readable. */
+.req { color: #dc2626; margin-left: 3px; font-weight: 600; }
+.dark .req { color: #f87171; }
 .muted { color: var(--color-text-secondary); font-size: 0.82rem; }
 .progress-bar { height: 8px; background: var(--color-bg-tertiary); border-radius: 4px; overflow: hidden; margin: 8px 0; }
 .progress-bar > div { height: 100%; background: var(--color-text-accent); transition: width 0.2s; }

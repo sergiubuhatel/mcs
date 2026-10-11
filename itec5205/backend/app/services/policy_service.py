@@ -1,9 +1,12 @@
 """Policies: a named, re-runnable recipe that automates search -> forecast ->
 RL portfolio.
 
-A policy references three reusable criteria documents (collection
-`criteria`, field `kind`):
+A policy references four reusable criteria documents (collection
+`criteria`, field `kind`), run in this order:
 
+  data        -- optional: the Yahoo Finance import to run first (which
+                 tickers, how many years of history, what to import, only
+                 what's missing); without it the run uses the stored data
   screen      -- the Fundamental Analysis search (sector/industry/q/ranges)
   prediction  -- forecast horizons (e.g. 3 days, 1 month), the training
                  window (business days, or months/years of them), which
@@ -19,13 +22,15 @@ from datetime import date, datetime, timezone
 
 from ..db.arango_client import get_db
 
-KINDS = ("screen", "prediction", "portfolio")
+KINDS = ("data", "screen", "prediction", "portfolio")
+OPTIONAL_KINDS = ("data",)
 
 # Trading days per unit (21 per month, matching horizons.py).
 HORIZON_UNITS = {"days": 1, "weeks": 5, "months": 21, "years": 252}
 TRAINING_UNITS = ("days", "months", "years")
 MODEL_RULES = ("both", "either", "lstm", "arima")
 PORTFOLIO_MODES = ("full", "subset")
+IMPORT_YEARS = (1, 2, 5, 10, 15, 20)  # the Data page's "Since" choices
 MIN_TRAINING_DAYS = 120  # = lstm_service.MIN_HISTORY_DAYS
 
 
@@ -49,6 +54,33 @@ def _num(value, cast=float, minimum=None, maximum=None, field="value"):
 
 
 # --------------------------------------------------------------- normalizers
+
+def _normalize_data(body: dict) -> dict:
+    """Same options as the Data page's import form."""
+    scope = body.get("scope", "all")
+    if scope not in ("all", "specific"):
+        raise ValueError("'scope' must be 'all' or 'specific'")
+    tickers = body.get("tickers") or []
+    if isinstance(tickers, str):
+        tickers = tickers.split(",")
+    tickers = list(dict.fromkeys(t.strip().upper() for t in tickers if t and t.strip()))
+    if scope == "specific" and not tickers:
+        raise ValueError("List the tickers to import")
+    years = _num(body.get("years"), int, field="years") or 10
+    if years not in IMPORT_YEARS:
+        raise ValueError(f"'years' must be one of {', '.join(map(str, IMPORT_YEARS))}")
+    flags = {k: bool(body.get(k, True)) for k in ("import_history", "import_statistics", "import_calculated_stats")}
+    if not any(flags.values()):
+        raise ValueError("Pick at least one of history, statistics, calculated statistics")
+    return {
+        "scope": scope,
+        "tickers": tickers if scope == "specific" else [],
+        "years": years,
+        # Like the Data page: only for the full universe, and only with history.
+        "only_missing": bool(body.get("only_missing", True)) and scope == "all",
+        **flags,
+    }
+
 
 def _normalize_screen(body: dict) -> dict:
     """`filters` is the screener form state (UI units, used to re-open the
@@ -129,7 +161,7 @@ def _normalize_portfolio(body: dict) -> dict:
     }
 
 
-NORMALIZERS = {"screen": _normalize_screen, "prediction": _normalize_prediction, "portfolio": _normalize_portfolio}
+NORMALIZERS = {"data": _normalize_data, "screen": _normalize_screen, "prediction": _normalize_prediction, "portfolio": _normalize_portfolio}
 
 
 # ------------------------------------------------------------------- criteria
@@ -217,6 +249,9 @@ def _normalize_policy(body: dict) -> dict:
     refs = {}
     for kind in KINDS:
         field = f"{kind}_criteria_id"
+        if kind in OPTIONAL_KINDS and not body.get(field):
+            refs[field] = None
+            continue
         if get_criteria(kind, body.get(field)) is None:
             raise ValueError(f"Pick a {kind} criteria")
         refs[field] = body[field]

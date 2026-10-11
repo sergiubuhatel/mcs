@@ -50,9 +50,10 @@ const fmtPct = (v) => (v === null || v === undefined ? "-" : `${(Number(v) * 100
 const changeColor = (v) => (v == null || v === 0 ? "var(--color-text-primary)" : v > 0 ? "#16a34a" : "#dc2626");
 
 const STEPS = [
-  { key: "screen", title: "1. Screen", waiting: "Search by the screen criteria" },
-  { key: "forecast", title: "2. Predict", waiting: "Forecast and filter by the prediction criteria" },
-  { key: "portfolio", title: "3. Portfolio", waiting: "Build the portfolio with the portfolio criteria" },
+  { key: "data", title: "1. Data", waiting: "Import with the data criteria" },
+  { key: "screen", title: "2. Screen", waiting: "Search by the screen criteria" },
+  { key: "forecast", title: "3. Predict", waiting: "Forecast and filter by the prediction criteria" },
+  { key: "portfolio", title: "4. Portfolio", waiting: "Build the portfolio with the portfolio criteria" },
 ];
 
 function StepCard({ step, data, run }) {
@@ -60,6 +61,13 @@ function StepCard({ step, data, run }) {
   const color = { done: "#16a34a", failed: "#dc2626", running: "var(--color-text-accent)" }[status] || "var(--color-text-secondary)";
   const current = run.step === step.key && ACTIVE.includes(run.status);
   let body = step.waiting;
+  if (step.key === "data" && data?.requested != null) {
+    if (data.status === "done") {
+      body = data.imported ? `Imported ${data.imported}${data.failed ? `, ${data.failed} failed` : ""}` : "Nothing to import";
+      if (data.up_to_date) body += ` · ${data.up_to_date} already up to date`;
+    } else if (data.total) body = `Importing ${data.completed}/${data.total}${data.up_to_date ? ` · ${data.up_to_date} up to date` : ""}`;
+  }
+  if (step.key === "data" && status === "skipped") body = "No data criteria — used the data already stored";
   if (step.key === "screen" && data?.tickers != null) body = `${data.tickers} companies matched`;
   if (step.key === "forecast" && data?.counts) {
     body = Object.entries(data.counts)
@@ -73,7 +81,7 @@ function StepCard({ step, data, run }) {
         {data.holdings} companies · return {fmtPct(data.metrics?.annual_return)} · volatility {fmtPct(data.metrics?.expected_volatility)}
       </>
     );
-  } else if (current) body = run.message;
+  } else if (current && step.key !== "data") body = run.message;
   return (
     <div className="filter-group" style={{ borderColor: current ? "var(--color-text-accent)" : undefined }}>
       <h4 style={{ color: "var(--color-text-primary)", justifyContent: "space-between" }}>
@@ -173,7 +181,7 @@ export default function PolicyRunPanel({ policy, refreshKey, onClose, onChanged 
             {ACTIVE.includes(run.status) && `Step ${run.step_index} of ${run.steps_total} · `}
             {run.message}
           </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
             {STEPS.map((s) => <StepCard key={s.key} step={s} data={run.steps?.[s.key]} run={run} />)}
           </div>
           <ForecastTable rows={run.steps?.forecast?.rows} />

@@ -7,6 +7,7 @@ import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import LoadingSpinner from "../components/LoadingSpinner";
 import ColumnPicker from "../components/ColumnPicker";
 import Modal from "../components/Modal";
+import Req from "../components/Req";
 import { useColumnConfig } from "../utils/useColumnConfig";
 import { PlayIcon, PlusIcon, SaveIcon, StopIcon } from "../layout/icons";
 import { KINDS, autoPolicyName, describeCriteria, uniqueName } from "../features/policies/criteriaConfig";
@@ -17,7 +18,9 @@ const ellipsis = { display: "block", overflow: "hidden", textOverflow: "ellipsis
 
 function criteriaCell(kind) {
   return (p, ctx) => {
-    const c = ctx.criteria[kind]?.[p[`${kind}_criteria_id`]];
+    const id = p[`${kind}_criteria_id`];
+    if (!id && KINDS[kind].optional) return <span className="muted">none</span>;
+    const c = ctx.criteria[kind]?.[id];
     if (!c) return <span className="error-text">missing</span>;
     return (
       <Link to={`/criteria/${kind}`} title={describeCriteria(kind, c)} style={ellipsis}>
@@ -39,11 +42,20 @@ const COLUMNS = [
       </a>
     ),
   },
+  { key: "data", label: "Data Criteria", width: 140, render: criteriaCell("data") },
   { key: "screen", label: "Screen Criteria", width: 170, render: criteriaCell("screen") },
   { key: "prediction", label: "Prediction Criteria", width: 170, render: criteriaCell("prediction") },
   { key: "portfolio", label: "Portfolio Criteria", width: 170, render: criteriaCell("portfolio") },
-  { key: "status", label: "Last run", width: 100, render: (p) => <RunStatus run={p.last_run} /> },
-  { key: "progress", label: "Progress", render: (p) => <RunProgress run={p.last_run} /> },
+  {
+    key: "status",
+    label: "Last run",
+    render: (p) => (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        <RunStatus run={p.last_run} />
+        {["queued", "running", "failed"].includes(p.last_run?.status) && <div style={{ flex: 1, minWidth: 0 }}><RunProgress run={p.last_run} /></div>}
+      </div>
+    ),
+  },
   {
     key: "result",
     label: "Portfolio",
@@ -53,11 +65,11 @@ const COLUMNS = [
   { key: "run_at", label: "Run at", width: 150, render: (p) => (p.last_run ? new Date(p.last_run.created_at).toLocaleString() : "—") },
 ];
 
-const EMPTY = { name: "", description: "", screen_criteria_id: "", prediction_criteria_id: "", portfolio_criteria_id: "" };
+const EMPTY = { name: "", description: "", data_criteria_id: "", screen_criteria_id: "", prediction_criteria_id: "", portfolio_criteria_id: "" };
 
 export default function PoliciesPage() {
   const [policies, setPolicies] = useState([]);
-  const [criteria, setCriteria] = useState({ screen: {}, prediction: {}, portfolio: {} });
+  const [criteria, setCriteria] = useState({ data: {}, screen: {}, prediction: {}, portfolio: {} });
   const [loading, setLoading] = useState(true);
   const [editor, setEditor] = useState(null); // { id | null, form, autoName }
   const [error, setError] = useState(null);
@@ -97,7 +109,7 @@ export default function PoliciesPage() {
 
   // "Screen → Prediction → Portfolio" from the picked criteria's names.
   const generatedName = (form, id) => {
-    const name = autoPolicyName(...Object.keys(KINDS).map((k) => criteria[k][form[`${k}_criteria_id`]]));
+    const name = autoPolicyName(Object.fromEntries(Object.keys(KINDS).map((k) => [k, criteria[k][form[`${k}_criteria_id`]]])));
     return uniqueName(name || "New policy", policies, id);
   };
 
@@ -119,8 +131,8 @@ export default function PoliciesPage() {
 
   const save = async (e) => {
     e.preventDefault();
-    const { name, description, screen_criteria_id, prediction_criteria_id, portfolio_criteria_id } = editor.form;
-    const payload = { name: name.trim(), description, screen_criteria_id, prediction_criteria_id, portfolio_criteria_id };
+    const payload = { name: editor.form.name.trim(), description: editor.form.description };
+    for (const k of Object.keys(KINDS)) payload[`${k}_criteria_id`] = editor.form[`${k}_criteria_id`];
     setSaving(true);
     setError(null);
     try {
@@ -197,7 +209,7 @@ export default function PoliciesPage() {
           <div>
             <h3 style={{ margin: 0 }}>Policies</h3>
             <p className="muted" style={{ margin: 0 }}>
-              Run = search by the screen criteria → forecast and filter by the prediction criteria → build the RL portfolio with the portfolio criteria.
+              Run = import with the data criteria → search by the screen criteria → forecast and filter by the prediction criteria → build the RL portfolio with the portfolio criteria.
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -281,7 +293,7 @@ export default function PoliciesPage() {
         {editor && (
           <form id="policy-form" onSubmit={save} className="filters-grid" style={{ gridTemplateColumns: "1fr" }}>
             <div>
-              <label>Name</label>
+              <label>Name<Req /></label>
               <input value={editor.form.name} onChange={(e) => setName(e.target.value)} autoFocus />
               {editor.autoName && <span className="muted">Named automatically from the criteria — type to rename.</span>}
             </div>
@@ -295,13 +307,15 @@ export default function PoliciesPage() {
               const chosen = criteria[kind][editor.form[field]];
               return (
                 <div key={kind}>
-                  <label>{meta.title}</label>
+                  <label>{meta.title}{meta.optional ? " (optional)" : <Req />}</label>
                   <select value={editor.form[field]} onChange={(e) => setField(field, e.target.value)}>
-                    <option value="">— pick one —</option>
+                    <option value="">{meta.optional ? "— none (don't import, use the stored data) —" : "— pick one —"}</option>
                     {options.map((c) => <option key={c._key} value={c._key}>{c.name}</option>)}
                   </select>
                   <p className="muted" style={{ margin: "3px 0 0" }}>
-                    {chosen ? describeCriteria(kind, chosen) : options.length === 0 ? (
+                    {chosen ? describeCriteria(kind, chosen) : meta.optional ? (
+                      "Optional — without it, the run screens and forecasts on the data already imported."
+                    ) : options.length === 0 ? (
                       <>None yet — <Link to={`/criteria/${kind}`}>create {meta.singular}</Link>.</>
                     ) : meta.blurb}
                   </p>

@@ -1,6 +1,6 @@
 """Policies and their criteria (CRUD + duplicate), and running a policy.
 
-    /api/criteria/<kind>                 GET list, POST create   (kind = screen | prediction | portfolio)
+    /api/criteria/<kind>                 GET list, POST create   (kind = data | screen | prediction | portfolio)
     /api/criteria/<kind>/<id>            GET, PUT, DELETE
     /api/criteria/<kind>/<id>/duplicate  POST
     /api/policies                        GET list (each with its last run), POST create
@@ -148,6 +148,9 @@ def policy_run(policy_id):
         return jsonify({"error": "This policy is already running"}), 409
     criteria = {}
     for kind in svc.KINDS:
+        if kind in svc.OPTIONAL_KINDS and not policy.get(f"{kind}_criteria_id"):
+            criteria[kind] = None  # no import: the run uses the data already stored
+            continue
         doc = svc.get_criteria(kind, policy[f"{kind}_criteria_id"])
         if doc is None:
             return jsonify({"error": f"The policy's {kind} criteria no longer exists -- edit the policy"}), 400
@@ -161,9 +164,9 @@ def policy_run(policy_id):
         "criteria": criteria,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "status": "queued",
-        "step": "screen",
+        "step": "data",
         "step_index": 1,
-        "steps_total": 3,
+        "steps_total": len(svc.KINDS),
         "percent": 0,
         "message": "Waiting for the policy worker...",
         "steps": {},

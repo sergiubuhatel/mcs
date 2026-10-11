@@ -1,8 +1,10 @@
-"""Background job: run a policy end to end -- screen -> forecast -> RL portfolio.
+"""Background job: run a policy end to end -- import -> screen -> forecast ->
+RL portfolio.
 
 The orchestrator runs on its own `policy` queue and fans the heavy work out
-to the existing workers: one LSTM/ARIMA task per ticker on the `lstm` /
-`arima` queues (in parallel), then one RL task on the `rl` queue. It waits
+to the existing workers: the import on the `import` queue, one LSTM/ARIMA
+task per ticker on the `lstm` / `arima` queues (in parallel), then one RL
+task on the `rl` queue. It waits
 on them by polling their states (never `.get()` inside a task), and records
 step-by-step progress in the run's `policy_runs` document, which the UI
 polls. Stop uses the same Redis stop-flag as the import job.
@@ -13,6 +15,7 @@ from datetime import date, datetime, timezone
 
 from celery.result import AsyncResult
 
+from .. import config
 from ..db.arango_client import get_db
 from ..services.horizons import MAX_HORIZON_DAYS
 from ..services.lstm_service import MIN_HISTORY_DAYS
@@ -27,17 +30,19 @@ from ..services.policy_service import (
 )
 from ..services.pool_service import create_pool, refine_pool
 from ..services.screening import search_companies
+from ..services.yahoo_import import get_up_to_date_tickers, read_tickers
 from .arima_tasks import train_arima_prediction
 from .celery_app import celery_app
+from .import_tasks import import_sp500_data
 from .predict_tasks import train_lstm_prediction
 from .rl_tasks import train_rl_portfolio
-from .stop_flags import clear_stop, is_stop_requested
+from .stop_flags import clear_stop, is_stop_requested, request_stop
 
 POLL_SECONDS = 2
 DONE_STATES = {"SUCCESS", "FAILURE", "REVOKED"}
 # Overall progress bar: share of 100% each step covers.
-STEP_SPAN = {"screen": (0, 5), "forecast": (5, 70), "portfolio": (70, 100)}
-STEP_INDEX = {"screen": 1, "forecast": 2, "portfolio": 3}
+STEP_SPAN = {"data": (0, 25), "screen": (25, 28), "forecast": (28, 75), "portfolio": (75, 100)}
+STEP_INDEX = {"data": 1, "screen": 2, "forecast": 3, "portfolio": 4}
 
 
 class Cancelled(Exception):
@@ -80,11 +85,57 @@ def run_policy(self, run_id: str):
         save(status="running", started_at=started.isoformat())
         today = date.today().isoformat()
         name = run["policy_name"]
+        data_c = run["criteria"]["data"]
         screen_c = run["criteria"]["screen"]
         pred_c = run["criteria"]["prediction"]
         port_c = run["criteria"]["portfolio"]
 
-        # ---- 1. screen -------------------------------------------------
+        # ---- 1. data (import) -------------------------------------------
+        if data_c is None:
+            step("data", 1, "No data criteria -- using the data already stored", status="skipped")
+        else:
+            step("data", 0, "Checking what needs importing...", status="running")
+            wanted = data_c["tickers"] if data_c["scope"] == "specific" else read_tickers(config.TICKERS_FILE)
+            to_import = wanted
+            if data_c["only_missing"] and data_c["import_history"]:
+                up_to_date = get_up_to_date_tickers()
+                to_import = [t for t in wanted if t not in up_to_date]
+            skipped = len(wanted) - len(to_import)
+            if not to_import:
+                step("data", 1, "Data already up to date", status="done", requested=len(wanted), up_to_date=skipped, imported=0, failed=0)
+            else:
+                imp = import_sp500_data.delay(
+                    tickers=to_import, years=data_c["years"], import_history=data_c["import_history"],
+                    import_statistics=data_c["import_statistics"], import_calculated_stats=data_c["import_calculated_stats"],
+                )
+                children.append(imp.id)
+                while True:
+                    res = AsyncResult(imp.id, app=celery_app)
+                    if res.state == "SUCCESS":
+                        break
+                    if res.state in ("FAILURE", "REVOKED"):
+                        raise PolicyRunError(f"Import failed: {res.info}")
+                    info = res.info if res.state == "PROGRESS" and isinstance(res.info, dict) else {}
+                    if info.get("total"):
+                        step("data", info["completed"] / info["total"],
+                             f"Importing · {info['completed']}/{info['total']} ({info.get('ticker', '')})",
+                             requested=len(wanted), up_to_date=skipped, completed=info["completed"], total=info["total"])
+                    else:
+                        step("data", 0, f"Waiting for the import worker · {len(to_import)} companies to import",
+                             requested=len(wanted), up_to_date=skipped, completed=0, total=len(to_import))
+                check_stop()
+                time.sleep(POLL_SECONDS)
+            r = res.result
+            if r.get("stopped"):
+                raise PolicyRunError("The import was stopped")
+            step(
+                "data", 1, f"Imported {r['succeeded_count']} companies" + (f", {r['failed_count']} failed" if r["failed_count"] else ""),
+                status="done", requested=len(wanted), up_to_date=skipped, imported=r["succeeded_count"],
+                failed=r["failed_count"], completed=r["total"], total=r["total"],
+            )
+        check_stop()
+
+        # ---- 2. screen -------------------------------------------------
         step("screen", 0, "Searching companies with the screen criteria...", status="running")
         s = screen_c["screen"]
         hits = search_companies(
@@ -101,7 +152,7 @@ def run_policy(self, run_id: str):
         step("screen", 1, f"{len(tickers)} companies match the screen", status="done", tickers=len(tickers), pool_id=pool["_key"])
         check_stop()
 
-        # ---- 2. forecast -----------------------------------------------
+        # ---- 3. forecast -----------------------------------------------
         needed = models_needed(pred_c["models"])
         forecast_days = max(MAX_HORIZON_DAYS, max(horizon_days(h) for h in pred_c["horizons"]))
         stats = history_stats(tickers, training_start(pred_c["training"]))
@@ -175,7 +226,7 @@ def run_policy(self, run_id: str):
         save(pool_id=pool["_key"])
         check_stop()
 
-        # ---- 3. portfolio ----------------------------------------------
+        # ---- 4. portfolio ----------------------------------------------
         step("portfolio", 0, "Waiting for the RL worker...", status="running")
         pct = lambda v: None if v is None else v / 100  # noqa: E731
         rl = train_rl_portfolio.delay(
@@ -218,6 +269,7 @@ def run_policy(self, run_id: str):
     except Cancelled:
         for task_id in children:
             if AsyncResult(task_id, app=celery_app).state not in DONE_STATES:
+                request_stop(task_id)  # the import stops cooperatively between tickers
                 celery_app.control.revoke(task_id, terminate=True)
         finish(save, started, "cancelled", message="Cancelled", steps=_mark_current(run, "cancelled"))
     except Exception as exc:  # noqa: BLE001 - recorded on the run for the UI
