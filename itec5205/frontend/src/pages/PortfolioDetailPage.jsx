@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiClient } from "../api/client";
-import { CloseIcon } from "../layout/icons";
 import { INTERVALS, filterByInterval } from "../utils/dateRanges";
 import { tooltipProps } from "../utils/chartTheme";
 import { useColumnConfig } from "../utils/useColumnConfig";
 import ColumnPicker from "../components/ColumnPicker";
 import SignalBoard from "../features/signals/SignalBoard";
+import BackButton from "../layout/BackButton";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -142,23 +142,18 @@ export default function PortfolioDetailPage() {
       .catch((err) => setError(err.response?.data?.error || err.message));
   }, [id]);
 
-  const CloseButton = (
-    <button className="close-btn" onClick={() => navigate(-1)} title="Back" aria-label="Back">
-      <CloseIcon />
-    </button>
-  );
 
   if (error)
     return (
       <div className="card error-text" style={{ position: "relative" }}>
-        {CloseButton}
+        <div className="card-corner"><BackButton /></div>
         {error}
       </div>
     );
   if (!portfolio || !series)
     return (
       <div className="card muted" style={{ position: "relative" }}>
-        {CloseButton}
+        <div className="card-corner"><BackButton /></div>
         Loading...
       </div>
     );
@@ -176,7 +171,7 @@ export default function PortfolioDetailPage() {
   return (
     <div>
       <div className="card" style={{ position: "relative" }}>
-        {CloseButton}
+        <div className="card-corner"><BackButton /></div>
         <h2 style={{ paddingRight: 48 }}>{portfolio.name}</h2>
         <p className="muted">
           Expected annual return: <strong style={{ color: changeColor(portfolio.expected_return) }}>{fmtPct(portfolio.expected_return)}</strong>

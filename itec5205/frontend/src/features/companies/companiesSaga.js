@@ -60,18 +60,23 @@ function* handleFetch() {
   try {
     yield put(fetchStarted());
     const filters = yield select((state) => state.companies.filters);
-    if (filters.sortBy === "signal") {
-      // The signal isn't a stored field the API can sort on: fetch every
-      // result (largest market cap first as the tie-break), sort and page here.
+    if (filters.sortBy === "signal" || filters.signal) {
+      // The signal isn't a stored field the API can sort or filter on: fetch
+      // every result in the requested order, then filter / sort and page here.
       const signals = yield select((state) => state.companies.signals);
-      const params = { ...buildParams(filters), sort_by: "market_cap", sort_dir: "desc", limit: 600, offset: 0 };
+      const bySignal = filters.sortBy === "signal";
+      const params = { ...buildParams(filters), limit: 600, offset: 0 };
+      if (bySignal) Object.assign(params, { sort_by: "market_cap", sort_dir: "desc" }); // tie-break
       const { data } = yield call(apiClient.get, "/api/companies", { params });
-      const rank = (r) => SIGNAL_RANK[signals[r.ticker]] ?? -1;
-      const sorted = data.results
-        .map((r, i) => [r, i])
-        .sort(([a, i], [b, j]) => (filters.sortDir === "desc" ? rank(b) - rank(a) : rank(a) - rank(b)) || i - j)
-        .map(([r]) => r);
-      yield put(fetchSucceeded({ ...data, results: sorted.slice(filters.offset, filters.offset + filters.limit) }));
+      let rows = filters.signal ? data.results.filter((r) => signals[r.ticker] === filters.signal) : data.results;
+      if (bySignal) {
+        const rank = (r) => SIGNAL_RANK[signals[r.ticker]] ?? -1;
+        rows = rows
+          .map((r, i) => [r, i])
+          .sort(([a, i], [b, j]) => (filters.sortDir === "desc" ? rank(b) - rank(a) : rank(a) - rank(b)) || i - j)
+          .map(([r]) => r);
+      }
+      yield put(fetchSucceeded({ ...data, total: rows.length, results: rows.slice(filters.offset, filters.offset + filters.limit) }));
       return;
     }
     const { data } = yield call(apiClient.get, "/api/companies", { params: buildParams(filters) });

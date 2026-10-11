@@ -91,14 +91,14 @@ function formatBound(field, value) {
 
 const isSet = (v) => v !== "" && v !== null && v !== undefined && !Number.isNaN(Number(v));
 
-// Builds a readable pool name from the screener's filled-in fields, e.g.
-// "Technology, P/E ≤ 30, Revenue Growth ≥ 40%". Returns "" when nothing
-// is filled in.
-export function describeFilters(filters) {
-  const parts = [];
-  if (filters.q?.trim()) parts.push(`"${filters.q.trim()}"`);
-  if (filters.industry) parts.push(filters.industry);
-  else if (filters.sector) parts.push(filters.sector);
+// One entry per filled-in search field, in form order: { id, label, field }
+// where `field` is "q" / "sector" / "industry" or a range key. Drives the
+// screener's removable "Active filters" chips and the auto pool names.
+export function activeFilters(filters) {
+  const out = [];
+  if (filters.q?.trim()) out.push({ id: "q", field: "q", label: `"${filters.q.trim()}"` });
+  if (filters.sector) out.push({ id: "sector", field: "sector", label: filters.sector });
+  if (filters.industry) out.push({ id: "industry", field: "industry", label: filters.industry });
 
   for (const group of FILTER_GROUPS) {
     for (const field of group.fields) {
@@ -106,10 +106,22 @@ export function describeFilters(filters) {
       const name = field.short || field.label;
       const hasMin = isSet(min);
       const hasMax = isSet(max);
-      if (hasMin && hasMax) parts.push(`${name} ${formatBound(field, min)}–${formatBound(field, max)}`);
-      else if (hasMin) parts.push(`${name} ≥ ${formatBound(field, min)}`);
-      else if (hasMax) parts.push(`${name} ≤ ${formatBound(field, max)}`);
+      let label = null;
+      if (hasMin && hasMax) label = `${name} ${formatBound(field, min)}–${formatBound(field, max)}`;
+      else if (hasMin) label = `${name} ≥ ${formatBound(field, min)}`;
+      else if (hasMax) label = `${name} ≤ ${formatBound(field, max)}`;
+      if (label) out.push({ id: field.key, field: field.key, label, group: group.title });
     }
   }
-  return parts.join(", ");
+  return out;
+}
+
+// Builds a readable pool name from the screener's filled-in fields, e.g.
+// "Technology, P/E ≤ 30, Revenue Growth ≥ 40%". Returns "" when nothing
+// is filled in. (An industry already implies its sector.)
+export function describeFilters(filters) {
+  return activeFilters(filters)
+    .filter((f) => !(f.field === "sector" && filters.industry))
+    .map((f) => f.label)
+    .join(", ");
 }

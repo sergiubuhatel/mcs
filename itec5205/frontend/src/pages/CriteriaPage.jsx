@@ -273,7 +273,7 @@ function CriteriaGrid({ kind }) {
 
   return (
     <div>
-      <PageHeader icon={SlidersIcon} color={page.color} title={meta.title} description={page.description} />
+      <PageHeader icon={SlidersIcon} color={page.color} title={page.title || meta.title} description={page.description} />
       <StatTiles tiles={tiles} />
 
       <div className="card">

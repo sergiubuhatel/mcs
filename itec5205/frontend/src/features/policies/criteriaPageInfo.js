@@ -16,6 +16,7 @@ import {
 
 export const CRITERIA_PAGES = {
   data: {
+    title: "Data Filters",
     color: "#10b981",
     description: "Saved Yahoo Finance import settings. A policy with a data criteria imports first, so it screens and forecasts on fresh data.",
     about: {
@@ -37,6 +38,7 @@ export const CRITERIA_PAGES = {
     ],
   },
   screen: {
+    title: "Screening Criteria",
     color: "#3b82f6",
     description: "Saved Stock Screener searches. A policy uses one to pick the companies it forecasts and builds a portfolio from.",
     about: {
@@ -58,6 +60,7 @@ export const CRITERIA_PAGES = {
     ],
   },
   prediction: {
+    title: "Forecast Settings",
     color: "#06b6d4",
     description: "Saved forecast rules: when to predict, how much history to train on, and which forecasts a company must pass.",
     about: {
@@ -79,6 +82,7 @@ export const CRITERIA_PAGES = {
     ],
   },
   portfolio: {
+    title: "Portfolio Constraints",
     color: "#22c55e",
     description: "Saved RL portfolio settings: volatility and return limits, weight range, company counts and training options.",
     about: {

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiClient } from "../api/client";
 import ForecastPanels from "../features/predictions/ForecastPanels";
-import { CloseIcon } from "../layout/icons";
 import { INTERVALS, filterByInterval } from "../utils/dateRanges";
 import { tooltipProps } from "../utils/chartTheme";
+import BackButton from "../layout/BackButton";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -46,7 +46,6 @@ function computeVolatility(rangeHistory) {
 
 export default function CompanyDetailPage() {
   const { ticker } = useParams();
-  const navigate = useNavigate();
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState(null);
   const [range, setRange] = useState("1Y");
@@ -60,23 +59,18 @@ export default function CompanyDetailPage() {
       .catch((err) => setError(err.response?.data?.error || err.message));
   }, [ticker]);
 
-  const CloseButton = (
-    <button className="close-btn" onClick={() => navigate(-1)} title="Back" aria-label="Back">
-      <CloseIcon />
-    </button>
-  );
 
   if (error)
     return (
       <div className="card error-text" style={{ position: "relative" }}>
-        {CloseButton}
+        <div className="card-corner"><BackButton /></div>
         {error}
       </div>
     );
   if (!detail)
     return (
       <div className="card muted" style={{ position: "relative" }}>
-        {CloseButton}
+        <div className="card-corner"><BackButton /></div>
         Loading...
       </div>
     );
@@ -90,7 +84,7 @@ export default function CompanyDetailPage() {
   return (
     <div>
       <div className="card" style={{ position: "relative" }}>
-        {CloseButton}
+        <div className="card-corner"><BackButton /></div>
         <h2 style={{ paddingRight: 48 }}>{ticker} — {company.name}</h2>
         <p className="muted">{company.sector} / {company.industry}</p>
         <div className="filters-grid">

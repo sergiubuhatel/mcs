@@ -260,13 +260,15 @@ export default function PoliciesPage() {
           color="#8b5cf6"
           title="Policies"
           description="Saved import → screening → prediction → portfolio recipes. Run a policy to build a portfolio automatically."
+          actions={
+            <div className="toolbar">
+              <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
+              <button className="btn" onClick={() => open(null)}>
+                <PlusIcon width={17} height={17} /> New policy
+              </button>
+            </div>
+          }
         />
-        <div className="toolbar">
-          <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
-          <button className="btn" onClick={() => open(null)}>
-            <PlusIcon width={17} height={17} /> New policy
-          </button>
-        </div>
       </div>
 
       <div className="card filter-card">

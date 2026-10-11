@@ -2,15 +2,17 @@ import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { apiClient } from "../api/client";
 import CarletonLockup from "./CarletonLockup";
+import CarletonCrest from "./CarletonLogo";
 import {
   BarChartIcon,
   BookmarkPlusIcon,
   CandlestickIcon,
+  ClipboardCheckIcon,
   DatabaseIcon,
   DownloadIcon,
+  GearIcon,
   ListIcon,
   PieChartIcon,
-  PlayIcon,
   SearchIcon,
   SlidersIcon,
   TrendChartIcon,
@@ -28,7 +30,7 @@ const GROUPS = [
     color: "#10b981",
     items: [
       { to: "/data", label: "Market Data", icon: DownloadIcon, hint: "Import prices and fundamentals from Yahoo Finance" },
-      { to: "/criteria/data", label: "Data Criteria", icon: SlidersIcon, hint: "Saved import settings for policies" },
+      { to: "/criteria/data", label: "Data Filters", icon: SlidersIcon, hint: "Saved import settings (data criteria) for policies" },
     ],
   },
   {
@@ -42,12 +44,12 @@ const GROUPS = [
     ],
   },
   {
-    title: "Prediction",
+    title: "Forecasting",
     icon: TrendChartIcon,
     color: "#06b6d4",
     items: [
       { to: "/prediction", label: "Price Forecasts", icon: CandlestickIcon, hint: "LSTM and ARIMA price forecasts per company" },
-      { to: "/criteria/prediction", label: "Prediction Criteria", icon: SlidersIcon, hint: "Saved forecast points, training window and pass rule" },
+      { to: "/criteria/prediction", label: "Forecast Settings", icon: GearIcon, hint: "Saved prediction criteria: forecast points, training window and pass rule" },
     ],
   },
   {
@@ -56,19 +58,19 @@ const GROUPS = [
     color: "#22c55e",
     items: [
       { to: "/portfolio", label: "My Portfolios", icon: BarChartIcon, hint: "Saved portfolios with performance and allocation" },
-      { to: "/criteria/portfolio", label: "Portfolio Criteria", icon: SlidersIcon, hint: "Saved RL portfolio limits and settings" },
+      { to: "/criteria/portfolio", label: "Portfolio Constraints", icon: SlidersIcon, hint: "Saved portfolio criteria: RL limits and settings" },
     ],
   },
   {
-    title: "Policies",
+    title: "Automation",
     icon: WorkflowIcon,
     color: "#6366f1",
     items: [
       {
         to: "/policies",
         label: "Policies",
-        icon: PlayIcon,
-        hint: "Run Data → Screening → Prediction → Portfolio automatically and get a portfolio",
+        icon: ClipboardCheckIcon,
+        hint: "Run Data → Screening → Forecasting → Portfolio automatically and get a portfolio",
         countKey: "runningPolicies",
       },
     ],
@@ -77,14 +79,6 @@ const GROUPS = [
 
 const ACTIVE_RUN = ["queued", "running"];
 const POLL_MS = 10000;
-
-function BarsIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M1 3H15M1 8H15M1 13H15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 // How many policies are running right now (badge on Policies).
 function useRunningPolicies() {
@@ -117,46 +111,35 @@ function NavItem({ item, collapsed, counts }) {
       className={({ isActive }) => `nav-item ${isActive ? "active" : ""} ${collapsed ? "collapsed" : ""}`}
       title={(collapsed ? `${item.label} — ${item.hint}` : item.hint) + countTitle}
     >
-      <Icon width={15} height={15} />
+      <Icon width={18} height={18} />
       {!collapsed && <span className="nav-label">{item.label}</span>}
       {count > 0 && <span className="nav-count">{count}</span>}
     </NavLink>
   );
 }
 
-export default function Sidebar({ collapsed, onToggleCollapsed }) {
+export default function Sidebar({ collapsed }) {
   const counts = { runningPolicies: useRunningPolicies() };
   return (
     <aside
       className="flex h-full flex-col border-r shrink-0 transition-[width]"
       style={{
-        width: collapsed ? 64 : 220,
+        width: collapsed ? 68 : 232,
         background: "var(--color-bg-secondary)",
         borderColor: "var(--color-divider)",
       }}
     >
       {/* Same height as the top bar, so logo and title read as one header row. */}
       <div
-        className={`flex items-center px-3 ${collapsed ? "justify-center" : "justify-between"}`}
+        className="flex items-center justify-center px-3"
         style={{ height: "var(--header-height)", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}
       >
-        {!collapsed && (
-          <NavLink to="/" className="brand-link" title="Home: Stock Screener" aria-label="Carleton University — home">
-            <CarletonLockup height={42} />
-          </NavLink>
-        )}
-        <button
-          onClick={onToggleCollapsed}
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md hover:bg-tertiary"
-          style={{ color: "var(--color-text-secondary)" }}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          <BarsIcon />
-        </button>
+        <NavLink to="/" className="brand-link" title="Home: Stock Screener" aria-label="Carleton University — home">
+          {collapsed ? <CarletonCrest height={36} /> : <CarletonLockup height={42} />}
+        </NavLink>
       </div>
 
-      <nav className="flex flex-col px-2 py-2" style={{ overflowY: "auto" }}>
+      <nav className="flex flex-col px-3 py-3" style={{ overflowY: "auto" }}>
         {GROUPS.map((group) => {
           const GroupIcon = group.icon;
           return (
@@ -175,16 +158,9 @@ export default function Sidebar({ collapsed, onToggleCollapsed }) {
         })}
       </nav>
       {!collapsed && (
-        <div
-          className="mt-auto text-center"
-          style={{
-            fontSize: "0.72rem",
-            color: "var(--color-text-secondary)",
-            padding: "8px 0",
-            borderTop: "1px solid var(--color-divider)",
-          }}
-        >
-          Version {APP_VERSION}, {APP_VERSION_DATE}
+        <div className="sidebar-version mt-auto">
+          <div>Version {APP_VERSION}</div>
+          <div>{APP_VERSION_DATE}</div>
         </div>
       )}
     </aside>

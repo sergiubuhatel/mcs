@@ -365,3 +365,68 @@ table.compact th, table.compact td { padding: 4px 8px; }
 .run-panel-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; }
 .link-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; padding: 4px 0; color: var(--color-text-primary); font-size: 0.85rem; font-weight: 500; cursor: pointer; }
 .link-btn:hover { color: var(--btn-accent); }
+
+/* Page back X (2026-10-11): right end of each page's header, in the main panel. */
+.page-header-actions { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.header-card .page-header { flex: 1; min-width: 0; }
+.card-corner { position: absolute; top: 16px; right: 16px; }
+
+/* Stock Screener (reference screenshot 2026-10-11): filter groups with
+   counts, active-filter chips, Forecast Analysis tiles, results toolbar. */
+.screener-search-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.screener-search-row .search-box input { width: 100%; }
+.screener-search-row select { width: 100%; }
+@media (max-width: 900px) { .screener-search-row { grid-template-columns: 1fr; } }
+.screener-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; align-items: start; }
+.screener-group { padding: 12px; }
+.screener-group-head { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: 0; padding: 0; color: var(--color-text-primary); cursor: pointer; text-align: left; }
+.screener-group-title { flex: 1; font-weight: 600; font-size: 0.92rem; }
+.count-badge { min-width: 24px; height: 24px; padding: 0 7px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+.count-badge.on { background: rgba(37, 99, 235, 0.18); color: var(--btn-accent); }
+.dark .count-badge.on { color: #93c5fd; }
+.range-inputs { display: flex; gap: 6px; }
+.range-inputs input { flex: 1 1 0; min-width: 0; }
+.unit-label { display: flex; align-items: center; gap: 2px; }
+.unit-label select { padding: 0 2px; border: 0; background: transparent; color: var(--btn-accent); font-weight: 600; font-size: inherit; cursor: pointer; width: auto; }
+.active-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--color-divider); font-size: 0.85rem; }
+.filter-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 10px; border-radius: 999px; background: rgba(37, 99, 235, 0.12); border: 1px solid rgba(37, 99, 235, 0.35); color: var(--color-text-primary); font-size: 0.78rem; white-space: nowrap; }
+.filter-chip button { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 999px; border: 0; background: transparent; color: var(--color-text-secondary); cursor: pointer; padding: 0; font-size: 0.9rem; line-height: 1; }
+.filter-chip button:hover { background: rgba(220, 38, 38, 0.15); color: #dc2626; }
+.active-filters .clear-all { margin-left: auto; color: var(--btn-accent); text-decoration: underline; }
+.forecast-controls { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.forecast-controls label { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--color-text-secondary); margin: 0; }
+.forecast-controls input { width: 80px; }
+.signal-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.signal-tile { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 10px; text-align: left; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--tile) 55%, transparent); background: color-mix(in srgb, var(--tile) 9%, var(--color-bg-primary)); color: var(--color-text-primary); }
+.signal-tile:hover { background: color-mix(in srgb, var(--tile) 16%, var(--color-bg-primary)); }
+.signal-tile.active { box-shadow: 0 0 0 2px var(--tile); }
+.signal-tile-icon { width: 46px; height: 46px; border-radius: 999px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--tile); color: #fff; }
+.signal-tile-label { display: block; font-weight: 700; font-size: 0.9rem; color: var(--tile); }
+.dark .signal-tile-label { color: color-mix(in srgb, var(--tile) 70%, #fff); }
+.signal-tile-value { display: flex; align-items: baseline; gap: 10px; font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+.signal-tile-value .muted { font-size: 0.8rem; font-weight: 500; }
+.signal-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; margin-top: 14px; background: var(--color-bg-tertiary); }
+.signal-bar > div { height: 100%; }
+.forecast-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 0.85rem; }
+.th-filter { position: relative; display: inline-flex; vertical-align: middle; margin-left: 4px; }
+.th-filter-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 5px; border: 0; background: transparent; color: var(--color-text-secondary); cursor: pointer; padding: 0; }
+.th-filter-btn:hover, .th-filter-btn.on { color: var(--btn-accent); background: rgba(37, 99, 235, 0.12); }
+.th-filter-menu { position: absolute; top: 24px; left: 0; z-index: 20; min-width: 130px; padding: 4px; border-radius: 8px; border: 1px solid var(--color-divider); background: var(--color-bg-primary); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); display: grid; }
+.th-filter-menu button { text-align: left; padding: 6px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--color-text-primary); font-size: 0.82rem; font-weight: 500; cursor: pointer; }
+.th-filter-menu button:hover { background: var(--color-bg-tertiary); }
+.th-filter-menu button.on { color: var(--btn-accent); font-weight: 700; }
+.screener-search-row label:not(.search-box), .screener-group label { display: block; font-size: 0.8rem; font-weight: 500; color: var(--color-text-secondary); margin-bottom: 3px; }
+.screener-group .unit-label { display: flex; }
+.range-inputs input, .screener-search-row select, .screener-search-row .search-box { font-size: 0.85rem; }
+
+/* Sidebar v2 (reference screenshot 2026-10-11): bigger headings/icons,
+   toggle moved to the top bar, two-line version footer. */
+.nav-section { font-size: 1.02rem; padding: 10px 10px 6px; gap: 12px; }
+.nav-section svg { width: 22px; height: 22px; }
+.nav-item { font-size: 0.9rem; padding: 8px 12px 8px 42px; gap: 12px; border-radius: 8px; }
+.nav-item.collapsed { padding: 9px; }
+.nav-group + .nav-group { margin-top: 8px; padding-top: 8px; }
+.sidebar-version { font-size: 0.75rem; color: var(--color-text-secondary); padding: 10px 16px; border-top: 1px solid var(--color-divider); line-height: 1.4; }
+.sidebar-toggle { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex-shrink: 0; border-radius: 8px; border: 0; background: transparent; color: var(--color-text-secondary); cursor: pointer; }
+.sidebar-toggle:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }

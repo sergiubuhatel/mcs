@@ -6,6 +6,7 @@ const initialState = {
     industry: "",
     q: "",
     ranges: {}, // { roe: [min, max], trailing_pe: [min, max], ... }
+    signal: "", // "" = any; else only results rated "Strong" / "Mixed" / "Weak" / "Avoid"
     sortBy: "market_cap",
     sortDir: "desc",
     limit: 50,
@@ -37,6 +38,7 @@ const companiesSlice = createSlice({
         industry: initialState.filters.industry,
         q: initialState.filters.q,
         ranges: initialState.filters.ranges,
+        signal: initialState.filters.signal,
         offset: 0,
       };
     },

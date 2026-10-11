@@ -28,7 +28,15 @@ function MoonIcon() {
   );
 }
 
-export default function TopBar() {
+function BarsIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M1 3H15M1 8H15M1 13H15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export default function TopBar({ sidebarCollapsed, onToggleSidebar }) {
   const dispatch = useDispatch();
   const darkMode = useSelector((s) => s.theme.darkMode);
 
@@ -37,11 +45,21 @@ export default function TopBar() {
       className="flex shrink-0 items-center justify-between gap-4 px-6"
       style={{ height: "var(--header-height)", borderBottom: "1px solid var(--color-divider)", background: "var(--color-bg-secondary)" }}
     >
+      <div className="flex min-w-0 items-center gap-4">
+      <button
+        onClick={onToggleSidebar}
+        className="sidebar-toggle"
+        title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+      >
+        <BarsIcon />
+      </button>
       <div style={{ minWidth: 0 }}>
         <div className="app-title">Investment Decision Support</div>
         <div className="app-subtitle" title="A Data-Driven Framework for S&P 500 Stock Screening, Portfolio Allocation, and Price Prediction">
           A Data-Driven Framework for S&amp;P 500 Stock Screening, Portfolio Allocation, and Price Prediction
         </div>
+      </div>
       </div>
       <button
         className="theme-toggle"

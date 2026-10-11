@@ -13,6 +13,7 @@ import {
   TrendChartIcon,
   WorkflowIcon,
 } from "../layout/icons";
+import BackButton from "../layout/BackButton";
 
 const RECENT = 8;
 
@@ -251,6 +252,9 @@ export default function DataPage() {
           <p className="muted" style={{ margin: 0, fontSize: "0.9rem" }}>
             Price history and fundamentals from Yahoo Finance. Choose which companies, what to import, and how far back history should start.
           </p>
+        </div>
+        <div className="page-header-actions">
+          <BackButton />
         </div>
       </header>
 

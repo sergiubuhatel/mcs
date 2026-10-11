@@ -2,9 +2,11 @@
 // page header, stat tiles, toolbar search, sortable headers, pager, and the
 // About / Quick tips panels at the bottom.
 import { useMemo, useState } from "react";
+import BackButton from "../layout/BackButton";
 import { LightbulbIcon, SearchIcon } from "../layout/icons";
 
-export function PageHeader({ icon: Icon, color = "#3b82f6", title, description, breadcrumb }) {
+/** Page title row; `actions` (e.g. New buttons) sit right, just before the back X. */
+export function PageHeader({ icon: Icon, color = "#3b82f6", title, description, breadcrumb, actions }) {
   return (
     <header className="page-header">
       <div className="icon-badge page-header-icon" style={{ background: `${color}26`, color }}>
@@ -23,6 +25,10 @@ export function PageHeader({ icon: Icon, color = "#3b82f6", title, description, 
         )}
         <h2 style={{ margin: 0 }}>{title}</h2>
         <p className="muted" style={{ margin: 0, fontSize: "0.9rem" }}>{description}</p>
+      </div>
+      <div className="page-header-actions">
+        {actions}
+        <BackButton />
       </div>
     </header>
   );

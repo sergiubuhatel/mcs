@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import Modal from "../../components/Modal";
+import Req from "../../components/Req";
 import { clearSelected } from "../companies/companiesSlice";
 import { describeFilters } from "../companies/filterFields";
 import { createRequested } from "./poolsSlice";
 import { screenCriteria } from "../companies/companiesSaga";
-import { BookmarkPlusIcon } from "../../layout/icons";
+import { SaveIcon } from "../../layout/icons";
 
 // Name used when auto-naming is on: the screener's filled-in filters, or --
 // if the pool was hand-picked with no filters -- its first few tickers.
@@ -15,50 +17,59 @@ function autoPoolName(filters, tickers) {
   return tickers.length > 5 ? `${shown} +${tickers.length - 5} more` : shown;
 }
 
-export default function SavePoolForm() {
+/** "Create Stock Pool" dialog for the screener's selected companies. */
+export default function SavePoolForm({ isOpen, onClose }) {
   const dispatch = useDispatch();
   const { selected, filters } = useSelector((s) => s.companies);
   const { creating, error } = useSelector((s) => s.pools);
   const [name, setName] = useState("");
-  const [autoName, setAutoName] = useState(true);
 
   const tickers = Object.keys(selected);
-  if (tickers.length === 0) return null;
-
   const generated = autoPoolName(filters, tickers);
-  const effectiveName = autoName ? generated : name;
-
-  const onAutoNameChange = (checked) => {
-    // Unchecking starts manual editing from the generated name rather than blank.
-    if (!checked) setName(generated);
-    setAutoName(checked);
-  };
+  // Empty name = auto-named from the filters; typing renames it.
+  const effectiveName = name.trim() ? name : generated;
 
   const submit = (e) => {
     e.preventDefault();
-    if (!effectiveName.trim()) return;
+    if (!effectiveName.trim() || tickers.length === 0) return;
     dispatch(createRequested({ name: effectiveName.trim(), tickers, filters: screenCriteria(filters) }));
     setName("");
     dispatch(clearSelected());
+    onClose();
   };
 
   return (
-    <form className="card" onSubmit={submit} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      <strong style={{ whiteSpace: "nowrap" }}>{tickers.length} selected</strong>
-      <label style={{ display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", margin: 0 }}>
-        <input type="checkbox" checked={autoName} onChange={(e) => onAutoNameChange(e.target.checked)} />
-        Auto name
-      </label>
-      <input
-        placeholder="Pool name, e.g. 'Low-debt tech'"
-        value={effectiveName}
-        readOnly={autoName}
-        onChange={(e) => setName(e.target.value)}
-        title={autoName ? "Built from the search filters -- uncheck Auto name to edit" : undefined}
-        style={{ flex: 1, padding: "6px 8px", border: "1px solid var(--color-divider)", borderRadius: 5, background: "var(--color-bg-primary)", color: autoName ? "var(--color-text-secondary, var(--color-text-primary))" : "var(--color-text-primary)" }}
-      />
-      <button className="btn" type="submit" disabled={creating}><BookmarkPlusIcon /> Save as pool</button>
-      {error && <span className="error-text">{error}</span>}
-    </form>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Create stock pool"
+      maxWidth={560}
+      headerActions={
+        <button
+          className="close-btn"
+          style={{ position: "static", opacity: creating ? 0.5 : 1 }}
+          type="submit"
+          form="save-pool-form"
+          disabled={creating || tickers.length === 0}
+          title="Save"
+          aria-label="Save"
+        >
+          <SaveIcon width={18} height={18} />
+        </button>
+      }
+    >
+      <form id="save-pool-form" onSubmit={submit} className="filters-grid" style={{ gridTemplateColumns: "1fr" }}>
+        <div>
+          <label>Name<Req /></label>
+          <input value={effectiveName} onChange={(e) => setName(e.target.value)} autoFocus />
+          {!name.trim() && <span className="muted">Named automatically from the filters — type to rename.</span>}
+        </div>
+        <div>
+          <label>Companies ({tickers.length})</label>
+          <p className="muted" style={{ margin: 0, maxHeight: 120, overflow: "auto" }}>{tickers.join(", ") || "None selected"}</p>
+        </div>
+        {error && <p className="error-text">{error}</p>}
+      </form>
+    </Modal>
   );
 }
