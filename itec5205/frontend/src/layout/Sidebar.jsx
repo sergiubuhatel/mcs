@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { apiClient } from "../api/client";
-import CarletonLogo from "./CarletonLogo";
+import CarletonLockup from "./CarletonLockup";
 import {
   BarChartIcon,
   BookmarkPlusIcon,
@@ -141,13 +141,8 @@ export default function Sidebar({ collapsed, onToggleCollapsed }) {
         style={{ height: "var(--header-height)", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}
       >
         {!collapsed && (
-          <NavLink to="/" className="brand-link" title="Home: Stock Screener">
-            <CarletonLogo height={40} />
-            <span className="brand-wordmark">
-              Carleton
-              <br />
-              University
-            </span>
+          <NavLink to="/" className="brand-link" title="Home: Stock Screener" aria-label="Carleton University — home">
+            <CarletonLockup height={42} />
           </NavLink>
         )}
         <button

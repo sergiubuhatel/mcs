@@ -146,7 +146,9 @@ tr:hover td { background: var(--color-bg-hover); }
 :root { --header-height: 72px; }
 .brand-link { display: flex; align-items: center; gap: 10px; min-width: 0; text-decoration: none; color: var(--color-text-primary); }
 .brand-link:hover { text-decoration: none; }
-.brand-wordmark { font-family: Georgia, "Times New Roman", serif; font-weight: 700; font-size: 1.12rem; line-height: 1.05; letter-spacing: 0.01em; white-space: nowrap; }
+/* Wordmark color (the lockup draws it in currentColor): official near-black, white on dark. */
+.brand-link { color: #100f0d; }
+.dark .brand-link { color: #ffffff; }
 .app-title { font-size: 1.2rem; font-weight: 700; color: var(--color-text-primary); line-height: 1.25; }
 .app-subtitle { font-size: 0.82rem; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .theme-toggle {
