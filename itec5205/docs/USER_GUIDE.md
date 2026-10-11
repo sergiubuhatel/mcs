@@ -94,6 +94,10 @@ grid can be searched and sorted (Name, Used by, Updated).
   portfolio with RL*: whole pool or steady-trend only, max volatility, min
   annual return, max weight range, min/max companies, risk aversion, timesteps.
 
+On the Policies page, search by name or criteria and filter by each
+criteria (Data also has *None*) and by last-run status; **View** opens a
+policy's last run and history.
+
 **Running** a policy (⋮ -> Run): (1) import with the data criteria (skipped
 without one, or when everything is already up to date), (2) search with the
 screen criteria, (3) forecast every match and keep the companies whose
@@ -159,6 +163,16 @@ performance chart, holdings, allocation and its own **signal board** (Forecast
 all works there too).
 
 ## 5. Company page (`/companies/<ticker>`) and Prediction page
+
+**Price Forecasts** (`/prediction`): load a ticker (or click a recent one) to
+see its last close, the model signal at the chosen horizon (1M–4M:
+Bullish = both models up, Bearish = both down, Mixed = they disagree; the
+confidence is ARIMA's probability of a rise from its 95% interval), the
+price chart with both forecasts and ARIMA's interval band, predicted prices
+from 1 day to 4 months, the two models' test errors, a plain-language
+interpretation, and recent predictions. **Forecast now / Re-forecast**
+trains both models on the last 10 years; *Model details & settings* opens the
+full training controls.
 
 - Price, fundamentals and a price chart (1M … ALL).
 - **Training days** (shared by both models) and the last close with its

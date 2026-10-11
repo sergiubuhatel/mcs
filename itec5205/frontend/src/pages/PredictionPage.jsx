@@ -32,8 +32,10 @@ const TRAINING_DAYS = 2515;
 const COLORS = { history: "#2563eb", lstm: "#16a34a", arima: "#a855f7" };
 
 const money = (v) => (v == null ? "–" : `$${Number(v).toFixed(2)}`);
-const pct = (v, digits = 2) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`);
-const tone = (v) => (v == null || v === 0 ? undefined : v > 0 ? "#16a34a" : "#dc2626");
+// Changes that round to 0.00% read as unchanged: no sign, neutral color.
+const roundsToZero = (v, digits = 2) => Math.abs(v) < 0.5 * 10 ** -digits;
+const pct = (v, digits = 2) => (v == null ? "–" : roundsToZero(v, digits) ? `${(0).toFixed(digits)}%` : `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`);
+const tone = (v) => (v == null || roundsToZero(v) ? undefined : v > 0 ? "#16a34a" : "#dc2626");
 const fmtWhen = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "–");
 const apiError = (err) => err.response?.data?.error || err.message;
 
