@@ -162,7 +162,7 @@ export default function CompanyTable() {
     {
       key: "day_change",
       label: "Change (1D)",
-      csv: (row) => dayChangePct(row)?.toFixed(4),
+      csv: (row) => (dayChangePct(row) == null ? null : (dayChangePct(row) / 100).toFixed(6)),
       sortable: true,
       width: 95,
       render: (row) => {

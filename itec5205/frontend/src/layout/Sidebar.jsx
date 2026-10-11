@@ -124,7 +124,7 @@ export default function Sidebar({ collapsed }) {
     <aside
       className="flex h-full flex-col border-r shrink-0 transition-[width]"
       style={{
-        width: collapsed ? 68 : 232,
+        width: collapsed ? 68 : 250,
         background: "var(--color-bg-secondary)",
         borderColor: "var(--color-divider)",
       }}

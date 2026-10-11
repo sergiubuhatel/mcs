@@ -62,7 +62,7 @@ export default function SavePoolForm({ isOpen, onClose }) {
         <div>
           <label>Name<Req /></label>
           <input value={effectiveName} onChange={(e) => setName(e.target.value)} autoFocus />
-          {!name.trim() && <span className="muted">Named automatically from the filters — type to rename.</span>}
+          {!name.trim() && <span className="muted">Named automatically — type to rename.</span>}
         </div>
         <div>
           <label>Companies ({tickers.length})</label>
