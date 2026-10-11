@@ -470,3 +470,34 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 .setting-row > label { font-size: 0.84rem; }
 .setting-control select, .setting-control input[type="number"], .setting-control input[type="text"] { padding-top: 5px; padding-bottom: 5px; font-size: 0.84rem; }
 .info-banner { padding: 10px 14px; margin-bottom: 14px; align-items: center; }
+
+/* Portfolio detail (reference screenshots 2026-10-11). */
+.last-updated { display: inline-flex; align-items: center; gap: 8px; font-size: 0.8rem; line-height: 1.3; color: var(--color-text-primary); margin-right: 6px; }
+.last-updated svg { color: var(--color-text-secondary); }
+.stat-row:has(> .stat-card:nth-child(5)) { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.alloc-card { display: grid; grid-template-columns: minmax(220px, 1fr) 2.4fr; gap: 24px; align-items: start; }
+@media (max-width: 1000px) { .alloc-card { grid-template-columns: 1fr; } }
+.alloc-rows { display: grid; gap: 4px; }
+.alloc-count { text-align: right; font-size: 0.78rem; }
+.alloc-row { display: grid; grid-template-columns: 56px minmax(120px, 220px) 1fr 64px; align-items: center; gap: 12px; padding: 5px 6px; border-radius: 6px; color: var(--color-text-primary); text-decoration: none; }
+.alloc-row:hover { background: var(--color-bg-hover); text-decoration: none; }
+.alloc-ticker { font-weight: 700; color: var(--color-text-accent); }
+.alloc-name { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alloc-track { height: 12px; border-radius: 999px; background: var(--color-bg-tertiary); overflow: hidden; }
+.alloc-track > span { display: block; height: 100%; border-radius: 999px; }
+.alloc-pct { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.signal-board-head { flex-wrap: wrap; align-items: flex-start; }
+.signal-board-head .forecast-controls { margin-left: auto; align-items: center; }
+.signal-stars { letter-spacing: 2px; white-space: nowrap; font-size: 1.05rem; }
+.clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.portfolio-title { margin: 0; font-size: 1.35rem; line-height: 1.3; }
+.holdings-table th, .holdings-table td { padding: 6px 7px; font-size: 0.8rem; }
+
+/* Portfolio detail v3: no empty space (user screenshot 2026-10-11). */
+.alloc-row { grid-template-columns: 70px minmax(160px, 300px) 1fr 80px; padding: 4px 6px; }
+.alloc-head { font-size: 0.8rem; font-weight: 600; color: var(--color-text-secondary); border-bottom: 1px solid var(--color-divider); border-radius: 0; padding-bottom: 6px; }
+.alloc-head:hover { background: none; }
+.alloc-rows { gap: 2px; }
+.signal-summary { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 6px; font-size: 0.85rem; }
+.nav-item.standalone { padding-left: 12px; font-size: 1rem; font-weight: 700; }
+.nav-item.standalone svg { width: 22px; height: 22px; }

@@ -177,7 +177,7 @@ function CriteriaGrid({ kind }) {
     if (!q) return items;
     return items.filter((c) => `${c.name} ${describeCriteria(kind, c)} ${c.description || ""}`.toLowerCase().includes(q));
   }, [items, query, kind]);
-  const { sorted, sort, toggle } = useSort(filtered, {
+  const { sorted, sort, toggle, showNewest } = useSort(filtered, {
     name: (c) => c.name,
     used: (c) => usage[c._key] || 0,
     updated_at: (c) => c.updated_at,
@@ -230,6 +230,7 @@ function CriteriaGrid({ kind }) {
       if (editor.id) await apiClient.put(`/api/criteria/${kind}/${editor.id}`, payload);
       else await apiClient.post(`/api/criteria/${kind}`, payload);
       toast.success(`Saved "${payload.name}"`);
+      if (!editor.id) showNewest(); // newest (last updated) first
       setEditor(null);
       load();
     } catch (err) {
@@ -242,7 +243,10 @@ function CriteriaGrid({ kind }) {
   const duplicate = (c) =>
     apiClient
       .post(`/api/criteria/${kind}/${c._key}/duplicate`)
-      .then(load)
+      .then(() => {
+        showNewest();
+        return load();
+      })
       .catch((err) => toast.error(apiError(err)));
 
   const confirmDelete = () => {

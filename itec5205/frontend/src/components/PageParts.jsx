@@ -82,7 +82,9 @@ export function useSort(items, getters, initial = { key: null, dir: "asc" }) {
   }, [items, sort]);
   const toggle = (key) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" ? "asc" : "desc" }));
-  return { sorted, sort, toggle };
+  // `showNewest` puts the grid back on its initial (newest-first) sort,
+  // e.g. right after creating something so it appears at the top.
+  return { sorted, sort, toggle, showNewest: () => setSort(initial) };
 }
 
 /** Column header; clickable with an arrow when `sortable`. */

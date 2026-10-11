@@ -77,6 +77,13 @@ const GROUPS = [
   },
 ];
 
+// App-wide initial values; a single item, no group heading.
+const SETTINGS_GROUP = {
+  title: "Settings",
+  standalone: true,
+  items: [{ to: "/settings", label: "Settings", icon: GearIcon, hint: "Initial values for every page", standalone: true }],
+};
+
 const ACTIVE_RUN = ["queued", "running"];
 const POLL_MS = 10000;
 
@@ -108,7 +115,7 @@ function NavItem({ item, collapsed, counts }) {
     <NavLink
       to={item.to}
       end={item.end}
-      className={({ isActive }) => `nav-item ${isActive ? "active" : ""} ${collapsed ? "collapsed" : ""}`}
+      className={({ isActive }) => `nav-item ${isActive ? "active" : ""} ${collapsed ? "collapsed" : ""} ${item.standalone ? "standalone" : ""}`}
       title={(collapsed ? `${item.label} — ${item.hint}` : item.hint) + countTitle}
     >
       <Icon width={18} height={18} />
@@ -140,11 +147,11 @@ export default function Sidebar({ collapsed }) {
       </div>
 
       <nav className="flex flex-col px-3 py-3" style={{ overflowY: "auto" }}>
-        {GROUPS.map((group) => {
+        {[...GROUPS, SETTINGS_GROUP].map((group) => {
           const GroupIcon = group.icon;
           return (
             <div key={group.title} className="nav-group flex flex-col" style={{ gap: 2 }}>
-              {!collapsed && (
+              {!collapsed && !group.standalone && (
                 <div className="nav-section">
                   <GroupIcon style={{ color: group.color }} />
                   {group.title}

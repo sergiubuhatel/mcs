@@ -225,7 +225,7 @@ def update_portfolio(portfolio_id: str, name: str) -> dict | None:
     col = db.collection("portfolios")
     if not col.has(portfolio_id):
         return None
-    col.update({"_key": portfolio_id, "name": name})
+    col.update({"_key": portfolio_id, "name": name, "updated_at": datetime.now(timezone.utc).isoformat()})
     return col.get(portfolio_id)
 
 

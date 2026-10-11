@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiClient } from "../../api/client";
-import { TrendChartIcon } from "../../layout/icons";
+import { CheckCircleIcon, StarIcon, TrendChartIcon } from "../../layout/icons";
 import { HORIZONS } from "../predictions/ForecastTables";
 import { getSettings } from "../settings/settings";
 
@@ -35,7 +35,7 @@ function sortValue(row, key) {
 
 function Stars({ stars }) {
   return (
-    <span style={{ letterSpacing: 1, whiteSpace: "nowrap" }}>
+    <span className="signal-stars">
       {STAR_LABELS.map(([key, label]) => {
         const v = stars[key];
         const glyph = v === null || v === undefined ? "·" : v ? "★" : "☆";
@@ -68,7 +68,7 @@ function Pct({ point, title }) {
 
 function AgreeCell({ value }) {
   if (!value) return <span className="muted">-</span>;
-  if (value === "agree_up") return <span style={{ color: "#16a34a", fontWeight: 700 }} title="Both up">▲▲</span>;
+  if (value === "agree_up") return <CheckCircleIcon width={17} height={17} style={{ color: "#16a34a", verticalAlign: "middle" }} aria-label="Both up" />;
   if (value === "agree_down") return <span style={{ color: "#dc2626", fontWeight: 700 }} title="Both down">▼▼</span>;
   return <span className="muted" title="LSTM and ARIMA disagree (or one is flat)">≠</span>;
 }
@@ -87,7 +87,7 @@ export function progressText(run) {
 }
 
 /** Combined evidence for a pool (`poolId`) or a portfolio (`portfolioId`). */
-export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey }) {
+export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey, onBoard }) {
   const scope = poolId ? { pool_id: poolId } : { portfolio_id: portfolioId };
   const [board, setBoard] = useState(null);
   const [error, setError] = useState(null);
@@ -103,7 +103,10 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
   const loadBoard = useCallback(() => {
     apiClient
       .get("/api/signals", { params: scope })
-      .then((res) => setBoard(res.data))
+      .then((res) => {
+        setBoard(res.data);
+        onBoard?.(res.data); // e.g. the portfolio page's Latest signal tile
+      })
       .catch((err) => setError(err.response?.data?.error || err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poolId, portfolioId]);
@@ -213,30 +216,50 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
     HORIZONS.map((h) =>
       sortableTh(`${model}:${h.label}`, h.label, `Sort by ${model.toUpperCase()} ${h.name} change`, { style: { textAlign: "right" } })
     );
+  const explanation =
+    "Four pieces of evidence per company: fundamentals (still passes the pool's screen), RL (held by the latest RL allocation), " +
+    "LSTM and ARIMA (each forecasting up at 1, 2, 3 and 4 months). LSTM and ARIMA agree only when they call the same direction " +
+    `at all four horizons; a move within ±${board?.deadband_pct ?? 0.05}% counts as flat (≈). Strong = every available star is lit; ` +
+    "Avoid = both models agree on down.";
   const droppable = !s ? 0 : refineRule === "drop_weak" ? s.Weak + s.Avoid : s.Mixed + s.Weak + s.Avoid;
 
   return (
     <div className="card">
-      <h3>Signal board — do all the stars align?</h3>
-      <p className="muted">
-        Four pieces of evidence per company: <strong>fundamentals</strong> (still passes the pool's screen),{" "}
-        <strong>RL</strong> (held by the latest RL allocation), <strong>LSTM</strong> and <strong>ARIMA</strong> (each
-        forecasting up at 1, 2, 3 and 4 months). LSTM and ARIMA <em>agree</em> only when they call the same direction at
-        all four horizons; a move within ±{board?.deadband_pct ?? 0.05}% counts as flat (≈). <strong>Strong</strong> = every
-        available star is lit; <strong>Avoid</strong> = both models agree on down.
-        {board && !board.has_screen && " This pool has no saved screen, so the fundamentals star is n/a."}
-        {board && board.portfolio_id === null && " No RL portfolio has been trained on it yet, so the RL star is n/a."}
-      </p>
+      <div className="card-header signal-board-head">
+        <div className="icon-badge" style={{ background: "#eab30822", color: "#eab308", width: 42, height: 42, borderRadius: 11 }}>
+          <StarIcon width={20} height={20} />
+        </div>
+        <div style={{ minWidth: 0, flex: "1 1 420px" }}>
+          <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+            Signal board — do all the stars align?
+            <span className="help-dot" title={explanation} aria-label={explanation} role="img">?</span>
+          </h3>
+          {s && (
+            <div className="signal-summary">
+              {["Strong", "Mixed", "Weak", "Avoid"].map((k) => (
+                <span key={k}><SignalBadge signal={k} /> {s[k]}</span>
+              ))}
+              <span className="muted">· models agree on {s.agree}, disagree on {s.disagree}</span>
+              {s.missing_forecasts > 0 && <span className="muted">· {s.missing_forecasts} without both forecasts</span>}
+            </div>
+          )}
+          {board && (!board.has_screen || board.portfolio_id === null) && (
+            <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.78rem" }}>
+              {!board.has_screen && "No saved screen, so the fundamentals star is n/a. "}
+              {board.portfolio_id === null && "No RL portfolio trained on it yet, so the RL star is n/a."}
+            </p>
+          )}
+        </div>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
-        <div>
-          <label style={{ display: "block", fontSize: "0.78rem", color: "var(--color-text-secondary)" }}>Training days</label>
-          <input type="number" min={120} value={trainingDays} onChange={(e) => setTrainingDays(e.target.value)} style={{ width: 90 }} disabled={running} />
-        </div>
-        <div>
-          <label style={{ display: "block", fontSize: "0.78rem", color: "var(--color-text-secondary)" }}>LSTM max epochs</label>
-          <input type="number" min={1} value={epochs} onChange={(e) => setEpochs(e.target.value)} style={{ width: 90 }} disabled={running} />
-        </div>
+      <div className="forecast-controls">
+        <label>
+          Training days
+          <input type="number" min={120} value={trainingDays} onChange={(e) => setTrainingDays(e.target.value)} disabled={running} />
+        </label>
+        <label>
+          LSTM max epochs
+          <input type="number" min={1} value={epochs} onChange={(e) => setEpochs(e.target.value)} disabled={running} />
+        </label>
         <button className="btn" onClick={forecastAll} disabled={running}>
           <TrendChartIcon /> {running ? "Forecasting..." : `Forecast all (LSTM + ARIMA)`}
         </button>
@@ -262,6 +285,7 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
           </>
         )}
       </div>
+      </div>
 
       {run && (
         <div style={{ marginTop: 8 }}>
@@ -282,45 +306,36 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
       )}
       {error && <p className="error-text">{error}</p>}
 
-      {s && (
-        <p style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          {["Strong", "Mixed", "Weak", "Avoid"].map((k) => (
-            <span key={k}><SignalBadge signal={k} /> {s[k]}</span>
-          ))}
-          <span className="muted">· models agree on {s.agree}, disagree on {s.disagree}</span>
-          {s.missing_forecasts > 0 && <span className="muted">· {s.missing_forecasts} without both forecasts</span>}
-        </p>
-      )}
 
       {board && (
         <div style={{ overflowX: "auto" }}>
-          <table>
+          <table className="compact">
             <thead>
               <tr>
+                <th rowSpan={2} style={{ textAlign: "left" }}>Ticker</th>
                 <th rowSpan={2} style={{ textAlign: "left" }}>Company</th>
                 {sortableTh("signal", "Signal", "Sort by signal (Strong → Avoid)", { rowSpan: 2 })}
                 {sortableTh("stars", "Stars", "Sort by number of lit stars", { rowSpan: 2 })}
                 {sortableTh("rl_weight", "RL weight", "Sort by RL allocation weight", { rowSpan: 2 })}
                 <th colSpan={4}>LSTM change</th>
                 <th colSpan={4}>ARIMA change</th>
-                <th colSpan={4}>Agree</th>
+                <th rowSpan={2} title="LSTM and ARIMA call the same direction at all four horizons">Agree</th>
               </tr>
               <tr>
                 {horizonHeader("lstm")}
                 {horizonHeader("arima")}
-                {HORIZONS.map((h) => <th key={`g-${h.label}`} style={{ textAlign: "right", cursor: "default" }}>{h.label}</th>)}
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.ticker}>
                   <td style={{ textAlign: "left" }}>
-                    <Link to={`/companies/${r.ticker}`}><strong>{r.ticker}</strong></Link>{" "}
-                    <span className="muted" style={{ fontSize: "0.8rem" }}>{r.name}</span>
+                    <Link to={`/companies/${r.ticker}`}><strong>{r.ticker}</strong></Link>
                     {r.window_mismatch && (
                       <span className="error-text" title="LSTM and ARIMA were trained on different windows/data -- re-run Forecast all"> ⚠</span>
                     )}
                   </td>
+                  <td style={{ textAlign: "left", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }} title={r.name}>{r.name}</td>
                   <td><SignalBadge signal={r.signal} /></td>
                   <td><Stars stars={r.stars} /></td>
                   <td>{r.rl_weight === null || r.rl_weight === undefined ? <span className="muted">n/a</span> : `${(r.rl_weight * 100).toFixed(1)}%`}</td>
@@ -333,7 +348,7 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
                       </td>
                     );
                   })}
-                  {HORIZONS.map((h) => <td key={`g-${h.label}`}><AgreeCell value={r.horizon_agreement?.[h.label]} /></td>)}
+                  <td style={{ textAlign: "center" }}><AgreeCell value={r.agreement} /></td>
                 </tr>
               ))}
             </tbody>

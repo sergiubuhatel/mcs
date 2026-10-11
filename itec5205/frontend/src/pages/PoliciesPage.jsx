@@ -83,6 +83,7 @@ const COLUMNS = [
     width: 75,
     render: (p) => (p.last_run?.portfolio_id ? <Link to={`/portfolios/${p.last_run.portfolio_id}`}>Open</Link> : <span className="muted">—</span>),
   },
+  { key: "created_at", label: "Created", width: 165, sortable: true, hiddenByDefault: true, render: (p) => (p.created_at ? new Date(p.created_at).toLocaleString() : "—") },
   { key: "run_at", label: "Last run", width: 165, sortable: true, render: (p) => (p.last_run ? new Date(p.last_run.created_at).toLocaleString() : "—") },
 ];
 
@@ -165,6 +166,7 @@ export default function PoliciesPage() {
       if (editor.id) await apiClient.put(`/api/policies/${editor.id}`, payload);
       else await apiClient.post("/api/policies", payload);
       toast.success(`Saved "${payload.name}"`);
+      if (!editor.id) showFirst();
       setEditor(null);
       loadPolicies();
     } catch (err) {
@@ -197,7 +199,10 @@ export default function PoliciesPage() {
   const duplicate = (p) =>
     apiClient
       .post(`/api/policies/${p._key}/duplicate`)
-      .then(loadPolicies)
+      .then(() => {
+        showFirst();
+        return loadPolicies();
+      })
       .catch((err) => toast.error(apiError(err)));
 
   const confirmDelete = () => {
@@ -229,12 +234,18 @@ export default function PoliciesPage() {
       return `${p.name} ${p.description || ""} ${names}`.toLowerCase().includes(q);
     });
   }, [policies, filters, query, criteria]);
-  const { sorted, sort, toggle } = useSort(
+  // Newest policy first, so a new or duplicated one shows at the top.
+  const { sorted, sort, toggle, showNewest } = useSort(
     filtered,
-    { name: (p) => p.name, status: (p) => runState(p), run_at: (p) => p.last_run?.created_at },
-    { key: "run_at", dir: "desc" }
+    { name: (p) => p.name, status: (p) => runState(p), created_at: (p) => p.created_at, run_at: (p) => p.last_run?.created_at },
+    { key: "created_at", dir: "desc" }
   );
   const pager = usePager(sorted, Number(getSettings().general.list_page_size));
+  // After creating: newest-first sort, first page.
+  const showFirst = () => {
+    showNewest();
+    pager.setPage(1);
+  };
   const setFilter = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
   const filtersOn = query.trim() || filters.status !== "all" || Object.keys(KINDS).some((k) => filters[k]);
   const activePolicy = policies.find((p) => p._key === activeId);
@@ -320,7 +331,7 @@ export default function PoliciesPage() {
                   sortable={c.sortable}
                   sort={sort}
                   onSort={toggle}
-                  style={c.key !== "run_at" ? { textAlign: "left" } : undefined}
+                  style={!["run_at", "created_at"].includes(c.key) ? { textAlign: "left" } : undefined}
                 />
               ))}
               <th>Actions</th>
@@ -332,7 +343,7 @@ export default function PoliciesPage() {
               return (
                 <tr key={p._key} className={p._key === activeId ? "selected" : ""}>
                   {visibleColumns.map((c) => (
-                    <td key={c.key} style={c.key !== "run_at" ? { textAlign: "left", maxWidth: 0 } : undefined}>{c.render(p, ctx)}</td>
+                    <td key={c.key} style={!["run_at", "created_at"].includes(c.key) ? { textAlign: "left", maxWidth: 0 } : undefined}>{c.render(p, ctx)}</td>
                   ))}
                   <td>
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center" }}>

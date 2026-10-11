@@ -1,13 +1,20 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { toast } from "react-toastify";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiClient } from "../api/client";
 import { INTERVALS, filterByInterval } from "../utils/dateRanges";
 import { tooltipProps } from "../utils/chartTheme";
 import { useColumnConfig } from "../utils/useColumnConfig";
+import ActionMenu from "../components/ActionMenu";
 import ColumnPicker from "../components/ColumnPicker";
-import SignalBoard from "../features/signals/SignalBoard";
+import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
+import Modal from "../components/Modal";
+import Req from "../components/Req";
+import { StatTiles } from "../components/PageParts";
+import SignalBoard, { SignalBadge } from "../features/signals/SignalBoard";
 import BackButton from "../layout/BackButton";
+import { ClockIcon, CopyIcon, DatabaseIcon, EditIcon, GrowthIcon, LayersIcon, ListIcon, PieChartIcon, SaveIcon, StarIcon, TrendChartIcon } from "../layout/icons";
 import { getSettings } from "../features/settings/settings";
 
 function fmtPct(v) {
@@ -28,6 +35,7 @@ function changeColor(value) {
   if (value === null || value === undefined || value === 0) return "var(--color-text-primary)";
   return value > 0 ? "#16a34a" : "#dc2626";
 }
+const signed = (pct) => (pct == null ? "–" : `${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`);
 // dividend_yield comes back from yfinance already as a plain percent number
 // (e.g. 0.44 meaning 0.44%), unlike roe/roa/margins/growth (decimal
 // fractions) -- so this doesn't multiply by 100 like fmtPct does.
@@ -39,8 +47,7 @@ const TRADING_DAYS_PER_YEAR = 252;
 
 // Annualized stdev of daily returns derived from the indexed performance
 // series (value-to-value, since this series carries a cumulative index
-// rather than a raw percentage_change field), over whatever range is
-// currently selected on the chart.
+// rather than a raw percentage_change field), over the given window.
 function computeVolatilityFromSeries(rangeSeries) {
   const dailyReturns = [];
   for (let i = 1; i < rangeSeries.length; i++) {
@@ -55,12 +62,34 @@ function computeVolatilityFromSeries(rangeSeries) {
   return Math.sqrt(variance) * Math.sqrt(TRADING_DAYS_PER_YEAR);
 }
 
-// Categorical palette for the allocation chart (one distinct color per holding,
+// % change first -> last point of a window of the indexed series.
+function windowChangePct(rangeSeries) {
+  return rangeSeries.length >= 2 && rangeSeries[0].value
+    ? ((rangeSeries[rangeSeries.length - 1].value - rangeSeries[0].value) / rangeSeries[0].value) * 100
+    : null;
+}
+
+// Categorical palette for the allocation bars (one distinct color per holding,
 // cycling if a portfolio ever has more holdings than colors).
 const ALLOCATION_COLORS = [
   "#2563eb", "#f97316", "#16a34a", "#dc2626", "#9333ea",
   "#a16207", "#ec4899", "#6b7280", "#ca8a04", "#0ea5e9",
 ];
+
+const SIGNAL_RANK = { Strong: 3, Mixed: 2, Weak: 1, Avoid: 0 };
+
+// Portfolio-level signal for the tile: the most common holding signal
+// (ties go to the better one), with how many holdings carry it.
+function overallSignal(board) {
+  const s = board?.summary;
+  const n = board?.rows?.length || 0;
+  if (!s || !n || s.missing_forecasts === n) return null;
+  const [signal, count] = Object.keys(SIGNAL_RANK)
+    .map((k) => [k, s[k] || 0])
+    .sort((a, b) => b[1] - a[1] || SIGNAL_RANK[b[0]] - SIGNAL_RANK[a[0]])[0];
+  const aligned = s.agree === n ? "models aligned" : `${s.agree} of ${n} agree`;
+  return { signal, sub: `${count} of ${n} · ${aligned}`, title: `${count} of ${n} holdings are ${signal}; LSTM and ARIMA agree on ${s.agree} of ${n}` };
+}
 
 const HOLDINGS_COLUMNS = [
   {
@@ -109,6 +138,8 @@ const HOLDINGS_COLUMNS = [
   { key: "dividend_yield", label: "Dividend Yield", hiddenByDefault: true, render: (h) => fmtRawPct(h.dividend_yield) },
 ];
 
+const apiError = (err) => err.response?.data?.error || err.message;
+
 export default function PortfolioDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -118,6 +149,9 @@ export default function PortfolioDetailPage() {
   const [range, setRange] = useState(() => getSettings().general.chart_range);
   const [sortBy, setSortBy] = useState("weight");
   const [sortDir, setSortDir] = useState("desc");
+  const [board, setBoard] = useState(null);
+  const [renaming, setRenaming] = useState(null); // name being edited, or null
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("portfolioHoldings", HOLDINGS_COLUMNS);
 
   const onSortClick = (key) => {
@@ -132,6 +166,7 @@ export default function PortfolioDetailPage() {
     setPortfolio(null);
     setSeries(null);
     setError(null);
+    setBoard(null);
     Promise.all([
       apiClient.get(`/api/portfolios/${id}`),
       apiClient.get(`/api/portfolios/${id}/performance`, { params: { days: 3650 } }), // up to ~10 years
@@ -140,9 +175,45 @@ export default function PortfolioDetailPage() {
         setPortfolio(detailRes.data);
         setSeries(perfRes.data.series);
       })
-      .catch((err) => setError(err.response?.data?.error || err.message));
+      .catch((err) => setError(apiError(err)));
   }, [id]);
 
+  const rename = (e) => {
+    e.preventDefault();
+    const name = renaming.trim();
+    if (!name) return;
+    apiClient
+      .put(`/api/portfolios/${id}`, { name })
+      .then((r) => {
+        setPortfolio((p) => ({ ...p, name: r.data.name ?? name }));
+        setRenaming(null);
+        toast.success("Portfolio renamed");
+      })
+      .catch((err) => toast.error(apiError(err)));
+  };
+
+  const duplicate = () =>
+    apiClient
+      .post("/api/portfolios", {
+        name: `${portfolio.name} (copy)`,
+        holdings: portfolio.holdings.map((h) => ({ ticker: h.ticker, weight: h.weight })),
+        method: portfolio.method,
+        notes: portfolio.notes,
+      })
+      .then((r) => {
+        toast.success("Portfolio duplicated");
+        navigate(`/portfolios/${r.data._key}`);
+      })
+      .catch((err) => toast.error(apiError(err)));
+
+  const remove = () =>
+    apiClient
+      .delete(`/api/portfolios/${id}`)
+      .then(() => {
+        toast.success(`Deleted "${portfolio.name}"`);
+        navigate("/portfolio", { replace: true });
+      })
+      .catch((err) => toast.error(apiError(err)));
 
   if (error)
     return (
@@ -160,77 +231,193 @@ export default function PortfolioDetailPage() {
     );
 
   const rangeSeries = filterByInterval(series, range);
-  const periodChangePct =
-    rangeSeries.length >= 2 && rangeSeries[0].value
-      ? ((rangeSeries[rangeSeries.length - 1].value - rangeSeries[0].value) / rangeSeries[0].value) * 100
-      : null;
+  const periodChangePct = windowChangePct(rangeSeries);
   const periodVolatility = computeVolatilityFromSeries(rangeSeries);
+  // Tiles always use the past year (same window as the 1Y chart / My Portfolios).
+  const yearSeries = filterByInterval(series, "1Y");
+  const yearChangePct = windowChangePct(yearSeries);
+  const yearVolatility = computeVolatilityFromSeries(yearSeries);
   const allocation = portfolio.holdings
     .map((h) => ({ ticker: h.ticker, name: h.name, weightPct: h.weight * 100 }))
     .sort((a, b) => b.weightPct - a.weightPct);
+  const maxWeight = Math.max(...allocation.map((a) => a.weightPct), 1);
+  // Same color per holding in the holdings grid and the allocation bars.
+  const colorOf = Object.fromEntries(allocation.map((a, i) => [a.ticker, ALLOCATION_COLORS[i % ALLOCATION_COLORS.length]]));
+  const signal = overallSignal(board);
+  const built = portfolio.method === "rl" ? "RL-optimized portfolio" : "Hand-built portfolio";
+  const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : null);
+  const created = fmtDay(portfolio.created_at);
+  const lastUpdated = fmtDay(portfolio.updated_at || portfolio.created_at);
+  const asOf = series.length ? series[series.length - 1].date : null; // latest stored close
+
+  const tiles = [
+    {
+      icon: GrowthIcon,
+      color: "#16a34a",
+      label: "1Y return",
+      value: <span style={{ color: changeColor(yearChangePct) }}>{signed(yearChangePct)}</span>,
+      sub: "historical backtest",
+      title: "Change of the portfolio index over the past year (same as the 1Y chart).",
+    },
+    {
+      icon: DatabaseIcon,
+      color: "#6366f1",
+      label: "Annual volatility (1Y)",
+      value: fmtPct(yearVolatility),
+      sub: `std. dev. · at build ${fmtPct(portfolio.expected_volatility)}`,
+      title: "Annualized standard deviation of the portfolio's daily returns over the past year.",
+    },
+    {
+      icon: StarIcon,
+      color: "#06b6d4",
+      label: "Expected return (ann.)",
+      value: <span style={{ color: changeColor(portfolio.expected_return) }}>{fmtPct(portfolio.expected_return)}</span>,
+      sub: "estimate at build",
+      title: "Annualized mean return of the holdings' history at the time the portfolio was built (not a forecast).",
+    },
+    {
+      icon: LayersIcon,
+      color: "#8b5cf6",
+      label: "Holdings",
+      value: portfolio.holdings.length,
+      sub: `largest ${allocation[0]?.ticker ?? "–"} · ${allocation[0] ? allocation[0].weightPct.toFixed(1) : "–"}%`,
+      title: "Companies in the portfolio.",
+    },
+    {
+      icon: TrendChartIcon,
+      color: "#f59e0b",
+      label: "Latest signal",
+      value: signal ? <SignalBadge signal={signal.signal} /> : <span className="muted" style={{ fontSize: "0.95rem" }}>{board ? "Not rated" : "…"}</span>,
+      sub: signal ? signal.sub : board ? "run forecasts in the signal board below" : "loading signals",
+      title: "Most common signal among the holdings, from the signal board below (LSTM + ARIMA + RL + fundamentals).",
+    },
+  ];
 
   return (
     <div>
-      <div className="card" style={{ position: "relative" }}>
-        <div className="card-corner"><BackButton /></div>
-        <h2 style={{ paddingRight: 48 }}>{portfolio.name}</h2>
-        <p className="muted">
-          Expected annual return: <strong style={{ color: changeColor(portfolio.expected_return) }}>{fmtPct(portfolio.expected_return)}</strong>
-          {" · "}Volatility: <strong>{fmtPct(portfolio.expected_volatility)}</strong>
-          {" · "}Sharpe: <strong>{portfolio.sharpe_ratio ?? "-"}</strong>
-        </p>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-          <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
-        </div>
-        <table className="holdings-table">
-          <thead>
-            <tr>
-              {visibleColumns.map((c) => (
-                <th key={c.key} className={sortBy === c.key ? "sorted" : ""} onClick={() => onSortClick(c.key)} style={{ cursor: "pointer" }}>
-                  {c.label}
-                  <span style={{ visibility: sortBy === c.key ? "visible" : "hidden" }}>
-                    {" "}{sortDir === "desc" ? "↓" : "↑"}
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {portfolio.holdings
-              .slice()
-              .sort((a, b) => {
-                const va = a[sortBy];
-                const vb = b[sortBy];
-                if (va == null && vb == null) return 0;
-                if (va == null) return 1;
-                if (vb == null) return -1;
-                const cmp = typeof va === "string" ? va.localeCompare(vb) : va - vb;
-                return sortDir === "desc" ? -cmp : cmp;
-              })
-              .map((h) => (
-                <tr key={h.ticker} onClick={() => navigate(`/companies/${h.ticker}`)} style={{ cursor: "pointer" }}>
-                  {visibleColumns.map((c) => (
-                    <td key={c.key} className={c.className} style={c.key === "ticker" || c.key === "name" ? { textAlign: "left" } : undefined}>
-                      {c.render(h)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-          </tbody>
-        </table>
+      <div className="card header-card">
+        <header className="page-header">
+          <div className="icon-badge page-header-icon" style={{ background: "#ef444426", color: "#ef4444" }}>
+            <PieChartIcon width={28} height={28} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <h2 className="clamp-2 portfolio-title" title={portfolio.name}>{portfolio.name}</h2>
+            <p className="muted clamp-2" style={{ margin: 0, fontSize: "0.85rem" }} title={portfolio.notes || undefined}>
+              {built}
+              {portfolio.notes ? ` · ${portfolio.notes}` : ""}
+              {created ? ` · created ${created}` : ""}
+              {portfolio.sharpe_ratio != null ? ` · Sharpe ${portfolio.sharpe_ratio}` : ""}
+            </p>
+          </div>
+          <div className="page-header-actions">
+            {lastUpdated && (
+              <span className="last-updated" title="Created, or last renamed">
+                <ClockIcon width={16} height={16} />
+                <span>
+                  <span className="muted">Last updated</span>
+                  <br />
+                  {lastUpdated}
+                </span>
+              </span>
+            )}
+            <button className="btn" onClick={() => setRenaming(portfolio.name)} title="Edit this portfolio's name">
+              <EditIcon width={15} height={15} /> Edit Portfolio
+            </button>
+            <button className="btn secondary" onClick={duplicate} title="Save a copy of this portfolio and open it">
+              <CopyIcon width={15} height={15} /> Duplicate
+            </button>
+            <ActionMenu onDelete={() => setConfirmDelete(true)} />
+            <BackButton />
+          </div>
+        </header>
       </div>
 
+      <StatTiles tiles={tiles} />
+
       <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-            <h3 style={{ margin: 0 }}>Portfolio performance</h3>
+        <div className="card-header" style={{ justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div className="icon-badge" style={{ background: "#3b82f622", color: "#3b82f6" }}>
+              <ListIcon width={18} height={18} />
+            </div>
+            <h3 style={{ margin: 0 }}>Selected holdings performance</h3>
+          </div>
+          <div className="toolbar">
+            {asOf && <span className="muted">as of {asOf}</span>}
+            <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
+          </div>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table className="holdings-table">
+            <thead>
+              <tr>
+                {visibleColumns.map((c) => (
+                  <th key={c.key} className={sortBy === c.key ? "sorted" : ""} onClick={() => onSortClick(c.key)} style={{ cursor: "pointer" }}>
+                    {c.label}
+                    <span style={{ visibility: sortBy === c.key ? "visible" : "hidden" }}>
+                      {" "}{sortDir === "desc" ? "↓" : "↑"}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {portfolio.holdings
+                .slice()
+                .sort((a, b) => {
+                  const va = a[sortBy];
+                  const vb = b[sortBy];
+                  if (va == null && vb == null) return 0;
+                  if (va == null) return 1;
+                  if (vb == null) return -1;
+                  const cmp = typeof va === "string" ? va.localeCompare(vb) : va - vb;
+                  return sortDir === "desc" ? -cmp : cmp;
+                })
+                .map((h) => (
+                  <tr key={h.ticker} onClick={() => navigate(`/companies/${h.ticker}`)} style={{ cursor: "pointer" }}>
+                    {visibleColumns.map((c) => (
+                      <td
+                        key={c.key}
+                        className={c.className}
+                        style={c.key === "ticker" || c.key === "name" ? { textAlign: "left" } : c.key === "weight" ? { color: colorOf[h.ticker] } : undefined}
+                      >
+                        {c.render(h)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+
+      <div className="card">
+        <div className="card-header" style={{ flexWrap: "wrap", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div className="icon-badge" style={{ background: "#3b82f622", color: "#3b82f6" }}>
+              <TrendChartIcon width={18} height={18} />
+            </div>
+            <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+              Portfolio performance
+              <span
+                className="help-dot"
+                role="img"
+                title="Indexed to 100 at the start of the available price history, applying the portfolio's fixed weights to each day's actual returns."
+                aria-label="Indexed to 100 at the start of the available price history, applying the portfolio's fixed weights to each day's actual returns."
+              >?</span>
+            </h3>
             {periodChangePct !== null && (
-              <span style={{ color: changeColor(periodChangePct), fontWeight: 600 }}>
-                {periodChangePct > 0 ? "+" : ""}{periodChangePct.toFixed(2)}% ({range})
-              </span>
+              <span style={{ color: changeColor(periodChangePct), fontWeight: 600 }}>{signed(periodChangePct)} ({range})</span>
             )}
             {periodVolatility !== null && (
               <span className="muted">Volatility ({range}): <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(periodVolatility)}</strong></span>
+            )}
+            {portfolio.sharpe_ratio != null && (
+              <span className="muted">| Sharpe: <strong style={{ color: "var(--color-text-primary)" }}>{portfolio.sharpe_ratio}</strong></span>
+            )}
+            {portfolio.expected_return != null && (
+              <span className="muted">| Expected annual return: <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(portfolio.expected_return)}</strong></span>
             )}
           </div>
           <div style={{ display: "flex", gap: 4 }}>
@@ -249,54 +436,81 @@ export default function PortfolioDetailPage() {
         {rangeSeries.length === 0 ? (
           <p className="muted">Not enough price history to chart this portfolio yet.</p>
         ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={rangeSeries}>
+          <ResponsiveContainer width="100%" height={230}>
+            <AreaChart data={rangeSeries} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="perfFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#2563eb" stopOpacity={0.45} />
+                  <stop offset="100%" stopColor="#2563eb" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={40} />
-              <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10 }} />
+              <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10 }} width={48} />
               <Tooltip {...tooltipProps} formatter={(value) => [Number(value).toFixed(2), "Index value"]} />
-              <Line type="monotone" dataKey="value" stroke="#2563eb" strokeWidth={2.5} dot={false} />
-            </LineChart>
+              <Area type="monotone" dataKey="value" stroke="#2563eb" strokeWidth={2.5} fill="url(#perfFill)" dot={false} />
+            </AreaChart>
           </ResponsiveContainer>
         )}
-        <p className="muted">Indexed to 100 at the start of the available price history, applying the portfolio's fixed weights to each day's actual returns.</p>
       </div>
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Portfolio allocation</h3>
-        <ResponsiveContainer width="100%" height={allocation.length * 40 + 40}>
-          <BarChart data={allocation} layout="vertical" margin={{ top: 12, right: 60, left: 8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-            <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `${v}%`} domain={[0, "auto"]} />
-            <YAxis type="category" dataKey="ticker" tick={{ fontSize: 12 }} width={60} />
-            <Tooltip
-              {...tooltipProps}
-              cursor={{ fill: "rgba(148, 163, 184, 0.12)" }}
-              formatter={(value, _name, item) => [`${Number(value).toFixed(2)}%`, item.payload.name || item.payload.ticker]}
-            />
-            <Bar dataKey="weightPct" radius={[0, 4, 4, 0]} barSize={24}>
-              {allocation.map((a, i) => (
-                <Cell key={a.ticker} fill={ALLOCATION_COLORS[i % ALLOCATION_COLORS.length]} />
-              ))}
-              <LabelList
-                dataKey="name"
-                position="insideLeft"
-                offset={10}
-                style={{ fill: "#fff", fontSize: 12, fontWeight: 600 }}
-              />
-              <LabelList
-                dataKey="weightPct"
-                position="right"
-                formatter={(v) => `${Number(v).toFixed(2)}%`}
-                style={{ fill: "var(--color-text-primary)", fontSize: 12, fontWeight: 600 }}
-              />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-        <p className="muted">Share of the portfolio invested in each holding, as allocated by the RL model.</p>
+        <div className="card-header" style={{ alignItems: "flex-start", marginBottom: 8 }}>
+          <div className="icon-badge" style={{ background: "#3b82f622", color: "#3b82f6" }}>
+            <PieChartIcon width={18} height={18} />
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h3 style={{ margin: 0 }}>Portfolio allocation</h3>
+            <p className="muted" style={{ margin: 0 }}>
+              Share of the portfolio invested in each holding{portfolio.method === "rl" ? ", as allocated by the reinforcement learning model" : ""}.
+            </p>
+          </div>
+          <span className="muted">{allocation.length} holding{allocation.length === 1 ? "" : "s"}</span>
+        </div>
+        <div className="alloc-rows">
+          <div className="alloc-row alloc-head">
+            <span>Ticker</span>
+            <span>Company</span>
+            <span />
+            <span className="alloc-pct">Weight</span>
+          </div>
+          {allocation.map((a, i) => (
+            <Link key={a.ticker} to={`/companies/${a.ticker}`} className="alloc-row" title={`${a.name || a.ticker}: ${a.weightPct.toFixed(2)}%`}>
+              <span className="alloc-ticker">{a.ticker}</span>
+              <span className="alloc-name">{a.name || ""}</span>
+              <span className="alloc-track">
+                <span style={{ width: `${(a.weightPct / maxWeight) * 100}%`, background: ALLOCATION_COLORS[i % ALLOCATION_COLORS.length] }} />
+              </span>
+              <span className="alloc-pct">{a.weightPct.toFixed(2)}%</span>
+            </Link>
+          ))}
+        </div>
       </div>
 
-      <SignalBoard portfolioId={id} />
+      <SignalBoard portfolioId={id} onBoard={setBoard} />
+
+      <Modal
+        isOpen={renaming !== null}
+        onClose={() => setRenaming(null)}
+        title="Edit portfolio"
+        headerActions={
+          <button className="close-btn" style={{ position: "static" }} type="submit" form="rename-portfolio" title="Save" aria-label="Save">
+            <SaveIcon width={18} height={18} />
+          </button>
+        }
+      >
+        <form id="rename-portfolio" onSubmit={rename}>
+          <label>Name<Req /></label>
+          <input value={renaming ?? ""} onChange={(e) => setRenaming(e.target.value)} autoFocus />
+        </form>
+      </Modal>
+      <ConfirmDeleteModal
+        isOpen={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={remove}
+        itemName={portfolio.name}
+        title="Delete portfolio"
+      />
     </div>
   );
 }
