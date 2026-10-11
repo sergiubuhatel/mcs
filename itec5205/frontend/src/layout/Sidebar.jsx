@@ -135,25 +135,18 @@ export default function Sidebar({ collapsed, onToggleCollapsed }) {
         borderColor: "var(--color-divider)",
       }}
     >
+      {/* Same height as the top bar, so logo and title read as one header row. */}
       <div
-        className={`flex items-center px-3 py-4 ${collapsed ? "justify-center" : "justify-between"}`}
-        style={{ borderBottom: "1px solid var(--color-divider)" }}
+        className={`flex items-center px-3 ${collapsed ? "justify-center" : "justify-between"}`}
+        style={{ height: "var(--header-height)", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}
       >
         {!collapsed && (
-          <NavLink to="/" className="flex items-center" style={{ gap: 8, minWidth: 0, textDecoration: "none" }} title="Home: Stock Screener">
-            <CarletonLogo height={26} />
-            <span
-              style={{
-                color: "var(--color-text-primary)",
-                fontWeight: 600,
-                fontSize: "0.85rem",
-                lineHeight: 1.15,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Carleton University
+          <NavLink to="/" className="brand-link" title="Home: Stock Screener">
+            <CarletonLogo height={40} />
+            <span className="brand-wordmark">
+              Carleton
+              <br />
+              University
             </span>
           </NavLink>
         )}
@@ -162,6 +155,7 @@ export default function Sidebar({ collapsed, onToggleCollapsed }) {
           className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md hover:bg-tertiary"
           style={{ color: "var(--color-text-secondary)" }}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           <BarsIcon />
         </button>

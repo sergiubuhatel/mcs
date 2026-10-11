@@ -142,6 +142,23 @@ tr:hover td { background: var(--color-bg-hover); }
 .req { color: #dc2626; margin-left: 3px; font-weight: 600; }
 .dark .req { color: #f87171; }
 
+/* Header row: sidebar brand + top bar share this height. */
+:root { --header-height: 72px; }
+.brand-link { display: flex; align-items: center; gap: 10px; min-width: 0; text-decoration: none; color: var(--color-text-primary); }
+.brand-link:hover { text-decoration: none; }
+.brand-wordmark { font-family: Georgia, "Times New Roman", serif; font-weight: 700; font-size: 1.12rem; line-height: 1.05; letter-spacing: 0.01em; white-space: nowrap; }
+.app-title { font-size: 1.2rem; font-weight: 700; color: var(--color-text-primary); line-height: 1.25; }
+.app-subtitle { font-size: 0.82rem; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theme-toggle {
+  display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 9px; flex-shrink: 0;
+  border: 1px solid var(--color-divider); background: var(--color-bg-primary); color: var(--color-text-primary);
+  font-size: 0.875rem; font-weight: 500; cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--btn-accent); }
+.theme-toggle-icon { display: inline-flex; }
+.theme-toggle-icon.sun { color: #f59e0b; }
+.theme-toggle-icon.moon { color: #6366f1; }
+
 /* Sidebar: one group per workflow step -- a heading with a colored icon,
    its pages indented below, dividers between groups. The active page gets
    the solid button blue (same in both themes, like .btn). */
