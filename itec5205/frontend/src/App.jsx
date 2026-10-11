@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -44,6 +44,8 @@ export default function App() {
             <Route path="/prediction" element={<PredictionPage />} />
             <Route path="/companies/:ticker" element={<CompanyDetailPage />} />
             <Route path="/portfolios/:id" element={<PortfolioDetailPage />} />
+            {/* Home is the Stock Screener; unknown URLs go there instead of a blank page. */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
 

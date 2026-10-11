@@ -140,7 +140,7 @@ export default function Sidebar({ collapsed, onToggleCollapsed }) {
         style={{ borderBottom: "1px solid var(--color-divider)" }}
       >
         {!collapsed && (
-          <div className="flex items-center" style={{ gap: 8, minWidth: 0 }}>
+          <NavLink to="/" className="flex items-center" style={{ gap: 8, minWidth: 0, textDecoration: "none" }} title="Home: Stock Screener">
             <CarletonLogo height={26} />
             <span
               style={{
@@ -152,11 +152,10 @@ export default function Sidebar({ collapsed, onToggleCollapsed }) {
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
               }}
-              title="Carleton University"
             >
               Carleton University
             </span>
-          </div>
+          </NavLink>
         )}
         <button
           onClick={onToggleCollapsed}
