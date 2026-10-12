@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Area, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { tooltipProps } from "../utils/chartTheme";
 
@@ -9,6 +9,12 @@ export const BAND_LEVELS = [50, 75, 80, 90, 95, 99];
 export const DEFAULT_BAND_LEVEL = 95;
 // Two-sided normal z per level: scales an older forecast's 95% band to another level.
 const Z = { 50: 0.6745, 75: 1.1503, 80: 1.2816, 90: 1.6449, 95: 1.96, 99: 2.5758 };
+// Default forecast length: about half the history on screen (the forecast takes
+// ~1/3 of the chart), so a 1M view isn't dominated by a 4-month band.
+const FORECAST_SHARE = 0.5;
+const MIN_FORECAST_DAYS = 5;
+const defaultForecastDays = (historyLength, max) =>
+  Math.min(max, Math.max(MIN_FORECAST_DAYS, Math.round(historyLength * FORECAST_SHARE)));
 const bandName = (model, level, isModel) =>
   isModel ? `${model} ${level}% interval (model; retrain for the measured band)` : `${model} ${level}% band`;
 
@@ -87,10 +93,18 @@ export function BandLevelSelect({ value, onChange, disabled }) {
  *   in the same units as `value`, or null to draw the history only
  * @param format   value -> label (axis, tooltip)
  * @param area     fill under the history line (portfolio index style)
+ * The forecast is drawn for a default length relative to the history shown;
+ * the slider under the chart lets the user drag it shorter or longer.
  */
 export default function ForecastChart({ history, forecast, format, historyName = "Price", area = false, height = 260 }) {
   const has = (k) => !!forecast?.[k]?.length;
   const hasBand = (k) => !!forecast?.[k]?.low?.length;
+  const lastDate = history[history.length - 1]?.date;
+  // Forecast days after the last close (the stored forecast may start earlier).
+  const maxDays = forecast ? forecast.dates.filter((d) => !lastDate || d > lastDate).length : 0;
+  const [chosenDays, setChosenDays] = useState(null); // null = default for this range
+  useEffect(() => setChosenDays(null), [history.length]); // a new range starts from its default
+  const forecastDays = Math.min(maxDays, chosenDays ?? defaultForecastDays(history.length, maxDays));
   const data = useMemo(() => {
     if (!history.length) return [];
     const rows = history.map((h) => ({ date: h.date, value: h.value }));
@@ -104,8 +118,10 @@ export default function ForecastChart({ history, forecast, format, historyName =
       arimaBand: hasBand("arimaBand") ? [last.value, last.value] : undefined,
     };
     const band = (k, i) => (hasBand(k) && forecast[k].low[i] != null ? [forecast[k].low[i], forecast[k].high[i]] : undefined);
+    let shown = 0;
     forecast.dates.forEach((date, i) => {
-      if (date <= last.date) return;
+      if (date <= last.date || shown >= forecastDays) return;
+      shown += 1;
       rows.push({
         date,
         lstm: forecast.lstm?.[i],
@@ -116,14 +132,15 @@ export default function ForecastChart({ history, forecast, format, historyName =
     });
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history, forecast]);
-  const lastDate = history[history.length - 1]?.date;
+  }, [history, forecast, forecastDays]);
+  const endDate = data[data.length - 1]?.date;
   const level = forecast?.level ?? DEFAULT_BAND_LEVEL;
   const lstmBandName = bandName("LSTM", level, forecast?.lstmBand?.isModel);
   const arimaBandName = bandName("ARIMA", level, forecast?.arimaBand?.isModel);
 
   if (!data.length) return null;
   return (
+    <>
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
         <defs>
@@ -158,5 +175,27 @@ export default function ForecastChart({ history, forecast, format, historyName =
         )}
       </ComposedChart>
     </ResponsiveContainer>
+    {forecast && maxDays > 1 && (
+      <div className="forecast-length">
+        <span className="muted">History</span>
+        <input
+          type="range"
+          min={1}
+          max={maxDays}
+          value={forecastDays}
+          onChange={(e) => setChosenDays(Number(e.target.value))}
+          aria-label="Forecast length"
+          title="Drag left for a shorter forecast (more room for the history), right for a longer one"
+        />
+        <span className="muted">Forecast</span>
+        <span className="forecast-length-value">
+          {forecastDays} trading day{forecastDays === 1 ? "" : "s"} ahead, to {endDate}
+          {chosenDays != null && (
+            <button type="button" className="link-btn" onClick={() => setChosenDays(null)} title="Back to the default length for this range">reset</button>
+          )}
+        </span>
+      </div>
+    )}
+    </>
   );
 }

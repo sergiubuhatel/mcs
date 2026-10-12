@@ -564,3 +564,6 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 .nav-item.standalone svg { width: 22px; height: 22px; }
 .band-level { display: inline-flex; align-items: center; gap: 5px; font-size: 0.8rem; white-space: nowrap; }
 .band-level select { padding: 2px 6px; font-size: 0.8rem; width: auto; }
+.forecast-length { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px 58px; font-size: 0.78rem; flex-wrap: wrap; }
+.forecast-length input[type="range"] { flex: 1 1 200px; max-width: 420px; accent-color: #a855f7; cursor: ew-resize; padding: 0; }
+.forecast-length-value { color: var(--color-text-secondary); display: inline-flex; gap: 8px; align-items: center; }
