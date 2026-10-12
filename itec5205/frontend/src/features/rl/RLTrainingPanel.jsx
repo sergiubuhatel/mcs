@@ -8,6 +8,8 @@ import { PieChartIcon } from "../../layout/icons";
 import TickerToggleChips from "../pools/TickerToggleChips";
 import Req from "../../components/Req";
 import { getSettings } from "../settings/settings";
+import WeightRangeField from "../policies/WeightRangeField";
+import { describeWeightRange } from "../policies/criteriaConfig";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -48,7 +50,8 @@ export default function RLTrainingPanel({ pool }) {
   const [maxCompanies, setMaxCompanies] = useState(defaults.max_companies); // blank = no upper bound (auto)
   const [maxVolatility, setMaxVolatility] = useState(defaults.max_volatility_pct); // annual %, blank = no ceiling
   const [minReturn, setMinReturn] = useState(defaults.min_return_pct); // realized past-year return %, blank = no floor
-  const [maxWeightRange, setMaxWeightRange] = useState(defaults.max_weight_range_pct); // max(w) - min(w) in % points, blank = no cap
+  const [maxWeightRange, setMaxWeightRange] = useState(defaults.max_weight_range_pct); // see WeightRangeField, blank = no cap
+  const [weightRangeBasis, setWeightRangeBasis] = useState(defaults.weight_range_basis || "smallest");
   const [lookbackDays, setLookbackDays] = useState(defaults.trend_window_days); // trading days the trend line is fit over
 
   const start = () => {
@@ -65,6 +68,7 @@ export default function RLTrainingPanel({ pool }) {
         max_volatility: pctOrNull(maxVolatility),
         min_return: pctOrNull(minReturn),
         max_weight_range: pctOrNull(maxWeightRange),
+        weight_range_basis: weightRangeBasis,
       })
     );
   };
@@ -132,20 +136,13 @@ export default function RLTrainingPanel({ pool }) {
             disabled={training}
           />
         </div>
-        <div>
-          <label title="max − min weight across the holdings, in percentage points">Max weight range %</label>
-          <input
-            type="number"
-            step="1"
-            min="0"
-            max="100"
-            placeholder="no limit (e.g. 10)"
-            title="max − min weight across the holdings, in percentage points"
-            value={maxWeightRange}
-            onChange={(e) => setMaxWeightRange(e.target.value)}
-            disabled={training}
-          />
-        </div>
+        <WeightRangeField
+          value={maxWeightRange}
+          basis={weightRangeBasis}
+          onChange={setMaxWeightRange}
+          onBasisChange={setWeightRangeBasis}
+          disabled={training}
+        />
         <div>
           <label>Min companies (blank = auto)</label>
           <input
@@ -314,7 +311,7 @@ export default function RLTrainingPanel({ pool }) {
                 result.constraints.max_volatility != null && `volatility ≤ ${fmtPct(result.constraints.max_volatility)}`,
                 result.constraints.min_return != null && `annual return ≥ ${fmtPct(result.constraints.min_return)}`,
                 result.constraints.max_weight_range != null &&
-                  `weight range ≤ ${fmtPct(result.constraints.max_weight_range)} (now ${fmtPct(result.constraints.weight_range)})`,
+                  `${describeWeightRange(result.constraints.max_weight_range * 100, result.constraints.weight_range_basis)} (now ${describeWeightRange(result.constraints.weight_range * 100, result.constraints.weight_range_basis)})`,
               ]
                 .filter(Boolean)
                 .join(", ")}
@@ -323,7 +320,7 @@ export default function RLTrainingPanel({ pool }) {
                 ` (RL weights blended ${fmtPct(result.constraints.blend)} toward the optimizer allocation)`}
               {result.constraints.max_weight_range != null &&
                 result.constraints.learned_weight_range > result.constraints.max_weight_range &&
-                ` (the agent's weights ranged ${fmtPct(result.constraints.learned_weight_range)}; moved toward equal weights to fit)`}
+                ` (the agent's own weights: ${describeWeightRange(result.constraints.learned_weight_range * 100, result.constraints.weight_range_basis)}; moved toward equal weights to fit)`}
               {result.constraints.feasible === false &&
                 ` — no long-only mix of this pool reached them over the past year; best achievable: ${fmtPct(
                   result.constraints.best_achievable?.annual_return

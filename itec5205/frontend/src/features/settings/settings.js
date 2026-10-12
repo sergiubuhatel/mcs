@@ -54,6 +54,7 @@ export const DEFAULT_SETTINGS = {
     max_volatility_pct: "",
     min_return_pct: "",
     max_weight_range_pct: "",
+    weight_range_basis: "smallest", // what the range is measured against: smallest / largest holding, or points
     min_companies: "",
     max_companies: "",
   },

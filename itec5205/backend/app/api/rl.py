@@ -9,6 +9,7 @@ from celery.result import AsyncResult
 from flask import Blueprint, jsonify, request
 
 from ..services.pool_service import get_pool
+from ..services.rl_service import WEIGHT_RANGE_BASES
 from ..services.signal_service import SIGNAL_STRONG, build_signals, latest_portfolio_for_pool
 from ..tasks.celery_app import celery_app
 from ..tasks.rl_tasks import train_rl_portfolio
@@ -48,6 +49,9 @@ def train():
                 return jsonify({"error": f"Only {len(universe)} Strong companies in this pool -- need at least 2 (run Forecast all first)"}), 400
     elif mode == "strong":
         return jsonify({"error": "'strong' mode needs a pool_id"}), 400
+    basis = body.get("weight_range_basis") or "smallest"
+    if basis not in WEIGHT_RANGE_BASES:
+        return jsonify({"error": f"'weight_range_basis' must be one of {', '.join(WEIGHT_RANGE_BASES)}"}), 400
     both = sorted(set(required) & set(excluded))
     if both:
         return jsonify({"error": f"{', '.join(both)} can't be both mandatory and excluded"}), 400
@@ -65,6 +69,7 @@ def train():
         max_volatility=_optional(body.get("max_volatility"), float),
         min_return=_optional(body.get("min_return"), float),
         max_weight_range=_optional(body.get("max_weight_range"), float),
+        weight_range_basis=basis,
         required_tickers=required,
         excluded_tickers=excluded,
         pool_id=pool_id,

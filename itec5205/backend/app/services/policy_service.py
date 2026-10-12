@@ -22,6 +22,7 @@ import uuid
 from datetime import date, datetime, timezone
 
 from ..db.arango_client import get_db
+from .rl_service import WEIGHT_RANGE_BASES
 
 KINDS = ("data", "screen", "prediction", "portfolio")
 OPTIONAL_KINDS = ("data", "prediction")
@@ -150,6 +151,9 @@ def _normalize_portfolio(body: dict) -> dict:
     if min_c is not None and max_c is not None and min_c > max_c:
         raise ValueError("Min companies can't be greater than max companies")
     risk_aversion = _num(body.get("risk_aversion"), float, 0, field="risk aversion")
+    basis = body.get("weight_range_basis") or "smallest"
+    if basis not in WEIGHT_RANGE_BASES:
+        raise ValueError(f"'weight_range_basis' must be one of {', '.join(WEIGHT_RANGE_BASES)}")
     required, excluded = _tickers(body.get("required_tickers")), _tickers(body.get("excluded_tickers"))
     both = [t for t in required if t in set(excluded)]
     if both:
@@ -161,8 +165,12 @@ def _normalize_portfolio(body: dict) -> dict:
         "timesteps": _num(body.get("timesteps"), int, 1000, field="timesteps") or 20_000,
         "max_volatility_pct": _num(body.get("max_volatility_pct"), float, 0, field="max volatility"),
         "min_return_pct": _num(body.get("min_return_pct"), field="min annual return"),
-        # Optional cap on max(weight) - min(weight), in percentage points.
-        "max_weight_range_pct": _num(body.get("max_weight_range_pct"), float, 0, 100, field="max weight range"),
+        # Optional cap on max(weight) - min(weight), in % of the smallest /
+        # largest holding or in percentage points (`weight_range_basis`).
+        "max_weight_range_pct": _num(
+            body.get("max_weight_range_pct"), float, 0, None if basis == "smallest" else 100, field="max weight range"
+        ),
+        "weight_range_basis": basis,
         "min_companies": min_c,
         "max_companies": max_c,
         # Must be in the portfolio -- when they reach this step (a company

@@ -92,7 +92,7 @@ export const CRITERIA_PAGES = {
       text: "A portfolio criteria is the RL panel's options, saved. It builds the final portfolio from the companies that passed the prediction criteria.",
       features: [
         { icon: BarChartIcon, color: "#22c55e", title: "Risk and return limits", text: "Max annual volatility and min annual return, measured over the past year." },
-        { icon: SlidersIcon, color: "#3b82f6", title: "Weight range", text: "Max − min weight caps how uneven the allocation can be." },
+        { icon: SlidersIcon, color: "#3b82f6", title: "Weight range", text: "How much bigger the largest holding may be than the smallest: in % of the smallest or largest, or in points." },
         { icon: ListIcon, color: "#8b5cf6", title: "Company count", text: "Min and max companies; blank lets the optimizer decide." },
         { icon: StarIcon, color: "#f59e0b", title: "Training", text: "Risk aversion and PPO timesteps; more timesteps train longer." },
       ],
@@ -100,7 +100,7 @@ export const CRITERIA_PAGES = {
     tips: [
       { title: "Set one limit at a time", text: "A volatility cap alone maximizes return under it; a return floor alone minimizes volatility." },
       { title: "Check feasibility", text: "If a limit can't be met, the portfolio says so and shows the best achievable." },
-      { title: "Use the weight range for balance", text: "e.g. 10 keeps every holding within 10 percentage points of the others." },
+      { title: "Use the weight range for balance", text: "e.g. 50 % of smallest keeps the largest holding at most 1.5× the smallest (10% → at most 15%)." },
     ],
   },
 };

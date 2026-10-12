@@ -1,4 +1,5 @@
 import Req from "../../components/Req";
+import WeightRangeField from "./WeightRangeField";
 import TickerPicker from "../../components/TickerPicker";
 
 // The same options as "Generate low-risk / high-return portfolio with RL"
@@ -29,18 +30,12 @@ export default function PortfolioCriteriaForm({ value, onChange }) {
           <label>Min annual return %</label>
           <input type="number" placeholder="no minimum (e.g. 20)" value={value.min_return_pct} onChange={(e) => set({ min_return_pct: e.target.value })} />
         </div>
-        <div>
-          <label title="max − min weight across the holdings, in percentage points">Max weight range %</label>
-          <input
-            type="number"
-            min="0"
-            max="100"
-            placeholder="no limit (e.g. 10)"
-            title="max − min weight across the holdings, in percentage points"
-            value={value.max_weight_range_pct}
-            onChange={(e) => set({ max_weight_range_pct: e.target.value })}
-          />
-        </div>
+        <WeightRangeField
+          value={value.max_weight_range_pct}
+          basis={value.weight_range_basis}
+          onChange={(max_weight_range_pct) => set({ max_weight_range_pct })}
+          onBasisChange={(weight_range_basis) => set({ weight_range_basis })}
+        />
         <div>
           <label>Min companies (blank = auto)</label>
           <input type="number" min="2" placeholder="auto" value={value.min_companies} onChange={(e) => set({ min_companies: e.target.value })} />
@@ -94,8 +89,9 @@ export default function PortfolioCriteriaForm({ value, onChange }) {
       {countsInvalid && <p className="error-text" style={{ margin: 0 }}>Min companies can't be greater than max companies.</p>}
       <p className="muted" style={{ margin: 0 }}>
         With any limit or company count set, a mean-variance optimizer picks the companies first; the PPO agent then trains on
-        them, and its weights are blended toward the optimizer's allocation if they miss a limit. Max weight range caps
-        max(weight) − min(weight), e.g. 10 = no two holdings more than 10 percentage points apart. Mandatory stocks are
+        them, and its weights are blended toward the optimizer's allocation if they miss a limit. Max weight range limits how
+        much bigger the largest holding may be than the smallest, measured in % of the smallest or largest holding, or in
+        percentage points. Mandatory stocks are
         always kept in the portfolio when they reach this step; one dropped by the screen or the forecast filter is ignored.
         Excluded stocks are never in the portfolio.
       </p>

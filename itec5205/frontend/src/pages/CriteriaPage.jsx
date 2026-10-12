@@ -62,6 +62,7 @@ function toPayload(kind, form) {
     trend_window_days: Number(form.trend_window_days),
     risk_aversion: form.risk_aversion,
     timesteps: form.timesteps,
+    weight_range_basis: form.weight_range_basis || "smallest",
     required_tickers: form.required_tickers || [],
     excluded_tickers: form.excluded_tickers || [],
   };

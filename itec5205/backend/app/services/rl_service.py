@@ -427,23 +427,49 @@ def select_universe(
     return {"tickers": optimizer["tickers"], "selection": selection, "optimizer": optimizer}
 
 
-def weight_range(weights) -> float:
-    """Range of an allocation: max(w_i) - min(w_i)."""
+# What the max weight range is measured against (see `weight_range`).
+WEIGHT_RANGE_BASES = ("smallest", "largest", "points")
+
+
+def weight_range(weights, basis: str = "smallest") -> float:
+    """Spread of an allocation, max(w) - min(w), measured against `basis`:
+    "smallest" -> / min(w) (30% and 5% -> 5.0, i.e. 500%), "largest" ->
+    / max(w) (-> 0.83), "points" -> as is (-> 0.25, 25 points). Infinite
+    for "smallest" when a weight is 0."""
     w = np.asarray(weights, dtype=np.float64)
-    return float(w.max() - w.min()) if len(w) else 0.0
+    if not len(w):
+        return 0.0
+    spread = float(w.max() - w.min())
+    if basis == "points":
+        return spread
+    if basis == "largest":
+        return float(spread / w.max()) if w.max() > 0 else 0.0
+    return float(spread / w.min()) if w.min() > 0 else float("inf")
 
 
-def _cap_weight_range(weights: np.ndarray, max_range: float | None) -> tuple[np.ndarray, float]:
-    """Enforce max(w) - min(w) <= max_range by blending toward equal weights
-    with the smallest share a that does it: the range scales by (1 - a), so
-    a = 1 - max_range / range. Equal weights have range 0, so this is always
-    reachable; the ordering of the weights is kept and they still sum to 1.
+def _cap_weight_range(weights: np.ndarray, max_range: float | None, basis: str = "smallest") -> tuple[np.ndarray, float]:
+    """Enforce weight_range(w, basis) <= max_range by blending toward equal
+    weights, w' = (1 - a) w + a/n, with the smallest share a that does it.
+    The blend keeps the order (M, m stay the largest / smallest) and the sum,
+    and equal weights have range 0, so it is always reachable. With
+    L = max_range:
+      points:   (1 - a)(M - m) <= L                  -> a = 1 - L / (M - m)
+      smallest: (1 - a)M + a/n <= (1 + L)((1 - a)m + a/n)
+                -> a = D / (D + L/n), D = M - (1 + L) m
+      largest:  (1 - L)((1 - a)M + a/n) <= (1 - a)m + a/n
+                -> a = D / (D + L/n), D = (1 - L) M - m
     Returns (weights, a)."""
-    spread = weight_range(weights)
-    if max_range is None or spread <= max_range + 1e-12:
+    if max_range is None or not len(weights) or weight_range(weights, basis) <= max_range + 1e-12:
         return weights, 0.0
-    a = 1.0 - max_range / spread
-    return (1.0 - a) * weights + a * np.full(len(weights), 1.0 / len(weights)), a
+    n = len(weights)
+    big, small = weights.max(), weights.min()
+    if basis == "points":
+        a = 1.0 - max_range / (big - small)
+    else:
+        excess = big - (1.0 + max_range) * small if basis == "smallest" else (1.0 - max_range) * big - small
+        a = excess / (excess + max_range / n)
+    a = min(1.0, max(0.0, a))
+    return (1.0 - a) * weights + a * np.full(n, 1.0 / n), a
 
 
 def _enforce_constraints(
@@ -453,6 +479,7 @@ def _enforce_constraints(
     min_return: float | None,
     anchor: dict[str, float] | None = None,
     max_weight_range: float | None = None,
+    weight_range_basis: str = "smallest",
 ) -> tuple[np.ndarray, float]:
     """The env's constraint penalty is soft, so the learned weights can
     still miss the target. If they do, blend them toward an anchor
@@ -464,7 +491,7 @@ def _enforce_constraints(
     blend is feasible, the closest one is returned. With `max_weight_range`,
     every candidate is range-capped first (`_cap_weight_range`), so the
     volatility/return limits are judged on what will actually be returned."""
-    cap = lambda w: _cap_weight_range(w, max_weight_range)[0]  # noqa: E731
+    cap = lambda w: _cap_weight_range(w, max_weight_range, weight_range_basis)[0]  # noqa: E731
     returns_df = returns_past_year(tickers).reindex(columns=tickers).fillna(0.0)
     if returns_df.empty:
         return weights, 0.0
@@ -504,9 +531,12 @@ def train_and_recommend(
     min_return: float | None = None,
     anchor: dict[str, float] | None = None,
     max_weight_range: float | None = None,
+    weight_range_basis: str = "smallest",
 ) -> dict:
     """`max_weight_range` (optional, fraction): cap on max(w) - min(w) across
-    the holdings, applied to the learned weights (see `_cap_weight_range`)."""
+    the holdings, measured against `weight_range_basis` (see `weight_range`;
+    "smallest": 0.5 = the largest at most 1.5x the smallest), applied to the
+    learned weights (see `_cap_weight_range`)."""
     tickers = universe or default_universe()
     if len(tickers) < 2:
         raise ValueError("Need at least 2 tickers to build a portfolio")
@@ -541,23 +571,25 @@ def train_and_recommend(
 
     constrained = max_volatility is not None or min_return is not None
     blend = 0.0
-    learned_range = weight_range(weights)
+    learned_range = weight_range(weights, weight_range_basis)
     if constrained:
         weights, blend = _enforce_constraints(
-            used_tickers, weights, max_volatility, min_return, anchor, max_weight_range=max_weight_range
+            used_tickers, weights, max_volatility, min_return, anchor,
+            max_weight_range=max_weight_range, weight_range_basis=weight_range_basis,
         )
-    weights, _ = _cap_weight_range(weights, max_weight_range)  # no-op when already within the range
+    weights, _ = _cap_weight_range(weights, max_weight_range, weight_range_basis)  # no-op when already within the range
 
     holdings = [{"ticker": ticker, "weight": float(weight)} for ticker, weight in zip(used_tickers, weights)]
     metrics = compute_metrics(holdings)
     constraints = None
     if constrained or max_weight_range is not None:
-        final_range = weight_range(weights)
+        final_range = weight_range(weights, weight_range_basis)
         range_ok = max_weight_range is None or final_range <= max_weight_range + 1e-9
         constraints = {
             "max_volatility": max_volatility,
             "min_return": min_return,
             "max_weight_range": max_weight_range,
+            "weight_range_basis": weight_range_basis,
             "weight_range": round(final_range, 4),
             "learned_weight_range": round(learned_range, 4),
             "satisfied": constraint_violation(metrics, max_volatility, min_return) == 0 and range_ok,
@@ -584,5 +616,6 @@ def train_and_recommend(
             "max_volatility": max_volatility,
             "min_return": min_return,
             "max_weight_range": max_weight_range,
+            "weight_range_basis": weight_range_basis,
         },
     }

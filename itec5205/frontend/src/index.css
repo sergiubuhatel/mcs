@@ -244,6 +244,7 @@ button.ticker-chip:disabled { cursor: not-allowed; opacity: 0.45; }
 .dark .count-badge { color: #93c5fd; }
 .count-badge.green { background: rgba(22, 163, 74, 0.14); color: #15803d; }
 .dark .count-badge.green { color: #4ade80; }
+.field-hint { display: block; font-size: 0.74rem; line-height: 1.3; margin-top: 3px; }
 .btn.stop-btn { display: inline-flex; align-items: center; gap: 5px; color: #dc2626; border-color: #dc2626; }
 .dark .btn.stop-btn { color: #f87171; border-color: #f87171; }
 .btn.stop-btn.icon-only { padding: 5px 7px; }

@@ -72,12 +72,46 @@ export function criteriaDefaults() {
       max_volatility_pct: p.max_volatility_pct,
       min_return_pct: p.min_return_pct,
       max_weight_range_pct: p.max_weight_range_pct,
+      weight_range_basis: p.weight_range_basis || "smallest",
       min_companies: p.min_companies,
       max_companies: p.max_companies,
       required_tickers: [],
       excluded_tickers: [],
     },
   };
+}
+
+// Max weight range: how much bigger the largest holding may be than the
+// smallest, measured against `weight_range_basis` (backend: rl_service.weight_range).
+export const WEIGHT_RANGE_HELP = "How much bigger the largest holding may be than the smallest";
+export const WEIGHT_RANGE_BASES = {
+  smallest: { label: "% of smallest", example: 50 },
+  largest: { label: "% of largest", example: 50, max: 100 },
+  points: { label: "percentage points", example: 10, max: 100 },
+};
+const num = (v) => +Number(v).toFixed(2);
+
+/** A worked example of a typed limit, e.g. (50, "smallest") -> "Largest
+ * holding at most 1.5× the smallest: smallest 10% → largest ≤ 15%." */
+export function weightRangeHint(pct, basis = "smallest") {
+  const blank = pct === "" || pct === null || pct === undefined || Number.isNaN(Number(pct)) || Number(pct) < 0;
+  const L = blank ? WEIGHT_RANGE_BASES[basis].example : Number(pct);
+  if (!blank && L === 0) return "0 = every holding gets the same weight.";
+  const text =
+    basis === "points"
+      ? `Largest minus smallest holding at most ${num(L)} points: smallest 10% → largest ≤ ${num(10 + L)}%.`
+      : basis === "largest"
+      ? `Smallest holding at least ${num(100 - L)}% of the largest: largest 20% → smallest ≥ ${num(20 * (1 - L / 100))}%.`
+      : `Largest holding at most ${num(1 + L / 100)}× the smallest: smallest 10% → largest ≤ ${num(10 * (1 + L / 100))}%.`;
+  return blank ? `Blank = no limit. E.g. ${L}: ${text.charAt(0).toLowerCase()}${text.slice(1)}` : text;
+}
+
+/** Short form for names and summaries, e.g. "largest ≤ 1.5× smallest". */
+export function describeWeightRange(pct, basis = "smallest") {
+  const L = Number(pct);
+  if (basis === "points") return `weight range ≤ ${num(L)} pts`;
+  if (basis === "largest") return `smallest ≥ ${num(100 - L)}% of largest`;
+  return `largest ≤ ${num(1 + L / 100)}× smallest`;
 }
 
 const plural = (value, unit) => `${value} ${Number(value) === 1 ? unit.replace(/s$/, "") : unit}`;
@@ -108,7 +142,10 @@ export function autoCriteriaName(kind, c) {
   const parts = [];
   if (isSet(c.max_volatility_pct)) parts.push(`Vol ≤ ${c.max_volatility_pct}%`);
   if (isSet(c.min_return_pct)) parts.push(`Return ≥ ${c.min_return_pct}%`);
-  if (isSet(c.max_weight_range_pct)) parts.push(`Range ≤ ${c.max_weight_range_pct}%`);
+  if (isSet(c.max_weight_range_pct)) {
+    const d = describeWeightRange(c.max_weight_range_pct, c.weight_range_basis);
+    parts.push(d.charAt(0).toUpperCase() + d.slice(1));
+  }
   const min = c.min_companies;
   const max = c.max_companies;
   if (isSet(min) && min === max) parts.push(`${min} companies`);
@@ -160,7 +197,7 @@ export function describeCriteria(kind, c) {
   const parts = [c.mode === "subset" ? "Steady upward trend only" : "Whole pool"];
   if (c.max_volatility_pct != null && c.max_volatility_pct !== "") parts.push(`volatility ≤ ${c.max_volatility_pct}%`);
   if (c.min_return_pct != null && c.min_return_pct !== "") parts.push(`annual return ≥ ${c.min_return_pct}%`);
-  if (isSet(c.max_weight_range_pct)) parts.push(`weight range ≤ ${c.max_weight_range_pct} pts`);
+  if (isSet(c.max_weight_range_pct)) parts.push(describeWeightRange(c.max_weight_range_pct, c.weight_range_basis));
   const min = c.min_companies ?? "";
   const max = c.max_companies ?? "";
   if (min !== "" || max !== "") parts.push(`${min === "" ? "auto" : min}–${max === "" ? "auto" : max} companies`);

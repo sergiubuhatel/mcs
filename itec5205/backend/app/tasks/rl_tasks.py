@@ -28,13 +28,15 @@ def train_rl_portfolio(
     min_return: float | None = None,
     pool_id: str | None = None,
     max_weight_range: float | None = None,
+    weight_range_basis: str = "smallest",
     required_tickers: list[str] | None = None,
     excluded_tickers: list[str] | None = None,
 ):
     """The optimizer decides how many companies to keep, within the optional
     [min_companies, max_companies] bounds (see `rl_service.select_universe`). `max_volatility` / `min_return`
     are annualized fractions (0.25 = 25%); `max_weight_range` caps
-    max(weight) - min(weight) across the holdings (0.10 = 10 points).
+    max(weight) - min(weight) across the holdings, measured against
+    `weight_range_basis` ("smallest" / "largest" holding, or "points").
     `required_tickers` must end up in the portfolio -- those that are in the
     input universe; the rest are ignored and reported. `excluded_tickers`
     are taken out of the universe before anything else, so they never are."""
@@ -64,6 +66,7 @@ def train_rl_portfolio(
         universe=universe, risk_aversion=risk_aversion, timesteps=timesteps, window=window,
         progress_room=room, progress_task=self, max_volatility=max_volatility, min_return=min_return,
         anchor=optimizer["weights"] if optimizer else None, max_weight_range=max_weight_range,
+        weight_range_basis=weight_range_basis,
     )
     constraints = result["constraints"]
     excluded = excluded_for_history(requested, result["tickers"], mode, optimizer is not None, lookback_days)
@@ -95,7 +98,10 @@ def train_rl_portfolio(
     if min_return is not None:
         notes += f", min annual return={min_return:.0%}"
     if max_weight_range is not None:
-        notes += f", max weight range={max_weight_range:.1%}"
+        notes += ", max weight range=" + (
+            f"{max_weight_range * 100:g} points" if weight_range_basis == "points"
+            else f"{max_weight_range:.0%} of the {weight_range_basis} holding"
+        )
     if mandatory_report:
         if mandatory_report["included"]:
             notes += ", mandatory: " + ", ".join(mandatory_report["included"])
