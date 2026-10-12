@@ -144,9 +144,12 @@ Click a pool's name to open three panels for it.
 ### RL portfolio
 
 Set the limits you need (blank = none): max volatility, min annual return,
-**max weight range** (max − min weight across the holdings, in percentage
-points: 10 = no two companies more than 10 points apart; the agent's weights
-are moved toward equal weights just enough to fit), min/max number of
+**max weight range** (how much bigger the largest holding may be than the
+smallest, measured in **% of the smallest** — 50 = the largest is at most
+1.5× the smallest — **% of the largest** — 50 = the smallest is at least
+half the largest — or **percentage points** — 10 = at most 10 points apart;
+the field shows a worked example of the value you type, and the agent's
+weights are moved toward equal weights just enough to fit), min/max number of
 companies, risk aversion, timesteps. **Train** — progress
 streams live, and the result is saved on the Portfolios page and feeds the
 RL star on the signal board.

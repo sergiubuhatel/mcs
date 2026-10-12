@@ -8,7 +8,7 @@ export default function WeightRangeField({ value, basis, onChange, onBasisChange
   return (
     <div>
       <label title={WEIGHT_RANGE_HELP}>Max weight range</label>
-      <div style={{ display: "flex", gap: 6 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         <input
           type="number"
           min="0"
@@ -19,14 +19,14 @@ export default function WeightRangeField({ value, basis, onChange, onBasisChange
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
-          style={{ minWidth: 0, flex: 1 }}
+          style={{ flex: "1 1 64px", minWidth: 64 }}
         />
         <select
           value={b}
           onChange={(e) => onBasisChange(e.target.value)}
           disabled={disabled}
           title="What the range is measured against"
-          style={{ width: "auto" }}
+          style={{ flex: "1 1 120px", width: "auto", minWidth: 0 }}
         >
           {Object.entries(WEIGHT_RANGE_BASES).map(([k, v]) => (
             <option key={k} value={k}>{v.label}</option>
