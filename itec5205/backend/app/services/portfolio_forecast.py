@@ -1,13 +1,13 @@
 """Where a portfolio is heading: its holdings' stored LSTM and ARIMA price
-forecasts combined with the portfolio weights, plus a 95% band per model.
+forecasts combined with the portfolio weights, plus a band per model at the chosen confidence level (50-99%, default 95%).
 
 Growth of the portfolio from today, k business days ahead, with fixed
 weights w_i and last closes L_i:
 
     G(k) = sum_i w_i * F_i(k) / L_i          (one path per model)
 
-Each stored forecast carries its own 95% band, measured at every daily step
-from the model's walk-forward backtest errors (`band_low` / `band_high`).
+Each stored forecast carries its own bands, measured at every daily step and
+confidence level from the model's walk-forward backtest errors (`bands`).
 A stock's band gives how far below / above its forecast it can land, as a
 fraction of its price: d_i(k) = (F_i - low_i) / L_i, u_i(k) = (high_i - F_i) / L_i.
 Stocks don't move independently, so the portfolio's spread on each side is
@@ -15,15 +15,18 @@ sqrt(v' C v) with v_i = w_i * d_i(k) (resp. u_i) and C the correlation of
 the holdings' daily returns over the past year -- adding the stock bands up
 would overstate the risk, ignoring correlation would understate it.
 
-Older forecasts without a measured band fall back to ARIMA's model interval
-(`lower_95` / `upper_95`); a holding without any band, or without a forecast
-at all (assumed flat, F = L, and listed in `missing`), uses its own
-past-year volatility, 1.96 * daily stdev * sqrt(k).
+Older forecasts with only a 95% band (measured, or ARIMA's model interval
+`lower_95` / `upper_95`) have it scaled by z(level) / z(95); a holding
+without any band, or without a forecast at all (assumed flat, F = L, and
+listed in `missing`), uses its own past-year volatility, z * daily stdev * sqrt(k).
 """
+
+from statistics import NormalDist
 
 import numpy as np
 
 from ..db.arango_client import get_db
+from .horizons import DEFAULT_BAND_LEVEL
 from .portfolio_service import _returns_matrix
 
 Z95 = 1.959964
@@ -42,7 +45,22 @@ def _fit_steps(values: list[float], steps: int) -> np.ndarray:
     return np.array(values, dtype=float)
 
 
-def portfolio_forecast(holdings: list[dict]) -> dict | None:
+def _point_band(p: dict, level: int, fallback_keys: tuple[str, str] | None):
+    """(low, high, source) of one forecast point at `level`%: the measured band
+    at that level; else a 95% band (measured, or the model interval) scaled
+    around the forecast by z(level) / z(95); else None."""
+    measured = (p.get("bands") or {}).get(str(level))
+    if measured:
+        return measured[0], measured[1], "backtest"
+    for lo_key, hi_key, source in (("band_low", "band_high", "backtest"), (*(fallback_keys or ("", "")), "model")):
+        if lo_key and p.get(lo_key) is not None:
+            scale = NormalDist().inv_cdf(0.5 + level / 200) / Z95
+            mid = p["predicted_close"]
+            return mid - (mid - p[lo_key]) * scale, mid + (p[hi_key] - mid) * scale, source
+    return None
+
+
+def portfolio_forecast(holdings: list[dict], level: int = DEFAULT_BAND_LEVEL) -> dict | None:
     """{dates, steps, lstm, arima, lstm_lower, lstm_upper, arima_lower,
     arima_upper (growth factors, 1 = today; lower/upper = arima band, kept
     for older pages), horizons {1M: {...}}, band_source, missing {lstm, arima},
@@ -64,7 +82,7 @@ def portfolio_forecast(holdings: list[dict]) -> dict | None:
     corr = returns.corr().fillna(0.0).to_numpy(copy=True)
     np.fill_diagonal(corr, 1.0)
     k = np.arange(1, steps + 1)[:, None]
-    vol_spread = Z95 * daily_sd[None, :] * np.sqrt(k)  # fallback, fraction of price
+    vol_spread = NormalDist().inv_cdf(0.5 + level / 200) * daily_sd[None, :] * np.sqrt(k)  # fallback, fraction of price
 
     def model_paths(forecasts: dict[str, dict], fallback_keys: tuple[str, str] | None):
         """Portfolio growth path and its band for one model, plus which
@@ -81,12 +99,11 @@ def portfolio_forecast(holdings: list[dict]) -> dict | None:
             points = doc["forecast"]
             mid = _fit_steps([p["predicted_close"] for p in points], steps)
             growth[:, j] = mid / last
-            for lo_key, hi_key, source in (("band_low", "band_high", "backtest"), (*(fallback_keys or ("", "")), "model")):
-                if lo_key and all(p.get(lo_key) is not None for p in points):
-                    down[:, j] = (mid - _fit_steps([p[lo_key] for p in points], steps)) / last
-                    up[:, j] = (_fit_steps([p[hi_key] for p in points], steps) - mid) / last
-                    sources[t] = source
-                    break
+            band = [_point_band(p, level, fallback_keys) for p in points]
+            if all(band):
+                down[:, j] = (mid - _fit_steps([b[0] for b in band], steps)) / last
+                up[:, j] = (_fit_steps([b[1] for b in band], steps) - mid) / last
+                sources[t] = band[0][2]
             else:
                 sources[t] = "volatility"
         path = growth @ weights
@@ -119,6 +136,7 @@ def portfolio_forecast(holdings: list[dict]) -> dict | None:
         "lower": r(arima_lo),
         "upper": r(arima_hi),
         "horizons": horizons,
+        "level": level,
         "band_source": {"lstm": lstm_src, "arima": arima_src},
         "missing": {"lstm": [t for t in tickers if t not in lstm], "arima": [t for t in tickers if t not in arima]},
         "data_end": reference.get("data_end"),

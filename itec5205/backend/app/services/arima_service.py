@@ -22,7 +22,7 @@ from statsmodels.tools.sm_exceptions import ConvergenceWarning
 from statsmodels.tsa.arima.model import ARIMA
 
 from ..config import RL_MODELS_DIR
-from .horizons import MAX_HORIZON_DAYS, backtest_band, horizon_points
+from .horizons import MAX_HORIZON_DAYS, backtest_bands, band_fields, horizon_points
 from .lstm_service import DEFAULT_LOOKBACK_DAYS, MIN_HISTORY_DAYS, _load_closes, split_index
 
 
@@ -121,7 +121,7 @@ def train_and_predict(
     fc = final_fit.get_forecast(steps=forecast_days)
     forecast_prices = np.asarray(fc.predicted_mean).tolist()
     conf = np.asarray(fc.conf_int(alpha=0.05))
-    band_lower, band_upper, band_info = backtest_band(predicted, actual, forecast_prices)
+    bands, band_info = backtest_bands(predicted, actual, forecast_prices)
 
     last_date = datetime.strptime(dates[-1], "%Y-%m-%d")
     forecast_dates = []
@@ -148,8 +148,8 @@ def train_and_predict(
             # ARIMA's own (model-based) 95% interval ...
             "lower_95": round(float(lower), 2),
             "upper_95": round(float(upper), 2),
-            # ... and the one measured from its backtest errors at this step.
-            **({"band_low": round(band_lower[i], 2), "band_high": round(band_upper[i], 2)} if band_lower else {}),
+            # ... and the bands (50-99%) measured from its backtest errors at this step.
+            **band_fields(bands, i),
             "change_pct_from_last_close": round((price - last_actual_close) / last_actual_close * 100, 2),
             "change_pct_from_prior_day": round((price - previous_close) / previous_close * 100, 2),
         })

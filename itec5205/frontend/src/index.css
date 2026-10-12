@@ -562,3 +562,5 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 .signal-summary { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 6px; font-size: 0.85rem; }
 .nav-item.standalone { padding-left: 12px; font-size: 1rem; font-weight: 700; }
 .nav-item.standalone svg { width: 22px; height: 22px; }
+.band-level { display: inline-flex; align-items: center; gap: 5px; font-size: 0.8rem; white-space: nowrap; }
+.band-level select { padding: 2px 6px; font-size: 0.8rem; width: auto; }

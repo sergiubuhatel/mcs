@@ -32,6 +32,7 @@ export const DEFAULT_SETTINGS = {
     lstm_epochs: 100,
     horizon: "3M", // Price Forecasts signal horizon
     chart_range: "6M", // Price Forecasts chart
+    band_level: 95, // confidence level (%) of the forecast bands on every chart
     quick_tickers: "AAPL, MSFT, NVDA, GOOGL, AMZN",
     models: "both", // new Forecast Settings: pass rule
     training_value: 10,

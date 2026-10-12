@@ -17,7 +17,7 @@ from torch import nn
 
 from ..config import RL_MODELS_DIR
 from ..db.arango_client import get_db
-from .horizons import MAX_HORIZON_DAYS, backtest_band, horizon_points
+from .horizons import MAX_HORIZON_DAYS, backtest_bands, band_fields, horizon_points
 
 MIN_HISTORY_DAYS = 120
 # Shared by the LSTM and ARIMA forecasters so both learn from the same window
@@ -203,14 +203,14 @@ def train_and_predict(
     # forecast_days-ahead forecast from the seq_len closes before it.
     first = split_index(len(closes64))
     origins = np.arange(first, len(closes64))
-    band_lower = band_upper = band_info = None
+    bands, band_info = {}, None
     if len(origins):
         predicted = _recursive(np.stack([closes64[t - seq_len : t] for t in origins]))
         actual = np.full_like(predicted, np.nan)
         for b, t in enumerate(origins):
             seen = closes64[t : t + forecast_days]
             actual[b, : len(seen)] = seen
-        band_lower, band_upper, band_info = backtest_band(predicted, actual, forecast_prices)
+        bands, band_info = backtest_bands(predicted, actual, forecast_prices)
 
     last_date = datetime.strptime(dates[-1], "%Y-%m-%d")
     forecast_dates = []
@@ -236,8 +236,8 @@ def train_and_predict(
         forecast.append({
             "date": d,
             "predicted_close": round(p, 2),
-            # 95% band measured from the backtest errors at this step.
-            **({"band_low": round(band_lower[i], 2), "band_high": round(band_upper[i], 2)} if band_lower else {}),
+            # Bands (50-99%) measured from the backtest errors at this step.
+            **band_fields(bands, i),
             # vs. the last actual close (cumulative move from today) and vs. the prior forecast day.
             "change_pct_from_last_close": round((p - last_actual_close) / last_actual_close * 100, 2),
             "change_pct_from_prior_day": round((p - previous_close) / previous_close * 100, 2),

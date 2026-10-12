@@ -2,6 +2,7 @@
 
 from flask import Blueprint, jsonify, request
 
+from ..services.horizons import BAND_LEVELS, DEFAULT_BAND_LEVEL
 from ..services.portfolio_forecast import portfolio_forecast
 from ..services.portfolio_service import (
     compute_performance_series,
@@ -59,7 +60,10 @@ def forecast(portfolio_id: str):
     portfolio = get_portfolio(portfolio_id)
     if portfolio is None:
         return jsonify({"error": "Portfolio not found"}), 404
-    result = portfolio_forecast(portfolio["holdings"])
+    level = request.args.get("level", DEFAULT_BAND_LEVEL, type=int)
+    if level not in BAND_LEVELS:
+        return jsonify({"error": f"'level' must be one of {', '.join(map(str, BAND_LEVELS))}"}), 400
+    result = portfolio_forecast(portfolio["holdings"], level=level)
     if result is None:
         return jsonify({"error": "None of the holdings has a forecast yet -- run Forecast all"}), 404
     return jsonify({"portfolio_id": portfolio_id, **result})

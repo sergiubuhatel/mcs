@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { apiClient } from "../api/client";
-import ForecastChart, { forecastFromDocs } from "../components/ForecastChart";
+import ForecastChart, { BandLevelSelect, forecastFromDocs } from "../components/ForecastChart";
 import ForecastPanels from "../features/predictions/ForecastPanels";
 import { INTERVALS, filterByInterval } from "../utils/dateRanges";
 import BackButton from "../layout/BackButton";
@@ -49,8 +49,13 @@ export default function CompanyDetailPage() {
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState(null);
   const [range, setRange] = useState(() => getSettings().general.chart_range);
-  const [forecast, setForecast] = useState(null); // {dates, lstm, arima, lower, upper} or null
+  const [forecastDocs, setForecastDocs] = useState(null); // stored {lstm, arima} docs
   const [showForecast, setShowForecast] = useState(true);
+  const [bandLevel, setBandLevel] = useState(() => Number(getSettings().forecast.band_level) || 95);
+  const forecast = useMemo(
+    () => (forecastDocs ? forecastFromDocs(forecastDocs.lstm, forecastDocs.arima, bandLevel) : null),
+    [forecastDocs, bandLevel]
+  );
 
   useEffect(() => {
     setDetail(null);
@@ -59,11 +64,11 @@ export default function CompanyDetailPage() {
       .get(`/api/companies/${ticker}`)
       .then((res) => setDetail(res.data))
       .catch((err) => setError(err.response?.data?.error || err.message));
-    // Stored LSTM / ARIMA forecasts, drawn after the history with each model's 95% band.
-    setForecast(null);
+    // Stored LSTM / ARIMA forecasts, drawn after the history with each model's band.
+    setForecastDocs(null);
     const optional = (url) => apiClient.get(url).then((r) => r.data).catch(() => null);
     Promise.all([optional(`/api/predictions/${ticker}`), optional(`/api/arima/${ticker}`)]).then(([lstm, arima]) =>
-      setForecast(forecastFromDocs(lstm, arima))
+      setForecastDocs({ lstm, arima })
     );
   }, [ticker]);
 
@@ -138,9 +143,12 @@ export default function CompanyDetailPage() {
               </div>
               <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                 {forecast && (
-                  <label className="muted" style={{ display: "flex", alignItems: "center", gap: 5, marginRight: 8, fontSize: "0.8rem" }} title="LSTM and ARIMA forecasts with ARIMA's 95% interval">
+                  <label className="muted" style={{ display: "flex", alignItems: "center", gap: 5, marginRight: 8, fontSize: "0.8rem" }} title="LSTM and ARIMA forecasts with each model's measured band">
                     <input type="checkbox" checked={showForecast} onChange={(e) => setShowForecast(e.target.checked)} /> Forecast
                   </label>
+                )}
+                {forecast && showForecast && (
+                  <BandLevelSelect value={bandLevel} onChange={setBandLevel} />
                 )}
                 {INTERVALS.map((iv) => (
                   <button
@@ -163,7 +171,7 @@ export default function CompanyDetailPage() {
             />
             {forecast && showForecast && (
               <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.8rem" }}>
-                Dashed: stored LSTM and ARIMA forecasts, one point per trading day. Shaded: each model&apos;s 95% band, measured at every step from where prices actually landed in its backtest (a full forecast from each held-out day). Retrain them below.
+                Dashed: stored LSTM and ARIMA forecasts, one point per trading day. Shaded: each model&apos;s {bandLevel}% band, measured at every step from where prices actually landed in its backtest (a full forecast from each held-out day). Retrain them below.
               </p>
             )}
           </div>

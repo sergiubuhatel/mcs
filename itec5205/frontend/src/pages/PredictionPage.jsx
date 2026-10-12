@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import ForecastChart, { forecastFromDocs } from "../components/ForecastChart";
+import ForecastChart, { BandLevelSelect, forecastFromDocs } from "../components/ForecastChart";
 import { apiClient } from "../api/client";
 import { PageHeader, QuickTipsBar } from "../components/PageParts";
 import ForecastPanels from "../features/predictions/ForecastPanels";
@@ -118,24 +118,27 @@ function useTickerData(ticker) {
   return { ...state, reload: load };
 }
 
-function PriceForecastCard({ ticker, company, lstm, arima, range, setRange }) {
+function PriceForecastCard({ ticker, company, lstm, arima, range, setRange, bandLevel, setBandLevel }) {
   const history = useMemo(
     () => filterByInterval((company?.history || []).map((h) => ({ date: h.date, value: h.close })), range),
     [company, range]
   );
-  const forecast = useMemo(() => forecastFromDocs(lstm, arima), [lstm, arima]);
+  const forecast = useMemo(() => forecastFromDocs(lstm, arima, bandLevel), [lstm, arima, bandLevel]);
 
   return (
     <div className="card" style={{ minWidth: 0 }}>
       <CardTitle
         icon={TrendChartIcon}
         title="Price history and forecast"
-        subtitle={`Daily closes and both models' daily forecasts for ${ticker}; each shaded band covers 95% of where prices landed in that model's backtest at the same step`}
+        subtitle={`Daily closes and both models' daily forecasts for ${ticker}; each shaded band covers ${bandLevel}% of where prices landed in that model's backtest at the same step`}
         action={
-          <div className="seg">
-            {CHART_RANGES.map((r) => (
-              <button key={r} className={r === range ? "active" : ""} onClick={() => setRange(r)}>{r}</button>
-            ))}
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {forecast && <BandLevelSelect value={bandLevel} onChange={setBandLevel} />}
+            <div className="seg">
+              {CHART_RANGES.map((r) => (
+                <button key={r} className={r === range ? "active" : ""} onClick={() => setRange(r)}>{r}</button>
+              ))}
+            </div>
           </div>
         }
       />
@@ -229,7 +232,7 @@ function ModelComparison({ lstm, arima }) {
   );
 }
 
-function Interpretation({ ticker, lstm, arima, horizon, signal, prob }) {
+function Interpretation({ ticker, lstm, arima, horizon, signal, prob, bandLevel }) {
   const l = pointAt(lstm, horizon.days);
   const a = pointAt(arima, horizon.days);
   const sentences = [];
@@ -249,10 +252,10 @@ function Interpretation({ ticker, lstm, arima, horizon, signal, prob }) {
     const width = ((a.upper_95 - a.lower_95) / 2 / arima.last_actual_close) * 100;
     sentences.push(`ARIMA's 95% interval at ${horizon.name} is ${money(a.lower_95)} – ${money(a.upper_95)} (±${width.toFixed(1)}%)${prob != null ? `, a ${Math.round(prob * 100)}% chance of closing above the last price` : ""}.`);
   }
-  const measured = [["LSTM", l], ["ARIMA", a]].filter(([, p]) => p?.band_low != null);
+  const measured = [["LSTM", l], ["ARIMA", a]].filter(([, p]) => p?.bands?.[bandLevel]);
   if (measured.length) {
     sentences.push(
-      `Measured from each model's ${horizon.name}-ahead backtest errors, the 95% band is ${measured.map(([name, p]) => `${money(p.band_low)} – ${money(p.band_high)} (${name})`).join(" and ")}.`
+      `Measured from each model's ${horizon.name}-ahead backtest errors, the ${bandLevel}% band is ${measured.map(([name, p]) => `${money(p.bands[bandLevel][0])} – ${money(p.bands[bandLevel][1])} (${name})`).join(" and ")}.`
     );
   }
   if (lstm?.test_rmse != null && arima?.test_rmse != null) {
@@ -345,6 +348,7 @@ export default function PredictionPage() {
   const [ticker, setTicker] = useState(input);
   const [horizonKey, setHorizonKey] = useState(() => getSettings().forecast.horizon);
   const [range, setRange] = useState(() => getSettings().forecast.chart_range);
+  const [bandLevel, setBandLevel] = useState(() => Number(getSettings().forecast.band_level) || 95);
   const [recentTickers, setRecentTickers] = useState([]);
   const [run, setRun] = useState(null);
   const [runError, setRunError] = useState(null);
@@ -498,12 +502,12 @@ export default function PredictionPage() {
       </div>
 
       <div className="forecast-grid">
-        <PriceForecastCard ticker={ticker} company={company} lstm={lstm} arima={arima} range={range} setRange={setRange} />
+        <PriceForecastCard ticker={ticker} company={company} lstm={lstm} arima={arima} range={range} setRange={setRange} bandLevel={bandLevel} setBandLevel={setBandLevel} />
         <PredictedPrices lstm={lstm} arima={arima} />
       </div>
       <div className="forecast-grid three">
         <ModelComparison lstm={lstm} arima={arima} />
-        <Interpretation ticker={ticker} lstm={lstm} arima={arima} horizon={horizon} signal={signal} prob={prob} />
+        <Interpretation ticker={ticker} lstm={lstm} arima={arima} horizon={horizon} signal={signal} prob={prob} bandLevel={bandLevel} />
         <RecentPredictions horizonKey={horizonKey} onOpen={open} refreshKey={refreshKey} onLoaded={(rows) => !recentTickers.length && setRecentTickers(rows)} />
       </div>
 

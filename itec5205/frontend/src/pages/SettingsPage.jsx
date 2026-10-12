@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { BAND_LEVELS } from "../components/ForecastChart";
 import { useDispatch } from "react-redux";
 import { toast } from "react-toastify";
 import { apiClient } from "../api/client";
@@ -96,6 +97,7 @@ const SECTIONS = [
       { key: "training_days", label: "Training days", type: "number", min: 120, suffix: "days", help: "Most recent trading days both models train on (screener, pools, company page, Price Forecasts)." },
       { key: "lstm_epochs", label: "LSTM max epochs", type: "number", min: 1, help: "Upper bound on LSTM epochs (early stopping may end sooner)." },
       { key: "horizon", label: "Signal horizon", type: "select", options: opts(["1M", "2M", "3M", "4M"]), help: "Horizon the Price Forecasts page rates signals at first." },
+      { key: "band_level", label: "Forecast band confidence", type: "select", options: opts(BAND_LEVELS.map((lv) => ({ value: lv, label: `${lv}%` }))), number: true, help: "Initial confidence level of the shaded forecast bands on the company, portfolio and Price Forecasts charts (each chart can still change it)." },
       { key: "chart_range", label: "Forecast chart range", type: "select", options: opts(["1M", "3M", "6M", "1Y", "ALL"]), help: "Initial history shown on the Price Forecasts chart." },
       { key: "quick_tickers", label: "Quick-pick tickers", type: "text", help: "Shown on Price Forecasts before anything has been forecast (comma-separated)." },
       { key: "models", label: "Pass rule", type: "select", options: opts(Object.entries(MODEL_RULES).map(([value, label]) => ({ value, label }))), help: "Which forecasts a company must pass in a new Forecast Settings." },

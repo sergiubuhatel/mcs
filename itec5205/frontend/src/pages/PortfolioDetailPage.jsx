@@ -7,7 +7,7 @@ import { useColumnConfig } from "../utils/useColumnConfig";
 import ActionMenu from "../components/ActionMenu";
 import ColumnPicker from "../components/ColumnPicker";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
-import ForecastChart, { FORECAST_COLORS } from "../components/ForecastChart";
+import ForecastChart, { BandLevelSelect, FORECAST_COLORS } from "../components/ForecastChart";
 import Modal from "../components/Modal";
 import Req from "../components/Req";
 import { StatTiles } from "../components/PageParts";
@@ -151,6 +151,7 @@ export default function PortfolioDetailPage() {
   const [board, setBoard] = useState(null);
   const [forecast, setForecast] = useState(null); // growth factors from /forecast, or {error}
   const [showForecast, setShowForecast] = useState(true);
+  const [bandLevel, setBandLevel] = useState(() => Number(getSettings().forecast.band_level) || 95);
   const [renaming, setRenaming] = useState(null); // name being edited, or null
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("portfolioHoldings", HOLDINGS_COLUMNS);
@@ -183,10 +184,10 @@ export default function PortfolioDetailPage() {
   // changes (e.g. after its Forecast all run trained new forecasts).
   useEffect(() => {
     apiClient
-      .get(`/api/portfolios/${id}/forecast`)
+      .get(`/api/portfolios/${id}/forecast`, { params: { level: bandLevel } })
       .then((r) => setForecast(r.data))
       .catch((err) => setForecast({ error: apiError(err) }));
-  }, [id, board]);
+  }, [id, board, bandLevel]);
 
   const rename = (e) => {
     e.preventDefault();
@@ -247,6 +248,7 @@ export default function PortfolioDetailPage() {
     forecast && !forecast.error && lastIndex != null
       ? {
           dates: forecast.dates,
+          level: forecast.level,
           lstm: forecast.lstm.map((g) => g * lastIndex),
           arima: forecast.arima.map((g) => g * lastIndex),
           lstmBand: forecast.lstm_lower && {
@@ -447,12 +449,13 @@ export default function PortfolioDetailPage() {
               <span className="muted">| Expected annual return: <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(portfolio.expected_return)}</strong></span>
             )}
           </div>
-          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 4, alignItems: "center", marginLeft: "auto" }}>
             {forecastIndex && (
-              <label className="muted" style={{ display: "flex", alignItems: "center", gap: 5, marginRight: 8, fontSize: "0.8rem" }} title="Where the portfolio is heading: its holdings' LSTM and ARIMA forecasts with a 95% band">
+              <label className="muted" style={{ display: "flex", alignItems: "center", gap: 5, marginRight: 8, fontSize: "0.8rem" }} title="Where the portfolio is heading: its holdings' LSTM and ARIMA forecasts with a measured band">
                 <input type="checkbox" checked={showForecast} onChange={(e) => setShowForecast(e.target.checked)} /> Forecast
               </label>
             )}
+            {forecastIndex && showForecast && <BandLevelSelect value={bandLevel} onChange={setBandLevel} />}
             {INTERVALS.map((iv) => (
               <button
                 key={iv.key}
@@ -481,7 +484,7 @@ export default function PortfolioDetailPage() {
           <div className="forecast-strip">
             <span className="muted">Forecast from {forecast.data_end ? `the ${forecast.data_end} close` : "the last close"}:</span>
             {Object.entries(forecast.horizons).map(([h, v]) => (
-              <span key={h} className="forecast-chip" title={`${h} (${v.date}): LSTM 95% band ${pctOf(v.lstm_lower)} to ${pctOf(v.lstm_upper)}; ARIMA 95% band ${pctOf(v.lower)} to ${pctOf(v.upper)}`}>
+              <span key={h} className="forecast-chip" title={`${h} (${v.date}): LSTM ${forecast.level}% band ${pctOf(v.lstm_lower)} to ${pctOf(v.lstm_upper)}; ARIMA ${forecast.level}% band ${pctOf(v.lower)} to ${pctOf(v.upper)}`}>
                 <strong>{h}</strong>
                 <span style={{ color: FORECAST_COLORS.lstm }}>LSTM {pctOf(v.lstm)} <span className="muted">({pctOf(v.lstm_lower)} … {pctOf(v.lstm_upper)})</span></span>
                 <span style={{ color: FORECAST_COLORS.arima }}>ARIMA {pctOf(v.arima)} <span className="muted">({pctOf(v.lower)} … {pctOf(v.upper)})</span></span>
@@ -491,7 +494,7 @@ export default function PortfolioDetailPage() {
             <span
               className="help-dot"
               role="img"
-              title="Each holding's stored LSTM and ARIMA forecast (one point per trading day), combined with the portfolio weights. Each model's 95% band (in brackets) is measured, not assumed: every stock's model made a full forecast from each of its ~500 held-out days, and at each step the band covers 95% of where prices actually landed. The stocks' bands are combined using how the holdings moved together over the past year (correlation), so the portfolio band is narrower than the stocks' bands added up."
+              title="Each holding's stored LSTM and ARIMA forecast (one point per trading day), combined with the portfolio weights. Each model's band (in brackets, at the chosen confidence level) is measured, not assumed: every stock's model made a full forecast from each of its ~500 held-out days, and at each step a 95% band covers 95% of where prices actually landed. The stocks' bands are combined using how the holdings moved together over the past year (correlation), so the portfolio band is narrower than the stocks' bands added up."
               aria-label="How the portfolio forecast is computed"
             >?</span>
           </div>
