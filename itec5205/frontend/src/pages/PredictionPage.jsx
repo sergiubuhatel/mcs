@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Area, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import ForecastChart, { forecastFromDocs } from "../components/ForecastChart";
 import { apiClient } from "../api/client";
 import { PageHeader, QuickTipsBar } from "../components/PageParts";
 import ForecastPanels from "../features/predictions/ForecastPanels";
@@ -12,7 +12,6 @@ import {
   SearchIcon,
   TrendChartIcon,
 } from "../layout/icons";
-import { tooltipProps } from "../utils/chartTheme";
 import { filterByInterval } from "../utils/dateRanges";
 import { getSettings, tickerList } from "../features/settings/settings";
 
@@ -119,31 +118,19 @@ function useTickerData(ticker) {
   return { ...state, reload: load };
 }
 
-function ForecastChart({ ticker, company, lstm, arima, range, setRange }) {
-  const data = useMemo(() => {
-    const history = (company?.history || []).map((h) => ({ date: h.date, close: h.close }));
-    const shown = filterByInterval(history, range);
-    if (!shown.length) return [];
-    const last = shown[shown.length - 1];
-    // The forecast lines start at the last actual close so they join the history.
-    const rows = shown.map((h) => ({ ...h }));
-    rows[rows.length - 1] = { ...last, lstm: lstm ? last.close : undefined, arima: arima ? last.close : undefined, band: arima ? [last.close, last.close] : undefined };
-    const byDate = new Map();
-    for (const p of lstm?.forecast || []) byDate.set(p.date, { date: p.date, lstm: p.predicted_close });
-    for (const p of arima?.forecast || []) {
-      const row = byDate.get(p.date) || { date: p.date };
-      byDate.set(p.date, { ...row, arima: p.predicted_close, band: p.lower_95 != null ? [p.lower_95, p.upper_95] : undefined });
-    }
-    return [...rows, ...[...byDate.values()].sort((a, b) => a.date.localeCompare(b.date))];
-  }, [company, lstm, arima, range]);
-  const lastDate = company?.history?.[company.history.length - 1]?.date;
+function PriceForecastCard({ ticker, company, lstm, arima, range, setRange }) {
+  const history = useMemo(
+    () => filterByInterval((company?.history || []).map((h) => ({ date: h.date, value: h.close })), range),
+    [company, range]
+  );
+  const forecast = useMemo(() => forecastFromDocs(lstm, arima), [lstm, arima]);
 
   return (
     <div className="card" style={{ minWidth: 0 }}>
       <CardTitle
         icon={TrendChartIcon}
         title="Price history and forecast"
-        subtitle={`Daily closes and both models' forecasts for ${ticker}; the shaded band is ARIMA's 95% interval`}
+        subtitle={`Daily closes and both models' daily forecasts for ${ticker}; each shaded band covers 95% of where prices landed in that model's backtest at the same step`}
         action={
           <div className="seg">
             {CHART_RANGES.map((r) => (
@@ -152,29 +139,10 @@ function ForecastChart({ ticker, company, lstm, arima, range, setRange }) {
           </div>
         }
       />
-      {data.length === 0 ? (
+      {history.length === 0 ? (
         <p className="muted">No price history stored for {ticker}.</p>
       ) : (
-        <ResponsiveContainer width="100%" height={300}>
-          <ComposedChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
-            <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--color-text-secondary)" }} minTickGap={50} />
-            <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10, fill: "var(--color-text-secondary)" }} tickFormatter={(v) => `$${Math.round(v)}`} width={56} />
-            <Tooltip
-              {...tooltipProps}
-              formatter={(value, name) => {
-                if (name === "ARIMA 95% interval") return [`${money(value[0])} – ${money(value[1])}`, name];
-                return [money(value), name];
-              }}
-            />
-            <Legend wrapperStyle={{ fontSize: "0.78rem" }} />
-            {arima && <Area dataKey="band" name="ARIMA 95% interval" stroke="none" fill={COLORS.arima} fillOpacity={0.12} isAnimationActive={false} connectNulls />}
-            <Line dataKey="close" name="Price" stroke={COLORS.history} strokeWidth={2.5} dot={false} isAnimationActive={false} />
-            {lstm && <Line dataKey="lstm" name="LSTM forecast" stroke={COLORS.lstm} strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} connectNulls />}
-            {arima && <Line dataKey="arima" name="ARIMA forecast" stroke={COLORS.arima} strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} connectNulls />}
-            {lastDate && <ReferenceLine x={lastDate} stroke="var(--color-text-secondary)" strokeDasharray="3 3" label={{ value: "Forecast →", position: "insideTopRight", fontSize: 11, fill: "var(--color-text-secondary)" }} />}
-          </ComposedChart>
-        </ResponsiveContainer>
+        <ForecastChart history={history} forecast={forecast} format={money} historyName="Price" height={300} />
       )}
     </div>
   );
@@ -280,6 +248,12 @@ function Interpretation({ ticker, lstm, arima, horizon, signal, prob }) {
   if (a?.lower_95 != null) {
     const width = ((a.upper_95 - a.lower_95) / 2 / arima.last_actual_close) * 100;
     sentences.push(`ARIMA's 95% interval at ${horizon.name} is ${money(a.lower_95)} – ${money(a.upper_95)} (±${width.toFixed(1)}%)${prob != null ? `, a ${Math.round(prob * 100)}% chance of closing above the last price` : ""}.`);
+  }
+  const measured = [["LSTM", l], ["ARIMA", a]].filter(([, p]) => p?.band_low != null);
+  if (measured.length) {
+    sentences.push(
+      `Measured from each model's ${horizon.name}-ahead backtest errors, the 95% band is ${measured.map(([name, p]) => `${money(p.band_low)} – ${money(p.band_high)} (${name})`).join(" and ")}.`
+    );
   }
   if (lstm?.test_rmse != null && arima?.test_rmse != null) {
     const winner = lstm.test_rmse < arima.test_rmse ? "LSTM" : "ARIMA";
@@ -524,7 +498,7 @@ export default function PredictionPage() {
       </div>
 
       <div className="forecast-grid">
-        <ForecastChart ticker={ticker} company={company} lstm={lstm} arima={arima} range={range} setRange={setRange} />
+        <PriceForecastCard ticker={ticker} company={company} lstm={lstm} arima={arima} range={range} setRange={setRange} />
         <PredictedPrices lstm={lstm} arima={arima} />
       </div>
       <div className="forecast-grid three">

@@ -4,19 +4,52 @@ import { tooltipProps } from "../utils/chartTheme";
 
 // Same colors as the Price Forecasts page; the history line stays the fixed blue.
 export const FORECAST_COLORS = { history: "#2563eb", lstm: "#16a34a", arima: "#a855f7" };
-const BAND = "ARIMA 95% interval";
+const BAND_NAMES = { lstmBand: "LSTM 95% band", arimaBand: "ARIMA 95% band" };
+// Older ARIMA forecasts (trained before the measured bands) only have the model's interval.
+const MODEL_INTERVAL_NAME = "ARIMA 95% interval (model; retrain for the measured band)";
+const BAND_LABELS = new Set([...Object.values(BAND_NAMES), MODEL_INTERVAL_NAME]);
 
 /**
- * History plus, after it, the LSTM / ARIMA forecast paths and ARIMA's 95%
- * band (the "beam"), joined at the last actual point.
+ * Chart input from the stored /api/predictions (LSTM) and /api/arima docs:
+ * one point per forecast day. Each model's band is the 95% range measured
+ * from its own backtest errors at that step (band_low / band_high); older
+ * ARIMA forecasts without it fall back to ARIMA's model interval.
+ */
+export function forecastFromDocs(lstm, arima) {
+  const ref = arima?.forecast?.length ? arima : lstm;
+  if (!ref?.forecast?.length) return null;
+  const byDate = (doc) => Object.fromEntries((doc?.forecast || []).map((p) => [p.date, p]));
+  const l = byDate(lstm);
+  const a = byDate(arima);
+  const dates = ref.forecast.map((p) => p.date);
+  const band = (points, lo, hi) =>
+    points.every((p) => p?.[lo] != null) ? { low: points.map((p) => p[lo]), high: points.map((p) => p[hi]) } : null;
+  const lp = dates.map((d) => l[d]);
+  const ap = dates.map((d) => a[d]);
+  const measured = arima ? band(ap, "band_low", "band_high") : null;
+  return {
+    dates,
+    lstm: lstm ? lp.map((p) => p?.predicted_close) : null,
+    arima: arima ? ap.map((p) => p?.predicted_close) : null,
+    lstmBand: lstm ? band(lp, "band_low", "band_high") : null,
+    arimaBand: measured || (arima ? band(ap, "lower_95", "upper_95") : null),
+    arimaBandIsModel: !!arima && !measured,
+  };
+}
+
+/**
+ * History plus, after it, the LSTM / ARIMA forecast paths and each model's
+ * 95% band (the "beam"), one point per forecast day, joined at the last
+ * actual point.
  * @param history  [{date, value}] (already cut to the chosen range)
- * @param forecast {dates, lstm?, arima?, lower?, upper?} in the same units as
- *   `value`, or null to draw the history only
+ * @param forecast {dates, lstm?, arima?, lstmBand?: {low, high}, arimaBand?: {low, high}, arimaBandIsModel?}
+ *   in the same units as `value`, or null to draw the history only
  * @param format   value -> label (axis, tooltip)
  * @param area     fill under the history line (portfolio index style)
  */
 export default function ForecastChart({ history, forecast, format, historyName = "Price", area = false, height = 260 }) {
   const has = (k) => !!forecast?.[k]?.length;
+  const hasBand = (k) => !!forecast?.[k]?.low?.length;
   const data = useMemo(() => {
     if (!history.length) return [];
     const rows = history.map((h) => ({ date: h.date, value: h.value }));
@@ -26,15 +59,18 @@ export default function ForecastChart({ history, forecast, format, historyName =
       ...last,
       lstm: has("lstm") ? last.value : undefined,
       arima: has("arima") ? last.value : undefined,
-      band: has("lower") ? [last.value, last.value] : undefined,
+      lstmBand: hasBand("lstmBand") ? [last.value, last.value] : undefined,
+      arimaBand: hasBand("arimaBand") ? [last.value, last.value] : undefined,
     };
+    const band = (k, i) => (hasBand(k) && forecast[k].low[i] != null ? [forecast[k].low[i], forecast[k].high[i]] : undefined);
     forecast.dates.forEach((date, i) => {
       if (date <= last.date) return;
       rows.push({
         date,
         lstm: forecast.lstm?.[i],
         arima: forecast.arima?.[i],
-        band: has("lower") ? [forecast.lower[i], forecast.upper[i]] : undefined,
+        lstmBand: band("lstmBand", i),
+        arimaBand: band("arimaBand", i),
       });
     });
     return rows;
@@ -57,17 +93,22 @@ export default function ForecastChart({ history, forecast, format, historyName =
         <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10, fill: "var(--color-text-secondary)" }} tickFormatter={format} width={58} />
         <Tooltip
           {...tooltipProps}
-          formatter={(value, name) => (name === BAND ? [`${format(value[0])} – ${format(value[1])}`, name] : [format(value), name])}
+          formatter={(value, name) => (BAND_LABELS.has(name) ? [`${format(value[0])} – ${format(value[1])}`, name] : [format(value), name])}
         />
         {forecast && <Legend wrapperStyle={{ fontSize: "0.78rem" }} />}
-        {has("lower") && <Area dataKey="band" name={BAND} stroke="none" fill={FORECAST_COLORS.arima} fillOpacity={0.14} isAnimationActive={false} connectNulls />}
+        {hasBand("lstmBand") && (
+          <Area dataKey="lstmBand" name={BAND_NAMES.lstmBand} type="linear" stroke={FORECAST_COLORS.lstm} strokeOpacity={0.35} strokeWidth={1} fill={FORECAST_COLORS.lstm} fillOpacity={0.1} isAnimationActive={false} connectNulls />
+        )}
+        {hasBand("arimaBand") && (
+          <Area dataKey="arimaBand" name={forecast.arimaBandIsModel ? MODEL_INTERVAL_NAME : BAND_NAMES.arimaBand} type="linear" stroke={FORECAST_COLORS.arima} strokeOpacity={0.35} strokeWidth={1} fill={FORECAST_COLORS.arima} fillOpacity={0.1} isAnimationActive={false} connectNulls />
+        )}
         {area ? (
           <Area dataKey="value" name={historyName} stroke={FORECAST_COLORS.history} strokeWidth={2.5} fill="url(#historyFill)" dot={false} isAnimationActive={false} />
         ) : (
           <Line dataKey="value" name={historyName} stroke={FORECAST_COLORS.history} strokeWidth={2.5} dot={false} isAnimationActive={false} />
         )}
-        {has("lstm") && <Line dataKey="lstm" name="LSTM forecast" stroke={FORECAST_COLORS.lstm} strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} connectNulls />}
-        {has("arima") && <Line dataKey="arima" name="ARIMA forecast" stroke={FORECAST_COLORS.arima} strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} connectNulls />}
+        {has("lstm") && <Line dataKey="lstm" name="LSTM forecast" type="linear" stroke={FORECAST_COLORS.lstm} strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} connectNulls />}
+        {has("arima") && <Line dataKey="arima" name="ARIMA forecast" type="linear" stroke={FORECAST_COLORS.arima} strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} connectNulls />}
         {forecast && lastDate && (
           <ReferenceLine x={lastDate} stroke="var(--color-text-secondary)" strokeDasharray="3 3" label={{ value: "Forecast →", position: "insideTopRight", fontSize: 11, fill: "var(--color-text-secondary)" }} />
         )}

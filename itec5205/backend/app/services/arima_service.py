@@ -22,7 +22,7 @@ from statsmodels.tools.sm_exceptions import ConvergenceWarning
 from statsmodels.tsa.arima.model import ARIMA
 
 from ..config import RL_MODELS_DIR
-from .horizons import MAX_HORIZON_DAYS, horizon_points
+from .horizons import MAX_HORIZON_DAYS, backtest_band, horizon_points
 from .lstm_service import DEFAULT_LOOKBACK_DAYS, MIN_HISTORY_DAYS, _load_closes, split_index
 
 
@@ -101,15 +101,27 @@ def train_and_predict(
     # predictions over the test span (each step conditions on the actual
     # previous closes, like the LSTM's sliding windows).
     train_fit = _fit(train, order, trend)
-    test_pred = train_fit.append(test, refit=False).predict(start=split, end=len(series) - 1)
+    held_out = train_fit.append(test, refit=False)
+    test_pred = held_out.predict(start=split, end=len(series) - 1)
     rmse = float(np.sqrt(np.mean((test_pred - test) ** 2)))
     mae = float(np.mean(np.abs(test_pred - test)))
+
+    # Multi-step backtest for the band: from every test day, the full
+    # forecast_days-ahead forecast using only the closes before it (dynamic
+    # prediction = same as refitting the filter on series[:t] and forecasting).
+    predicted = np.full((len(test), forecast_days), np.nan)
+    actual = np.full((len(test), forecast_days), np.nan)
+    for b, t in enumerate(range(split, len(series))):
+        end = min(t + forecast_days, len(series)) - 1
+        predicted[b, : end - t + 1] = np.asarray(held_out.predict(start=t, end=end, dynamic=True))
+        actual[b, : end - t + 1] = series[t : end + 1]
 
     # Final model on all retained history for the forward forecast.
     final_fit = _fit(series, order, trend)
     fc = final_fit.get_forecast(steps=forecast_days)
     forecast_prices = np.asarray(fc.predicted_mean).tolist()
     conf = np.asarray(fc.conf_int(alpha=0.05))
+    band_lower, band_upper, band_info = backtest_band(predicted, actual, forecast_prices)
 
     last_date = datetime.strptime(dates[-1], "%Y-%m-%d")
     forecast_dates = []
@@ -129,12 +141,15 @@ def train_and_predict(
     last_actual_close = float(closes[-1])
     forecast = []
     previous_close = last_actual_close
-    for date, price, (lower, upper) in zip(forecast_dates, forecast_prices, conf):
+    for i, (date, price, (lower, upper)) in enumerate(zip(forecast_dates, forecast_prices, conf)):
         forecast.append({
             "date": date,
             "predicted_close": round(price, 2),
+            # ARIMA's own (model-based) 95% interval ...
             "lower_95": round(float(lower), 2),
             "upper_95": round(float(upper), 2),
+            # ... and the one measured from its backtest errors at this step.
+            **({"band_low": round(band_lower[i], 2), "band_high": round(band_upper[i], 2)} if band_lower else {}),
             "change_pct_from_last_close": round((price - last_actual_close) / last_actual_close * 100, 2),
             "change_pct_from_prior_day": round((price - previous_close) / previous_close * 100, 2),
         })
@@ -156,5 +171,6 @@ def train_and_predict(
         "last_actual_close": round(last_actual_close, 2),
         "forecast": forecast,
         "horizons": horizon_points(forecast, last_actual_close),
+        "band": band_info,
         "model_path": model_path,
     }

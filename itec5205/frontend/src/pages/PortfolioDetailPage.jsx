@@ -249,8 +249,11 @@ export default function PortfolioDetailPage() {
           dates: forecast.dates,
           lstm: forecast.lstm.map((g) => g * lastIndex),
           arima: forecast.arima.map((g) => g * lastIndex),
-          lower: forecast.lower.map((g) => g * lastIndex),
-          upper: forecast.upper.map((g) => g * lastIndex),
+          lstmBand: forecast.lstm_lower && {
+            low: forecast.lstm_lower.map((g) => g * lastIndex),
+            high: forecast.lstm_upper.map((g) => g * lastIndex),
+          },
+          arimaBand: { low: forecast.lower.map((g) => g * lastIndex), high: forecast.upper.map((g) => g * lastIndex) },
         }
       : null;
   const pctOf = (g) => `${g >= 1 ? "+" : ""}${((g - 1) * 100).toFixed(1)}%`;
@@ -478,17 +481,17 @@ export default function PortfolioDetailPage() {
           <div className="forecast-strip">
             <span className="muted">Forecast from {forecast.data_end ? `the ${forecast.data_end} close` : "the last close"}:</span>
             {Object.entries(forecast.horizons).map(([h, v]) => (
-              <span key={h} className="forecast-chip" title={`${h} (${v.date}): ARIMA 95% band ${pctOf(v.lower)} to ${pctOf(v.upper)}`}>
+              <span key={h} className="forecast-chip" title={`${h} (${v.date}): LSTM 95% band ${pctOf(v.lstm_lower)} to ${pctOf(v.lstm_upper)}; ARIMA 95% band ${pctOf(v.lower)} to ${pctOf(v.upper)}`}>
                 <strong>{h}</strong>
-                <span style={{ color: FORECAST_COLORS.lstm }}>LSTM {pctOf(v.lstm)}</span>
-                <span style={{ color: FORECAST_COLORS.arima }}>ARIMA {pctOf(v.arima)}</span>
-                <span className="muted">95%: {pctOf(v.lower)} … {pctOf(v.upper)}</span>
+                <span style={{ color: FORECAST_COLORS.lstm }}>LSTM {pctOf(v.lstm)} <span className="muted">({pctOf(v.lstm_lower)} … {pctOf(v.lstm_upper)})</span></span>
+                <span style={{ color: FORECAST_COLORS.arima }}>ARIMA {pctOf(v.arima)} <span className="muted">({pctOf(v.lower)} … {pctOf(v.upper)})</span></span>
+
               </span>
             ))}
             <span
               className="help-dot"
               role="img"
-              title="Each holding's stored LSTM and ARIMA forecast, combined with the portfolio weights. The band is ARIMA's 95% interval for the whole portfolio: each stock's interval combined using how the holdings moved together over the past year (correlation), so it is narrower than the stocks' bands added up."
+              title="Each holding's stored LSTM and ARIMA forecast (one point per trading day), combined with the portfolio weights. Each model's 95% band (in brackets) is measured, not assumed: every stock's model made a full forecast from each of its ~500 held-out days, and at each step the band covers 95% of where prices actually landed. The stocks' bands are combined using how the holdings moved together over the past year (correlation), so the portfolio band is narrower than the stocks' bands added up."
               aria-label="How the portfolio forecast is computed"
             >?</span>
           </div>

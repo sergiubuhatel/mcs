@@ -1,22 +1,24 @@
 """Where a portfolio is heading: its holdings' stored LSTM and ARIMA price
-forecasts combined with the portfolio weights, plus a 95% band.
+forecasts combined with the portfolio weights, plus a 95% band per model.
 
 Growth of the portfolio from today, k business days ahead, with fixed
 weights w_i and last closes L_i:
 
     G(k) = sum_i w_i * F_i(k) / L_i          (one path per model)
 
-The band uses ARIMA's per-stock 95% intervals. A stock's interval gives its
-own standard deviation s_i(k) = (upper - lower) / (2 * 1.96) / L_i (as a
-fraction of its price). Stocks don't move independently, so the portfolio's
-standard deviation is sqrt(v' C v) with v_i = w_i * s_i(k) and C the
-correlation of the holdings' daily returns over the past year -- adding the
-stock bands up would overstate the risk, ignoring correlation would
-understate it.
+Each stored forecast carries its own 95% band, measured at every daily step
+from the model's walk-forward backtest errors (`band_low` / `band_high`).
+A stock's band gives how far below / above its forecast it can land, as a
+fraction of its price: d_i(k) = (F_i - low_i) / L_i, u_i(k) = (high_i - F_i) / L_i.
+Stocks don't move independently, so the portfolio's spread on each side is
+sqrt(v' C v) with v_i = w_i * d_i(k) (resp. u_i) and C the correlation of
+the holdings' daily returns over the past year -- adding the stock bands up
+would overstate the risk, ignoring correlation would understate it.
 
-A holding without a stored forecast is assumed flat (F = L) and gets a band
-from its own past-year volatility, s_i(k) = daily stdev * sqrt(k); it is
-listed in `missing` so the page can say so.
+Older forecasts without a measured band fall back to ARIMA's model interval
+(`lower_95` / `upper_95`); a holding without any band, or without a forecast
+at all (assumed flat, F = L, and listed in `missing`), uses its own
+past-year volatility, 1.96 * daily stdev * sqrt(k).
 """
 
 import numpy as np
@@ -34,9 +36,16 @@ def _forecasts(collection: str, tickers: list[str]) -> dict[str, dict]:
     return {d["_key"]: d for d in docs if d.get("forecast") and d.get("last_actual_close")}
 
 
+def _fit_steps(values: list[float], steps: int) -> np.ndarray:
+    values = list(values[:steps])
+    values += [values[-1]] * (steps - len(values))  # hold the last value if shorter
+    return np.array(values, dtype=float)
+
+
 def portfolio_forecast(holdings: list[dict]) -> dict | None:
-    """{dates, lstm, arima, lower, upper (growth factors, 1 = today), steps,
-    horizons {1M: {lstm, arima, lower, upper}}, missing {lstm, arima},
+    """{dates, steps, lstm, arima, lstm_lower, lstm_upper, arima_lower,
+    arima_upper (growth factors, 1 = today; lower/upper = arima band, kept
+    for older pages), horizons {1M: {...}}, band_source, missing {lstm, arima},
     data_end}; None when no holding has any forecast."""
     tickers = [h["ticker"] for h in holdings]
     weights = np.array([h["weight"] for h in holdings], dtype=float)
@@ -50,54 +59,67 @@ def portfolio_forecast(holdings: list[dict]) -> dict | None:
     dates = [p["date"] for p in reference["forecast"]]
     steps = len(dates)
 
-    def growth_paths(forecasts: dict[str, dict]) -> np.ndarray:
-        """steps x n growth factors F_i(k) / L_i; flat (1.0) when missing."""
-        out = np.ones((steps, len(tickers)))
+    returns = _returns_matrix(tickers, lookback_days=CORRELATION_DAYS).reindex(columns=tickers)
+    daily_sd = returns.std().fillna(0.0).to_numpy(copy=True)
+    corr = returns.corr().fillna(0.0).to_numpy(copy=True)
+    np.fill_diagonal(corr, 1.0)
+    k = np.arange(1, steps + 1)[:, None]
+    vol_spread = Z95 * daily_sd[None, :] * np.sqrt(k)  # fallback, fraction of price
+
+    def model_paths(forecasts: dict[str, dict], fallback_keys: tuple[str, str] | None):
+        """Portfolio growth path and its band for one model, plus which
+        source each holding's band came from."""
+        growth = np.ones((steps, len(tickers)))
+        down, up = vol_spread.copy(), vol_spread.copy()
+        sources = {}
         for j, t in enumerate(tickers):
             doc = forecasts.get(t)
             if not doc:
+                sources[t] = "volatility"
                 continue
-            closes = [p["predicted_close"] for p in doc["forecast"]][:steps]
-            closes += [closes[-1]] * (steps - len(closes))  # hold the last value if shorter
-            out[:, j] = np.array(closes, dtype=float) / float(doc["last_actual_close"])
-        return out
+            last = float(doc["last_actual_close"])
+            points = doc["forecast"]
+            mid = _fit_steps([p["predicted_close"] for p in points], steps)
+            growth[:, j] = mid / last
+            for lo_key, hi_key, source in (("band_low", "band_high", "backtest"), (*(fallback_keys or ("", "")), "model")):
+                if lo_key and all(p.get(lo_key) is not None for p in points):
+                    down[:, j] = (mid - _fit_steps([p[lo_key] for p in points], steps)) / last
+                    up[:, j] = (_fit_steps([p[hi_key] for p in points], steps) - mid) / last
+                    sources[t] = source
+                    break
+            else:
+                sources[t] = "volatility"
+        path = growth @ weights
 
-    lstm_growth = growth_paths(lstm) @ weights
-    arima_growth = growth_paths(arima) @ weights
+        def spread(s):
+            v = np.maximum(s, 0.0) * weights[None, :]
+            return np.sqrt(np.maximum(np.einsum("ki,ij,kj->k", v, corr, v), 0.0))
 
-    # Per-stock standard deviation (fraction of price) at each step.
-    returns = _returns_matrix(tickers, lookback_days=CORRELATION_DAYS).reindex(columns=tickers)
-    daily_sd = returns.std().fillna(0.0).to_numpy(copy=True)
-    k = np.arange(1, steps + 1)[:, None]
-    sd = daily_sd[None, :] * np.sqrt(k)  # fallback: past-year volatility
-    for j, t in enumerate(tickers):
-        doc = arima.get(t)
-        if not doc:
-            continue
-        half = [((p.get("upper_95") or 0) - (p.get("lower_95") or 0)) / 2 for p in doc["forecast"]][:steps]
-        half += [half[-1]] * (steps - len(half))
-        sd[:, j] = np.array(half, dtype=float) / Z95 / float(doc["last_actual_close"])
+        return path, path - spread(down), path + spread(up), sources
 
-    corr = returns.corr().fillna(0.0).to_numpy(copy=True)
-    np.fill_diagonal(corr, 1.0)
-    v = sd * weights[None, :]
-    portfolio_sd = np.sqrt(np.maximum(np.einsum("ki,ij,kj->k", v, corr, v), 0.0))
-    lower, upper = arima_growth - Z95 * portfolio_sd, arima_growth + Z95 * portfolio_sd
+    lstm_path, lstm_lo, lstm_hi, lstm_src = model_paths(lstm, None)
+    arima_path, arima_lo, arima_hi, arima_src = model_paths(arima, ("lower_95", "upper_95"))
 
     r = lambda a: [round(float(x), 6) for x in a]  # noqa: E731
     horizons = {
-        name: {"lstm": float(lstm_growth[d - 1]), "arima": float(arima_growth[d - 1]),
-               "lower": float(lower[d - 1]), "upper": float(upper[d - 1]), "date": dates[d - 1]}
+        name: {
+            "lstm": float(lstm_path[d - 1]), "lstm_lower": float(lstm_lo[d - 1]), "lstm_upper": float(lstm_hi[d - 1]),
+            "arima": float(arima_path[d - 1]), "lower": float(arima_lo[d - 1]), "upper": float(arima_hi[d - 1]),
+            "date": dates[d - 1],
+        }
         for name, d in HORIZONS.items() if d <= steps
     }
     return {
         "dates": dates,
-        "lstm": r(lstm_growth),
-        "arima": r(arima_growth),
-        "lower": r(lower),
-        "upper": r(upper),
         "steps": steps,
+        "lstm": r(lstm_path),
+        "lstm_lower": r(lstm_lo),
+        "lstm_upper": r(lstm_hi),
+        "arima": r(arima_path),
+        "lower": r(arima_lo),
+        "upper": r(arima_hi),
         "horizons": horizons,
+        "band_source": {"lstm": lstm_src, "arima": arima_src},
         "missing": {"lstm": [t for t in tickers if t not in lstm], "arima": [t for t in tickers if t not in arima]},
         "data_end": reference.get("data_end"),
     }

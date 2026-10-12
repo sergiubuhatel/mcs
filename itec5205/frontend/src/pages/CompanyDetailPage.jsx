@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { apiClient } from "../api/client";
-import ForecastChart from "../components/ForecastChart";
+import ForecastChart, { forecastFromDocs } from "../components/ForecastChart";
 import ForecastPanels from "../features/predictions/ForecastPanels";
 import { INTERVALS, filterByInterval } from "../utils/dateRanges";
 import BackButton from "../layout/BackButton";
@@ -59,26 +59,12 @@ export default function CompanyDetailPage() {
       .get(`/api/companies/${ticker}`)
       .then((res) => setDetail(res.data))
       .catch((err) => setError(err.response?.data?.error || err.message));
-    // Stored LSTM / ARIMA forecasts, drawn after the history with ARIMA's 95% band.
+    // Stored LSTM / ARIMA forecasts, drawn after the history with each model's 95% band.
     setForecast(null);
     const optional = (url) => apiClient.get(url).then((r) => r.data).catch(() => null);
-    Promise.all([optional(`/api/predictions/${ticker}`), optional(`/api/arima/${ticker}`)]).then(([lstm, arima]) => {
-      const ref = arima?.forecast?.length ? arima : lstm;
-      if (!ref?.forecast?.length) return;
-      const byDate = (doc, key) => Object.fromEntries((doc?.forecast || []).map((p) => [p.date, p[key]]));
-      const l = byDate(lstm, "predicted_close");
-      const a = byDate(arima, "predicted_close");
-      const lo = byDate(arima, "lower_95");
-      const hi = byDate(arima, "upper_95");
-      const dates = ref.forecast.map((p) => p.date);
-      setForecast({
-        dates,
-        lstm: lstm ? dates.map((d) => l[d]) : null,
-        arima: arima ? dates.map((d) => a[d]) : null,
-        lower: arima ? dates.map((d) => lo[d]) : null,
-        upper: arima ? dates.map((d) => hi[d]) : null,
-      });
-    });
+    Promise.all([optional(`/api/predictions/${ticker}`), optional(`/api/arima/${ticker}`)]).then(([lstm, arima]) =>
+      setForecast(forecastFromDocs(lstm, arima))
+    );
   }, [ticker]);
 
 
@@ -177,7 +163,7 @@ export default function CompanyDetailPage() {
             />
             {forecast && showForecast && (
               <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.8rem" }}>
-                Dashed: stored LSTM and ARIMA forecasts; shaded: ARIMA&apos;s 95% interval. Retrain them below.
+                Dashed: stored LSTM and ARIMA forecasts, one point per trading day. Shaded: each model&apos;s 95% band, measured at every step from where prices actually landed in its backtest (a full forecast from each held-out day). Retrain them below.
               </p>
             )}
           </div>

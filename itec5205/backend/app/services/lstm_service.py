@@ -17,7 +17,7 @@ from torch import nn
 
 from ..config import RL_MODELS_DIR
 from ..db.arango_client import get_db
-from .horizons import MAX_HORIZON_DAYS, horizon_points
+from .horizons import MAX_HORIZON_DAYS, backtest_band, horizon_points
 
 MIN_HISTORY_DAYS = 120
 # Shared by the LSTM and ARIMA forecasters so both learn from the same window
@@ -183,17 +183,34 @@ def train_and_predict(
     else:
         rmse = mae = None
 
-    # Recursive multi-step forecast: each predicted close is appended to the
-    # price window and the window is re-normalized to its new last close.
-    window = list(closes64[-seq_len:])
-    forecast_prices = []
-    with torch.no_grad():
-        for _ in range(forecast_days):
-            w = np.array(window[-seq_len:])
-            x = torch.tensor(((w / w[-1] - 1.0) * RETURN_SCALE).astype(np.float32)).view(1, seq_len, 1)
-            next_price = float(_to_price(float(model(x).item()), w[-1]))
-            forecast_prices.append(next_price)
-            window.append(next_price)
+    def _recursive(windows: np.ndarray) -> np.ndarray:
+        """Recursive multi-step forecast for a batch of price windows (B x
+        seq_len): each predicted close is appended to its window and the
+        window is re-normalized to its new last close. Returns B x forecast_days."""
+        out = np.empty((len(windows), forecast_days))
+        w = windows.copy()
+        with torch.no_grad():
+            for k in range(forecast_days):
+                x = torch.tensor(((w / w[:, -1:] - 1.0) * RETURN_SCALE).astype(np.float32)).unsqueeze(-1)
+                nxt = _to_price(model(x).squeeze(-1).numpy().astype(np.float64), w[:, -1])
+                out[:, k] = nxt
+                w = np.concatenate([w[:, 1:], nxt[:, None]], axis=1)
+        return out
+
+    forecast_prices = _recursive(closes64[-seq_len:][None, :])[0].tolist()
+
+    # Multi-step backtest for the band: from every held-out day t, the full
+    # forecast_days-ahead forecast from the seq_len closes before it.
+    first = split_index(len(closes64))
+    origins = np.arange(first, len(closes64))
+    band_lower = band_upper = band_info = None
+    if len(origins):
+        predicted = _recursive(np.stack([closes64[t - seq_len : t] for t in origins]))
+        actual = np.full_like(predicted, np.nan)
+        for b, t in enumerate(origins):
+            seen = closes64[t : t + forecast_days]
+            actual[b, : len(seen)] = seen
+        band_lower, band_upper, band_info = backtest_band(predicted, actual, forecast_prices)
 
     last_date = datetime.strptime(dates[-1], "%Y-%m-%d")
     forecast_dates = []
@@ -215,10 +232,12 @@ def train_and_predict(
     last_actual_close = float(closes[-1])
     forecast = []
     previous_close = last_actual_close
-    for d, p in zip(forecast_dates, forecast_prices):
+    for i, (d, p) in enumerate(zip(forecast_dates, forecast_prices)):
         forecast.append({
             "date": d,
             "predicted_close": round(p, 2),
+            # 95% band measured from the backtest errors at this step.
+            **({"band_low": round(band_lower[i], 2), "band_high": round(band_upper[i], 2)} if band_lower else {}),
             # vs. the last actual close (cumulative move from today) and vs. the prior forecast day.
             "change_pct_from_last_close": round((p - last_actual_close) / last_actual_close * 100, 2),
             "change_pct_from_prior_day": round((p - previous_close) / previous_close * 100, 2),
@@ -243,5 +262,6 @@ def train_and_predict(
         "last_actual_close": round(last_actual_close, 2),
         "forecast": forecast,
         "horizons": horizon_points(forecast, last_actual_close),
+        "band": band_info,
         "model_path": model_path,
     }
