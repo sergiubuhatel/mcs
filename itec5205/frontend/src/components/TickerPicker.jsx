@@ -56,6 +56,17 @@ export default function TickerPicker({ value, onChange, options, disabled, place
     const named = free.filter((c) => !c.ticker.startsWith(q) && c.name.toUpperCase().includes(q));
     return [...starts, ...named].slice(0, MAX_SUGGESTIONS);
   }, [pool, value, q, options]);
+  // Chosen companies the text matches, to explain an empty suggestion list.
+  const alreadyChosen = q
+    ? pool.filter((c) => value.includes(c.ticker) && (c.ticker.startsWith(q) || c.name.toUpperCase().includes(q)))
+    : [];
+  const label = (c) => (c.name ? `${c.ticker} (${c.name})` : c.ticker);
+  const notFound = () =>
+    alreadyChosen.length
+      ? `${alreadyChosen.map(label).join(", ")} ${alreadyChosen.length === 1 ? "is" : "are"} already in the list.`
+      : allowed
+      ? `No company in this pool matches "${query.trim()}".`
+      : `No S&P 500 company matches "${query.trim()}".`;
 
   const add = (ticker) => {
     if (!value.includes(ticker)) onChange([...value, ticker]);
@@ -70,11 +81,10 @@ export default function TickerPicker({ value, onChange, options, disabled, place
   const submit = () => {
     if (!q) return;
     if (open && suggestions[active]) return add(suggestions[active].ticker);
-    if (value.includes(q)) return setMessage(`${q} is already in the list.`);
-    if (allowed && !allowed.has(q)) {
-      return setMessage(byTicker[q] ? `${q} (${byTicker[q].name}) isn't in this pool.` : `No company in this pool matches "${query.trim()}".`);
-    }
-    if (!allowed && !byTicker[q]) return setMessage(`No S&P 500 company matches "${query.trim()}".`);
+    setOpen(false); // the reason shows under the field instead
+    if (value.includes(q)) return setMessage(`${label(byTicker[q] || { ticker: q })} is already in the list.`);
+    if (allowed && !allowed.has(q) && byTicker[q]) return setMessage(`${label(byTicker[q])} isn't in this pool.`);
+    if (allowed ? !allowed.has(q) : !byTicker[q]) return setMessage(notFound());
     add(q);
   };
 
@@ -147,11 +157,7 @@ export default function TickerPicker({ value, onChange, options, disabled, place
               <span>{c.name}</span>
             </li>
           ))}
-          {noMatch && (
-            <li className="empty">
-              {allowed ? `No company in this pool matches "${query.trim()}"` : `No S&P 500 company matches "${query.trim()}"`}
-            </li>
-          )}
+          {noMatch && <li className="empty">{notFound()}</li>}
         </ul>
       )}
       {message && <p className="error-text" style={{ margin: "4px 0 0" }}>{message}</p>}
