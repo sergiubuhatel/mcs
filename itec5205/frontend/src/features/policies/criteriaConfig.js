@@ -66,6 +66,7 @@ export function criteriaDefaults() {
       min_companies: p.min_companies,
       max_companies: p.max_companies,
       required_tickers: [],
+      excluded_tickers: [],
     },
   };
 }
@@ -108,6 +109,8 @@ export function autoCriteriaName(kind, c) {
   if (c.mode === "subset") parts.push("steady trend");
   const required = tickerList(c.required_tickers);
   if (required.length) parts.push(`must hold ${required.join(", ")}`);
+  const excluded = tickerList(c.excluded_tickers);
+  if (excluded.length) parts.push(`without ${excluded.join(", ")}`);
   return parts.length ? parts.join(", ") : "Whole pool, no limits";
 }
 
@@ -154,6 +157,8 @@ export function describeCriteria(kind, c) {
   if (min !== "" || max !== "") parts.push(`${min === "" ? "auto" : min}–${max === "" ? "auto" : max} companies`);
   const required = tickerList(c.required_tickers);
   if (required.length) parts.push(`mandatory ${required.join(", ")}`);
+  const excluded = tickerList(c.excluded_tickers);
+  if (excluded.length) parts.push(`excluded ${excluded.join(", ")}`);
   parts.push(`${Number(c.timesteps).toLocaleString()} steps`);
   return parts.join(", ");
 }

@@ -29,15 +29,22 @@ def train_rl_portfolio(
     pool_id: str | None = None,
     max_weight_range: float | None = None,
     required_tickers: list[str] | None = None,
+    excluded_tickers: list[str] | None = None,
 ):
     """The optimizer decides how many companies to keep, within the optional
     [min_companies, max_companies] bounds (see `rl_service.select_universe`). `max_volatility` / `min_return`
     are annualized fractions (0.25 = 25%); `max_weight_range` caps
     max(weight) - min(weight) across the holdings (0.10 = 10 points).
     `required_tickers` must end up in the portfolio -- those that are in the
-    input universe; the rest are ignored and reported."""
+    input universe; the rest are ignored and reported. `excluded_tickers`
+    are taken out of the universe before anything else, so they never are."""
     room = self.request.id
     requested = universe or default_universe()
+    banned = {t.upper() for t in excluded_tickers or []}
+    user_excluded = [t for t in requested if t in banned]
+    requested = [t for t in requested if t not in banned]
+    if len(requested) < 2:
+        raise ValueError(f"Only {len(requested)} companies left after the excluded stocks -- need at least 2")
     mandatory = [t.upper() for t in dict.fromkeys(required_tickers or [])]
     required = [t for t in mandatory if t in set(requested)]
 
@@ -94,6 +101,8 @@ def train_rl_portfolio(
             notes += ", mandatory: " + ", ".join(mandatory_report["included"])
         if mandatory_report["not_in_input"]:
             notes += ", mandatory but not in the input (ignored): " + ", ".join(mandatory_report["not_in_input"])
+    if user_excluded:
+        notes += ", excluded: " + ", ".join(user_excluded)
     if excluded:
         notes += ", left out for too little price history: " + ", ".join(
             f"{row['ticker']} ({row['days']} days)" for row in excluded
@@ -126,6 +135,7 @@ def train_rl_portfolio(
             "constraints": constraints,
             "excluded": excluded,
             "mandatory": mandatory_report,
+            "user_excluded": user_excluded,
             "pool_id": pool_id,
         }
     )
@@ -140,6 +150,7 @@ def train_rl_portfolio(
         "constraints": constraints,
         "excluded": excluded,
         "mandatory": mandatory_report,
+        "user_excluded": user_excluded,
         "min_companies": min_companies,
     }
     socketio.emit("rl_progress", {"stage": "done", **summary}, room=room)

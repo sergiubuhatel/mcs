@@ -30,6 +30,10 @@ const PREVIEW_TICKERS = 5;
 const ellipsis = { display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const fmtDate = (iso) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 
+// " mandatory" / " excluded" / "" -- the chip style of a pool company.
+const chipState = (p, t) =>
+  (p.required_tickers || []).includes(t) ? " mandatory" : (p.excluded_tickers || []).includes(t) ? " excluded" : "";
+
 const POOL_COLUMNS = [
   {
     key: "name",
@@ -49,7 +53,7 @@ const POOL_COLUMNS = [
     render: (p) => (
       <span title={p.tickers.join(", ")} style={{ display: "flex", gap: 4, overflow: "hidden", whiteSpace: "nowrap" }}>
         {p.tickers.slice(0, PREVIEW_TICKERS).map((t) => (
-          <span key={t} className={`ticker-chip${(p.required_tickers || []).includes(t) ? " mandatory" : ""}`}>{t}</span>
+          <span key={t} className={`ticker-chip${chipState(p, t)}`}>{t}</span>
         ))}
         {p.tickers.length > PREVIEW_TICKERS && <span className="ticker-chip">+{p.tickers.length - PREVIEW_TICKERS}</span>}
       </span>
@@ -64,6 +68,20 @@ const POOL_COLUMNS = [
       const req = p.required_tickers || [];
       return req.length ? (
         <span className="count-badge" title={`Always in the generated portfolio: ${req.join(", ")}`}>{req.length}</span>
+      ) : (
+        <span className="muted">–</span>
+      );
+    },
+  },
+  {
+    key: "excluded",
+    label: "Excluded",
+    width: 100,
+    sortable: true,
+    render: (p) => {
+      const out = p.excluded_tickers || [];
+      return out.length ? (
+        <span className="count-badge red" title={`Never in the generated portfolio: ${out.join(", ")}`}>{out.length}</span>
       ) : (
         <span className="muted">–</span>
       );
@@ -103,7 +121,7 @@ const ABOUT = {
 const TIPS = [
   { title: "Create focused pools", text: "Screen first (e.g. growth, low P/E); RL and forecasts run on every company in the pool." },
   { title: "Forecast, then train RL", text: "Run Forecast all on the signal board so the RL builder can use only Strong signals." },
-  { title: "Mandatory stocks", text: "Mark companies in the RL builder that must be in the portfolio; refining by signal keeps them." },
+  { title: "Mandatory / excluded", text: "Mark companies that must, or must never, be in the portfolio (Edit pool or the RL builder)." },
   { title: "Compare iterations", text: "Refine, retrain, and check the refinement history for the best portfolio." },
 ];
 
@@ -131,7 +149,8 @@ export default function PoolsPage() {
   }, [items, query]);
   const { sorted, sort, toggle } = useSort(
     filtered,
-    { name: (p) => p.name, size: (p) => p.tickers.length, mandatory: (p) => (p.required_tickers || []).length, created_at: (p) => p.created_at, iteration: (p) => p.iteration || 0 },
+    { name: (p) => p.name, size: (p) => p.tickers.length, mandatory: (p) => (p.required_tickers || []).length,
+      excluded: (p) => (p.excluded_tickers || []).length, created_at: (p) => p.created_at, iteration: (p) => p.iteration || 0 },
     { key: "created_at", dir: "desc" }
   );
   const pager = usePager(sorted, Number(getSettings().general.list_page_size));
@@ -152,7 +171,7 @@ export default function PoolsPage() {
   };
 
   const duplicatePool = (p) => {
-    dispatch(createRequested({ name: `${p.name} (copy)`, tickers: p.tickers, filters: p.filters, required_tickers: p.required_tickers }));
+    dispatch(createRequested({ name: `${p.name} (copy)`, tickers: p.tickers, filters: p.filters, required_tickers: p.required_tickers, excluded_tickers: p.excluded_tickers }));
   };
 
   const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("poolsGrid", POOL_COLUMNS);
@@ -166,7 +185,7 @@ export default function PoolsPage() {
     { icon: WorkflowIcon, color: "#f59e0b", label: "Refined pools", value: refined, sub: "iteration 1 or later" },
     { icon: BarChartIcon, color: "#3b82f6", label: "Largest pool", value: largest ? largest.tickers.length : "–", sub: largest ? `tickers · ${largest.name}` : "–", title: largest?.name },
   ];
-  const leftAligned = (key) => !["created_at", "iteration", "size", "mandatory"].includes(key);
+  const leftAligned = (key) => !["created_at", "iteration", "size", "mandatory", "excluded"].includes(key);
 
   return (
     <div>

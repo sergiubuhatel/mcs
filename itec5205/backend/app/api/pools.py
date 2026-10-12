@@ -29,7 +29,13 @@ def create():
     if not name or not tickers:
         return jsonify({"error": "'name' and 'tickers' are required"}), 400
     try:
-        pool = create_pool(name=name, tickers=tickers, filters=body.get("filters"), required_tickers=body.get("required_tickers"))
+        pool = create_pool(
+            name=name,
+            tickers=tickers,
+            filters=body.get("filters"),
+            required_tickers=body.get("required_tickers"),
+            excluded_tickers=body.get("excluded_tickers"),
+        )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify(pool), 201
@@ -41,10 +47,11 @@ def update(pool_id: str):
     name = body.get("name")
     tickers = body.get("tickers")
     required = body.get("required_tickers")
-    if name is None and tickers is None and required is None:
-        return jsonify({"error": "Nothing to update -- pass 'name', 'tickers' and/or 'required_tickers'"}), 400
+    excluded = body.get("excluded_tickers")
+    if name is None and tickers is None and required is None and excluded is None:
+        return jsonify({"error": "Nothing to update -- pass 'name', 'tickers', 'required_tickers' and/or 'excluded_tickers'"}), 400
     try:
-        pool = update_pool(pool_id, name=name, tickers=tickers, required_tickers=required)
+        pool = update_pool(pool_id, name=name, tickers=tickers, required_tickers=required, excluded_tickers=excluded)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     if pool is None:

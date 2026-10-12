@@ -149,6 +149,10 @@ def _normalize_portfolio(body: dict) -> dict:
     if min_c is not None and max_c is not None and min_c > max_c:
         raise ValueError("Min companies can't be greater than max companies")
     risk_aversion = _num(body.get("risk_aversion"), float, 0, field="risk aversion")
+    required, excluded = _tickers(body.get("required_tickers")), _tickers(body.get("excluded_tickers"))
+    both = [t for t in required if t in set(excluded)]
+    if both:
+        raise ValueError(f"{', '.join(both)} can't be both mandatory and excluded")
     return {
         "mode": mode,
         "trend_window_days": _num(body.get("trend_window_days"), int, 21, field="trend window") or 252,
@@ -162,7 +166,9 @@ def _normalize_portfolio(body: dict) -> dict:
         "max_companies": max_c,
         # Must be in the portfolio -- when they reach this step (a company
         # dropped by the screen or the forecast filter is ignored).
-        "required_tickers": _tickers(body.get("required_tickers")),
+        "required_tickers": required,
+        # Never in the portfolio, even when they pass every earlier step.
+        "excluded_tickers": excluded,
     }
 
 

@@ -252,6 +252,7 @@ def run_policy(self, run_id: str):
             min_return=pct(port_c["min_return_pct"]),
             max_weight_range=pct(port_c.get("max_weight_range_pct")),
             required_tickers=port_c.get("required_tickers") or [],
+            excluded_tickers=port_c.get("excluded_tickers") or [],
             pool_id=pool["_key"],
         )
         children.append(rl.id)
@@ -275,7 +276,7 @@ def run_policy(self, run_id: str):
             "portfolio", 1, f"Portfolio created with {len(result['holdings'])} companies",
             status="done", portfolio_id=result["portfolio_id"], metrics=result["metrics"],
             constraints=result.get("constraints"), holdings=len(result["holdings"]),
-            mandatory=result.get("mandatory"),
+            mandatory=result.get("mandatory"), user_excluded=result.get("user_excluded"),
         )
         finish(save, started, "succeeded", portfolio_id=result["portfolio_id"], percent=100,
                message=f"Done -- portfolio with {len(result['holdings'])} companies")

@@ -10,27 +10,44 @@ from datetime import datetime, timezone
 from ..db.arango_client import get_db
 
 
+def _members_only(wanted, members) -> list[str]:
+    """`wanted` tickers, upper-cased and de-duplicated, kept to `members`."""
+    members = set(members)
+    return [t for t in dict.fromkeys(t.upper() for t in wanted or []) if t in members]
+
+
+def _check_overlap(required: list[str], excluded: list[str]) -> None:
+    both = sorted(set(required) & set(excluded))
+    if both:
+        raise ValueError(f"{', '.join(both)} can't be both mandatory and excluded")
+
+
 def create_pool(
     name: str,
     tickers: list[str],
     filters: dict | None = None,
     lineage: dict | None = None,
     required_tickers: list[str] | None = None,
+    excluded_tickers: list[str] | None = None,
 ) -> dict:
     """`filters` holds the screener search the pool came from (sector/industry/
     q/ranges, in API units) so the fundamentals check can be re-run later.
     `lineage` is set only for refined pools (see `refine_pool`).
-    `required_tickers`: pool companies that must be in its RL portfolio."""
+    `required_tickers` / `excluded_tickers`: pool companies that must / must
+    never be in its RL portfolio."""
     if not tickers:
         raise ValueError("A pool needs at least one ticker")
     db = get_db()
     key = str(uuid.uuid4())
     members = [t.upper() for t in tickers]
+    required, excluded = _members_only(required_tickers, members), _members_only(excluded_tickers, members)
+    _check_overlap(required, excluded)
     doc = {
         "_key": key,
         "name": name,
         "tickers": members,
-        "required_tickers": [t for t in dict.fromkeys(t.upper() for t in required_tickers or []) if t in set(members)],
+        "required_tickers": required,
+        "excluded_tickers": excluded,
         "filters": filters or {},
         "created_at": datetime.now(timezone.utc).isoformat(),
         # Refinement loop: iteration 0 is a pool saved off the screener;
@@ -56,10 +73,15 @@ def get_pool(pool_id: str) -> dict | None:
 
 
 def update_pool(
-    pool_id: str, name: str | None = None, tickers: list[str] | None = None, required_tickers: list[str] | None = None
+    pool_id: str,
+    name: str | None = None,
+    tickers: list[str] | None = None,
+    required_tickers: list[str] | None = None,
+    excluded_tickers: list[str] | None = None,
 ) -> dict | None:
-    """`required_tickers`: companies that must be in the portfolio RL builds
-    from this pool -- kept to those in the pool (also when `tickers` changes)."""
+    """`required_tickers` / `excluded_tickers`: companies that must / must
+    never be in the portfolio RL builds from this pool -- kept to those in
+    the pool (also when `tickers` changes)."""
     db = get_db()
     col = db.collection("pools")
     if not col.has(pool_id):
@@ -72,11 +94,12 @@ def update_pool(
         patch["name"] = name
     if tickers is not None:
         patch["tickers"] = [t.upper() for t in tickers]
-    if tickers is not None or required_tickers is not None:
+    if tickers is not None or required_tickers is not None or excluded_tickers is not None:
         current = col.get(pool_id)
-        members = set(patch.get("tickers", current["tickers"]))
-        wanted = current.get("required_tickers", []) if required_tickers is None else required_tickers
-        patch["required_tickers"] = [t for t in dict.fromkeys(t.upper() for t in wanted) if t in members]
+        members = patch.get("tickers", current["tickers"])
+        for field, wanted in (("required_tickers", required_tickers), ("excluded_tickers", excluded_tickers)):
+            patch[field] = _members_only(current.get(field, []) if wanted is None else wanted, members)
+        _check_overlap(patch["required_tickers"], patch["excluded_tickers"])
     if patch:
         col.update({"_key": pool_id, **patch})
     return col.get(pool_id)
@@ -100,7 +123,8 @@ def refine_pool(pool_id: str, drop: list[str], reason: dict | None = None, name:
         raise LookupError("Pool not found")
     drop_set = {t.upper() for t in drop}
     kept = [t for t in parent["tickers"] if t not in drop_set]
-    required = [t for t in parent.get("required_tickers", []) if t in set(kept)]
+    required = _members_only(parent.get("required_tickers"), kept)
+    excluded = _members_only(parent.get("excluded_tickers"), kept)
     if len(kept) < 2:
         raise ValueError("Refinement would leave fewer than 2 tickers")
     iteration = parent.get("iteration", 0) + 1
@@ -117,6 +141,7 @@ def refine_pool(pool_id: str, drop: list[str], reason: dict | None = None, name:
             "dropped": sorted(drop_set & set(parent["tickers"])),
             "refine_reason": reason or {},
             "required_tickers": required,
+            "excluded_tickers": excluded,
         },
     )
 

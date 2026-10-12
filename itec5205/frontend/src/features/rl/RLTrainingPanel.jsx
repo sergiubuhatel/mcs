@@ -4,7 +4,8 @@ import { useDispatch, useSelector } from "react-redux";
 import { trainRequested, reset } from "./rlSlice";
 import { updateRequested as updatePoolRequested } from "../pools/poolsSlice";
 import { fetchRequested as fetchPortfoliosRequested } from "../portfolios/portfoliosSlice";
-import { CheckIcon, PieChartIcon } from "../../layout/icons";
+import { PieChartIcon } from "../../layout/icons";
+import TickerToggleChips from "../pools/TickerToggleChips";
 import Req from "../../components/Req";
 import { getSettings } from "../settings/settings";
 
@@ -68,10 +69,11 @@ export default function RLTrainingPanel({ pool }) {
     );
   };
 
-  // Mandatory companies are saved on the pool, so they apply to every run from it.
+  // Mandatory / excluded companies are saved on the pool, so they apply to every run from it.
   const mandatory = pool.required_tickers || [];
+  const excluded = pool.excluded_tickers || [];
   const setMandatory = (tickers) => dispatch(updatePoolRequested({ id: pool._key, required_tickers: tickers }));
-  const toggleMandatory = (t) => setMandatory(mandatory.includes(t) ? mandatory.filter((x) => x !== t) : [...mandatory, t]);
+  const setExcluded = (tickers) => dispatch(updatePoolRequested({ id: pool._key, excluded_tickers: tickers }));
   const tooManyMandatory = maxCompanies !== "" && mandatory.length > Number(maxCompanies);
 
   const countBoundsInvalid = minCompanies !== "" && maxCompanies !== "" && Number(minCompanies) > Number(maxCompanies);
@@ -185,38 +187,29 @@ export default function RLTrainingPanel({ pool }) {
           </div>
         )}
       </div>
-      <div style={{ margin: "10px 0 4px" }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          Mandatory stocks{mandatory.length > 0 && <span className="count-badge">{mandatory.length}</span>}
-          {mandatory.length > 0 && (
-            <a onClick={() => !training && setMandatory([])} style={{ cursor: "pointer", fontSize: "0.8rem", fontWeight: 400 }}>
-              Clear
-            </a>
-          )}
-        </label>
-        <p className="muted" style={{ margin: "2px 0 6px" }}>
-          Click a company to make it mandatory: it is always part of the generated portfolio (also when it isn't Strong or
-          trending up). Saved with the pool.
-        </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-          {pool.tickers.map((t) => {
-              const on = mandatory.includes(t);
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  className={`ticker-chip${on ? " mandatory" : ""}`}
-                  onClick={() => toggleMandatory(t)}
-                  disabled={training}
-                  aria-pressed={on}
-                  title={on ? `${t} is mandatory — click to make it optional` : `Make ${t} mandatory`}
-                >
-                  {on && <CheckIcon />}
-                  {t}
-                </button>
-              );
-            })}
-        </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, margin: "10px 0 4px" }}>
+        <TickerToggleChips
+          label="Mandatory stocks"
+          help="Click a company to make it mandatory: it is always part of the generated portfolio (also when it isn't Strong or trending up). Saved with the pool."
+          tickers={pool.tickers}
+          value={mandatory}
+          onChange={setMandatory}
+          variant="mandatory"
+          blocked={excluded}
+          blockedLabel="is excluded — undo that first"
+          disabled={training}
+        />
+        <TickerToggleChips
+          label="Excluded stocks"
+          help="Click a company to exclude it: it is never part of the generated portfolio. Saved with the pool."
+          tickers={pool.tickers}
+          value={excluded}
+          onChange={setExcluded}
+          variant="excluded"
+          blocked={mandatory}
+          blockedLabel="is mandatory — undo that first"
+          disabled={training}
+        />
       </div>
       {tooManyMandatory && (
         <p className="error-text" style={{ margin: "4px 0" }}>
@@ -302,6 +295,9 @@ export default function RLTrainingPanel({ pool }) {
                 result.holdings?.length < result.min_companies &&
                 `. Only ${result.holdings.length} companies could be used — fewer than the minimum of ${result.min_companies}.`}
             </p>
+          )}
+          {result.user_excluded?.length > 0 && (
+            <p className="muted">Excluded as requested: {result.user_excluded.join(", ")}.</p>
           )}
           {result.mandatory && (
             <p className={result.mandatory.not_in_input.length || result.mandatory.left_out.length ? "error-text" : "muted"}>

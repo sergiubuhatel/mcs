@@ -222,7 +222,10 @@ th.sorted .sort-arrow { opacity: 1; }
 button.ticker-chip { cursor: pointer; font-family: inherit; line-height: 1.5; display: inline-flex; align-items: center; }
 .ticker-chip.mandatory { background: rgba(217, 119, 6, 0.14); border-color: #d97706; color: #b45309; font-weight: 700; }
 .dark .ticker-chip.mandatory { color: #fbbf24; }
-.ticker-chip.mandatory svg { width: 11px; height: 11px; margin-right: 3px; flex-shrink: 0; }
+.ticker-chip.mandatory svg, .ticker-chip.excluded svg { width: 11px; height: 11px; margin-right: 3px; flex-shrink: 0; }
+.ticker-chip.excluded { background: rgba(220, 38, 38, 0.12); border-color: #dc2626; color: #b91c1c; font-weight: 700; }
+.dark .ticker-chip.excluded { color: #f87171; }
+button.ticker-chip:disabled { cursor: not-allowed; opacity: 0.45; }
 .ticker-picker { position: relative; }
 .ticker-picker-box { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 6px; min-height: 38px; border: 1px solid var(--color-divider); border-radius: 6px; background: var(--color-bg-primary); }
 .ticker-picker-box:focus-within { border-color: var(--btn-accent); }
@@ -241,6 +244,8 @@ button.ticker-chip { cursor: pointer; font-family: inherit; line-height: 1.5; di
 .dark .count-badge { color: #93c5fd; }
 .count-badge.green { background: rgba(22, 163, 74, 0.14); color: #15803d; }
 .dark .count-badge.green { color: #4ade80; }
+.count-badge.red { background: rgba(220, 38, 38, 0.12); color: #b91c1c; }
+.dark .count-badge.red { color: #f87171; }
 .count-badge.grey { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
 tr.selected td { background: rgba(37, 99, 235, 0.10); }
 .pager { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }

@@ -62,6 +62,19 @@ export default function PortfolioCriteriaForm({ value, onChange }) {
           <TickerPicker
             value={value.required_tickers || []}
             onChange={(required_tickers) => set({ required_tickers })}
+            blocked={value.excluded_tickers || []}
+            blockedReason="is excluded — remove it from Excluded stocks first"
+            placeholder="none — type a ticker or company name, then Enter"
+          />
+        </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <label title="These companies are never part of the portfolio, even when they pass every earlier step">Excluded stocks</label>
+          <TickerPicker
+            value={value.excluded_tickers || []}
+            onChange={(excluded_tickers) => set({ excluded_tickers })}
+            variant="excluded"
+            blocked={value.required_tickers || []}
+            blockedReason="is mandatory — remove it from Mandatory stocks first"
             placeholder="none — type a ticker or company name, then Enter"
           />
         </div>
@@ -84,6 +97,7 @@ export default function PortfolioCriteriaForm({ value, onChange }) {
         them, and its weights are blended toward the optimizer's allocation if they miss a limit. Max weight range caps
         max(weight) − min(weight), e.g. 10 = no two holdings more than 10 percentage points apart. Mandatory stocks are
         always kept in the portfolio when they reach this step; one dropped by the screen or the forecast filter is ignored.
+        Excluded stocks are never in the portfolio.
       </p>
     </div>
   );

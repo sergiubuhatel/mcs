@@ -1,33 +1,36 @@
 import { useEffect, useState } from "react";
 import Modal from "../../components/Modal";
 import Req from "../../components/Req";
-import { CheckIcon, SaveIcon } from "../../layout/icons";
+import { SaveIcon } from "../../layout/icons";
 import { parseTickers } from "../dataImport/ImportControls";
+import TickerToggleChips from "./TickerToggleChips";
 
-/** Edit a candidate pool: name, companies, and the (optional) mandatory
- * companies -- those always kept in the portfolio RL generates from it. */
+/** Edit a candidate pool: name, companies, and the (optional) mandatory and
+ * excluded companies -- always / never in the portfolio RL generates from it. */
 export default function EditPoolModal({ pool, onClose, onSave }) {
   const [name, setName] = useState("");
   const [tickersText, setTickersText] = useState("");
   const [mandatory, setMandatory] = useState([]);
+  const [excluded, setExcluded] = useState([]);
 
   useEffect(() => {
     if (!pool) return;
     setName(pool.name);
     setTickersText(pool.tickers.join(", "));
     setMandatory(pool.required_tickers || []);
+    setExcluded(pool.excluded_tickers || []);
   }, [pool]);
 
   const tickers = parseTickers(tickersText);
-  // A company removed from the pool can't stay mandatory.
+  // A company removed from the pool can't stay mandatory / excluded.
   const kept = mandatory.filter((t) => tickers.includes(t));
-  const toggle = (t) => setMandatory(kept.includes(t) ? kept.filter((x) => x !== t) : [...kept, t]);
+  const keptOut = excluded.filter((t) => tickers.includes(t));
   const invalid = !name.trim() || tickers.length === 0;
 
   const save = (e) => {
     e.preventDefault();
     if (invalid) return;
-    onSave({ id: pool._key, name: name.trim(), tickers, required_tickers: kept });
+    onSave({ id: pool._key, name: name.trim(), tickers, required_tickers: kept, excluded_tickers: keptOut });
   };
 
   return (
@@ -66,38 +69,26 @@ export default function EditPoolModal({ pool, onClose, onSave }) {
               style={{ width: "100%", resize: "vertical" }}
             />
           </div>
-          <div>
-            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              Mandatory stocks{kept.length > 0 && <span className="count-badge">{kept.length}</span>}
-              {kept.length > 0 && (
-                <a onClick={() => setMandatory([])} style={{ cursor: "pointer", fontSize: "0.8rem", fontWeight: 400 }}>
-                  Clear
-                </a>
-              )}
-            </label>
-            <p className="muted" style={{ margin: "2px 0 6px" }}>
-              Click the companies that must be part of the portfolio generated from this pool. None selected = the optimizer
-              and the RL agent decide.
-            </p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {tickers.map((t) => {
-              const on = kept.includes(t);
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  className={`ticker-chip${on ? " mandatory" : ""}`}
-                  onClick={() => toggle(t)}
-                  aria-pressed={on}
-                  title={on ? `${t} is mandatory — click to make it optional` : `Make ${t} mandatory`}
-                >
-                  {on && <CheckIcon />}
-                  {t}
-                </button>
-              );
-            })}
-            </div>
-          </div>
+          <TickerToggleChips
+            label="Mandatory stocks"
+            help="Click the companies that must be part of the portfolio generated from this pool. None selected = the optimizer and the RL agent decide."
+            tickers={tickers}
+            value={kept}
+            onChange={setMandatory}
+            variant="mandatory"
+            blocked={keptOut}
+            blockedLabel="is excluded — undo that first"
+          />
+          <TickerToggleChips
+            label="Excluded stocks"
+            help="Click the companies that must never be part of the portfolio generated from this pool."
+            tickers={tickers}
+            value={keptOut}
+            onChange={setExcluded}
+            variant="excluded"
+            blocked={kept}
+            blockedLabel="is mandatory — undo that first"
+          />
         </form>
       )}
     </Modal>

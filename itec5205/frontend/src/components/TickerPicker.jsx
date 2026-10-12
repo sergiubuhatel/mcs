@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiClient } from "../api/client";
-import { CheckIcon } from "../layout/icons";
+import { CheckIcon, CloseIcon } from "../layout/icons";
 
 const MAX_SUGGESTIONS = 8;
 
@@ -22,8 +22,19 @@ function loadCompanies() {
 /** Pick tickers one at a time: type a ticker or company name, choose a
  * suggestion (or press Enter), and it's added as a chip (click it to remove
  * it) while the field clears for the next one. `options` limits the choice to those tickers
- * (e.g. a pool's companies). */
-export default function TickerPicker({ value, onChange, options, disabled, placeholder = "Type a ticker or company name, then Enter" }) {
+ * (e.g. a pool's companies). `variant` styles the chips ("mandatory" amber with a
+ * check, "excluded" red with a cross); `blocked` tickers can't be picked (they're in the
+ * other list) and `blockedReason` says why. */
+export default function TickerPicker({
+  value,
+  onChange,
+  options,
+  disabled,
+  variant = "mandatory",
+  blocked = [],
+  blockedReason = "is in the other list",
+  placeholder = "Type a ticker or company name, then Enter",
+}) {
   const [companies, setCompanies] = useState([]);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -50,20 +61,23 @@ export default function TickerPicker({ value, onChange, options, disabled, place
 
   const q = query.trim().toUpperCase();
   const suggestions = useMemo(() => {
-    const free = pool.filter((c) => !value.includes(c.ticker));
+    const free = pool.filter((c) => !value.includes(c.ticker) && !blocked.includes(c.ticker));
     if (!q) return options ? free.slice(0, MAX_SUGGESTIONS) : [];
     const starts = free.filter((c) => c.ticker.startsWith(q));
     const named = free.filter((c) => !c.ticker.startsWith(q) && c.name.toUpperCase().includes(q));
     return [...starts, ...named].slice(0, MAX_SUGGESTIONS);
-  }, [pool, value, q, options]);
-  // Chosen companies the text matches, to explain an empty suggestion list.
-  const alreadyChosen = q
-    ? pool.filter((c) => value.includes(c.ticker) && (c.ticker.startsWith(q) || c.name.toUpperCase().includes(q)))
-    : [];
+  }, [pool, value, blocked, q, options]);
+  // Chosen / blocked companies the text matches, to explain an empty suggestion list.
+  const matches = (c) => c.ticker.startsWith(q) || c.name.toUpperCase().includes(q);
+  const alreadyChosen = q ? pool.filter((c) => value.includes(c.ticker) && matches(c)) : [];
+  const blockedHits = q ? pool.filter((c) => blocked.includes(c.ticker) && matches(c)) : [];
   const label = (c) => (c.name ? `${c.ticker} (${c.name})` : c.ticker);
+  const isAre = (list) => (list.length === 1 ? "is" : "are");
   const notFound = () =>
     alreadyChosen.length
-      ? `${alreadyChosen.map(label).join(", ")} ${alreadyChosen.length === 1 ? "is" : "are"} already in the list.`
+      ? `${alreadyChosen.map(label).join(", ")} ${isAre(alreadyChosen)} already in the list.`
+      : blockedHits.length
+      ? `${blockedHits.map(label).join(", ")} ${blockedReason}.`
       : allowed
       ? `No company in this pool matches "${query.trim()}".`
       : `No S&P 500 company matches "${query.trim()}".`;
@@ -83,6 +97,7 @@ export default function TickerPicker({ value, onChange, options, disabled, place
     if (open && suggestions[active]) return add(suggestions[active].ticker);
     setOpen(false); // the reason shows under the field instead
     if (value.includes(q)) return setMessage(`${label(byTicker[q] || { ticker: q })} is already in the list.`);
+    if (blocked.includes(q)) return setMessage(`${label(byTicker[q] || { ticker: q })} ${blockedReason}.`);
     if (allowed && !allowed.has(q) && byTicker[q]) return setMessage(`${label(byTicker[q])} isn't in this pool.`);
     if (allowed ? !allowed.has(q) : !byTicker[q]) return setMessage(notFound());
     add(q);
@@ -115,12 +130,12 @@ export default function TickerPicker({ value, onChange, options, disabled, place
           <button
             key={t}
             type="button"
-            className="ticker-chip mandatory"
+            className={`ticker-chip ${variant}`}
             onClick={() => remove(t)}
             disabled={disabled}
-            title={`${t}${byTicker[t]?.name ? ` — ${byTicker[t].name}` : ""}: mandatory — click to remove`}
+            title={`${t}${byTicker[t]?.name ? ` — ${byTicker[t].name}` : ""}: ${variant} — click to remove`}
           >
-            <CheckIcon />
+            {variant === "excluded" ? <CloseIcon /> : <CheckIcon />}
             {t}
             {byTicker[t]?.name && <span className="chip-name">{byTicker[t].name}</span>}
           </button>

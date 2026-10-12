@@ -29,12 +29,14 @@ def train():
     pool_id = body.get("pool_id")
     mode = body.get("mode", "full")
     required = [t.upper() for t in body.get("required_tickers") or []]
+    excluded = [t.upper() for t in body.get("excluded_tickers") or []]
     if pool_id:
         pool = get_pool(pool_id)
         if pool is None:
             return jsonify({"error": f"Pool '{pool_id}' not found"}), 404
         universe = pool["tickers"]
         required = list(dict.fromkeys(required + pool.get("required_tickers", [])))
+        excluded = list(dict.fromkeys(excluded + pool.get("excluded_tickers", [])))
         if mode == "strong":
             # Only the companies the signal board currently rates Strong; from
             # here on it trains like "full" mode over that narrower universe.
@@ -46,6 +48,9 @@ def train():
                 return jsonify({"error": f"Only {len(universe)} Strong companies in this pool -- need at least 2 (run Forecast all first)"}), 400
     elif mode == "strong":
         return jsonify({"error": "'strong' mode needs a pool_id"}), 400
+    both = sorted(set(required) & set(excluded))
+    if both:
+        return jsonify({"error": f"{', '.join(both)} can't be both mandatory and excluded"}), 400
 
     task = train_rl_portfolio.delay(
         universe=universe,
@@ -61,6 +66,7 @@ def train():
         min_return=_optional(body.get("min_return"), float),
         max_weight_range=_optional(body.get("max_weight_range"), float),
         required_tickers=required,
+        excluded_tickers=excluded,
         pool_id=pool_id,
     )
     return jsonify({"task_id": task.id}), 202
