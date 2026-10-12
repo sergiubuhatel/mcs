@@ -4,13 +4,13 @@ import { CheckIcon, CloseIcon } from "../layout/icons";
 
 const MAX_SUGGESTIONS = 8;
 
-// Every stored company (ticker + name), fetched once per page load.
+// Every stored company (ticker, name, last price in USD), fetched once per page load.
 let companiesPromise = null;
-function loadCompanies() {
+export function loadCompanies() {
   if (!companiesPromise) {
     companiesPromise = apiClient
       .get("/api/companies", { params: { limit: 600, offset: 0, sort_by: "ticker", sort_dir: "asc" } })
-      .then(({ data }) => data.results.map((r) => ({ ticker: r.ticker, name: r.name || "" })))
+      .then(({ data }) => data.results.map((r) => ({ ticker: r.ticker, name: r.name || "", price: r.current_price ?? null })))
       .catch((err) => {
         companiesPromise = null; // retry next time
         throw err;
@@ -33,6 +33,7 @@ export default function TickerPicker({
   variant = "mandatory",
   blocked = [],
   blockedReason = "is in the other list",
+  showChips = true, // false when the caller lists the chosen tickers itself
   placeholder = "Type a ticker or company name, then Enter",
 }) {
   const [companies, setCompanies] = useState([]);
@@ -126,7 +127,7 @@ export default function TickerPicker({
   return (
     <div className="ticker-picker" ref={boxRef}>
       <div className={`ticker-picker-box${disabled ? " disabled" : ""}`}>
-        {value.map((t) => (
+        {showChips && value.map((t) => (
           <button
             key={t}
             type="button"
@@ -143,7 +144,7 @@ export default function TickerPicker({
         <input
           value={query}
           disabled={disabled}
-          placeholder={value.length ? "Add another…" : placeholder}
+          placeholder={value.length && showChips ? "Add another…" : placeholder}
           onChange={(e) => {
             setQuery(e.target.value);
             setOpen(true);

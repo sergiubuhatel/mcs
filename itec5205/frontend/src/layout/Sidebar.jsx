@@ -6,6 +6,7 @@ import CarletonCrest from "./CarletonLogo";
 import {
   BarChartIcon,
   BookmarkPlusIcon,
+  CalculatorIcon,
   CandlestickIcon,
   ClipboardCheckIcon,
   DatabaseIcon,
@@ -72,6 +73,19 @@ const GROUPS = [
         icon: ClipboardCheckIcon,
         hint: "Run Data → Screening → Forecasting → Portfolio automatically and get a portfolio",
         countKey: "runningPolicies",
+      },
+    ],
+  },
+  {
+    title: "Trading",
+    icon: CalculatorIcon,
+    color: "#0ea5e9",
+    items: [
+      {
+        to: "/orders",
+        label: "Order Calculator",
+        icon: CalculatorIcon,
+        hint: "Shares to buy or sell in each account (RRSP, TFSA…) for a target allocation, in CAD",
       },
     ],
   },

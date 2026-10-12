@@ -18,6 +18,7 @@ import PoliciesPage from "./pages/PoliciesPage";
 import CriteriaPage from "./pages/CriteriaPage";
 import DataPage from "./pages/DataPage";
 import SettingsPage from "./pages/SettingsPage";
+import OrderCalculatorPage from "./pages/OrderCalculatorPage";
 import LoadingSpinner from "./components/LoadingSpinner";
 import { loadSettings } from "./features/settings/settings";
 
@@ -59,6 +60,7 @@ export default function App() {
             <Route path="/companies/:ticker" element={<CompanyDetailPage />} />
             <Route path="/portfolios/:id" element={<PortfolioDetailPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/orders" element={<OrderCalculatorPage />} />
             {/* Home is the Stock Screener; unknown URLs go there instead of a blank page. */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -55,6 +55,11 @@ export const DEFAULT_SETTINGS = {
     min_return_pct: "",
     max_weight_range_pct: "",
     weight_range_basis: "smallest", // what the range is measured against: smallest / largest holding, or points
+    // Order Calculator (first open only; afterwards it keeps its saved plan).
+    order_usd_cad: 1.4, // CAD for 1 USD until the live rate arrives
+    order_allow_sell: true,
+    order_spend_leftover: true,
+    order_fractional: false,
     min_companies: "",
     max_companies: "",
   },

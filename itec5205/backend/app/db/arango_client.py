@@ -75,6 +75,8 @@ COLLECTIONS = {
     ],
     # App-wide initial values (Settings page): one document, `_key` "app".
     "settings": [],
+    # Order Calculator plan (targets + accounts): one document, `_key` "default".
+    "order_plans": [],
 }
 
 
