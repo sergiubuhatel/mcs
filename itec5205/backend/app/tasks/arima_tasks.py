@@ -12,6 +12,7 @@ from ..services.arima_service import train_and_predict
 from ..services.lstm_service import DEFAULT_LOOKBACK_DAYS
 from ..services.horizons import MAX_HORIZON_DAYS
 from .celery_app import celery_app
+from .stop_flags import raise_if_stopped
 
 
 @celery_app.task(bind=True, name="train_arima_prediction")
@@ -26,8 +27,10 @@ def train_arima_prediction(
     forecast_days: int = MAX_HORIZON_DAYS,
 ):
     room = self.request.id
+    raise_if_stopped(room)  # cancelled while still queued
 
     def on_step(step, total_steps, tried, aic, best):
+        raise_if_stopped(room)
         progress = {
             "stage": "fitting", "ticker": ticker, "completed": step, "total": total_steps,
             "order": list(tried), "aic": aic if aic is not None and math.isfinite(aic) else None,

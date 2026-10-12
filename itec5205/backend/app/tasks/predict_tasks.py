@@ -8,6 +8,7 @@ from ..extensions import socketio
 from ..services.lstm_service import DEFAULT_LOOKBACK_DAYS, train_and_predict
 from ..services.horizons import MAX_HORIZON_DAYS
 from .celery_app import celery_app
+from .stop_flags import raise_if_stopped
 
 
 @celery_app.task(bind=True, name="train_lstm_prediction")
@@ -21,8 +22,10 @@ def train_lstm_prediction(
     lookback_days: int | None = DEFAULT_LOOKBACK_DAYS,
 ):
     room = self.request.id
+    raise_if_stopped(room)  # cancelled while still queued
 
     def on_epoch(epoch, total_epochs, loss, val_loss):
+        raise_if_stopped(room)
         progress = {
             "stage": "training", "ticker": ticker, "completed": epoch, "total": total_epochs,
             "loss": loss, "val_loss": val_loss,

@@ -22,11 +22,13 @@ from ..services.portfolio_service import get_portfolio
 from ..tasks.arima_tasks import train_arima_prediction
 from ..tasks.celery_app import celery_app
 from ..tasks.predict_tasks import train_lstm_prediction
+from ..tasks.stop_flags import request_stop
 
 bp = Blueprint("forecasts", __name__, url_prefix="/api/forecasts")
 
 MODELS = ("lstm", "arima")
 DONE_STATES = {"SUCCESS", "FAILURE", "REVOKED"}
+STOP_FLAG_TTL = 24 * 60 * 60  # a big run's queued jobs can wait for hours
 
 
 def resolve_tickers(body: dict) -> tuple[list[str] | None, dict, str | None]:
@@ -164,17 +166,25 @@ def latest_batch():
 
 @bp.post("/batch/<run_id>/cancel")
 def cancel_batch(run_id: str):
-    """Stop a run: revoke its unfinished jobs (queued ones are discarded when a
-    worker picks them up) and mark the run finished. Also clears runs whose
-    jobs were lost (e.g. a worker restarted while holding them)."""
+    """Stop a run: stop its unfinished jobs and mark the run finished. Running
+    jobs are terminated (their pool process is killed and replaced); queued ones
+    end as soon as a worker picks them up. The Redis stop flag backs up the
+    revoke, which workers only keep in memory (lost on restart). Also clears
+    runs whose jobs were lost (e.g. a worker restarted while holding them)."""
     col = get_db().collection("forecast_runs")
     if not col.has(run_id):
         return jsonify({"error": "Forecast run not found"}), 404
     run = col.get(run_id)
-    for model in MODELS:
-        for task_id in run["tasks"][model].values():
-            if AsyncResult(task_id, app=celery_app).state not in DONE_STATES:
-                celery_app.control.revoke(task_id)
+    unfinished = [
+        task_id
+        for model in MODELS
+        for task_id in run["tasks"][model].values()
+        if AsyncResult(task_id, app=celery_app).state not in DONE_STATES
+    ]
+    for task_id in unfinished:
+        request_stop(task_id, ttl=STOP_FLAG_TTL)
+    if unfinished:
+        celery_app.control.revoke(unfinished, terminate=True)
     run["cancelled_at"] = datetime.now(timezone.utc).isoformat()
     col.update({"_key": run_id, "cancelled_at": run["cancelled_at"]})
     return jsonify(_status(run))

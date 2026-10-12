@@ -19,8 +19,8 @@ def _key(task_id: str) -> str:
     return f"task_stop:{task_id}"
 
 
-def request_stop(task_id: str) -> None:
-    _client.setex(_key(task_id), _STOP_KEY_TTL, "1")
+def request_stop(task_id: str, ttl: int = _STOP_KEY_TTL) -> None:
+    _client.setex(_key(task_id), ttl, "1")
 
 
 def is_stop_requested(task_id: str) -> bool:
@@ -29,3 +29,12 @@ def is_stop_requested(task_id: str) -> bool:
 
 def clear_stop(task_id: str) -> None:
     _client.delete(_key(task_id))
+
+
+class TaskStopped(Exception):
+    """Raised inside a task that was asked to stop (ends it as FAILURE)."""
+
+
+def raise_if_stopped(task_id: str) -> None:
+    if is_stop_requested(task_id):
+        raise TaskStopped("Cancelled")

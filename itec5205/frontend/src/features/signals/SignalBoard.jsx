@@ -92,6 +92,7 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
   const [board, setBoard] = useState(null);
   const [error, setError] = useState(null);
   const [run, setRun] = useState(null);
+  const [starting, setStarting] = useState(false);
   const [trainingDays, setTrainingDays] = useState(() => getSettings().forecast.training_days);
   const [epochs, setEpochs] = useState(() => getSettings().forecast.lstm_epochs);
   const [refining, setRefining] = useState(false);
@@ -99,6 +100,7 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
   const [sortBy, setSortBy] = useState(null); // "signal" | "stars" | "rl_weight" | "lstm:1M" ...; null = backend order
   const [sortDir, setSortDir] = useState("desc");
   const pollRef = useRef(null);
+  const runIdRef = useRef(null); // responses for any other run are stale
 
   const loadBoard = useCallback(() => {
     apiClient
@@ -114,9 +116,11 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
   const poll = useCallback(
     (runId) => {
       clearTimeout(pollRef.current);
+      runIdRef.current = runId;
       apiClient
         .get(`/api/forecasts/batch/${runId}`)
         .then((res) => {
+          if (runIdRef.current !== runId) return;
           setRun(res.data);
           if (res.data.finished) loadBoard();
           else pollRef.current = setTimeout(() => poll(runId), 2000);
@@ -151,18 +155,22 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
   }, [refreshKey]);
 
   const forecastAll = () => {
+    if (starting) return;
     setError(null);
+    setStarting(true);
     apiClient
       .post("/api/forecasts/batch", { ...scope, lookback_days: Number(trainingDays), epochs: Number(epochs) })
       .then((res) => {
         setRun(res.data);
         poll(res.data.run_id);
       })
-      .catch((err) => setError(err.response?.data?.error || err.message));
+      .catch((err) => setError(err.response?.data?.error || err.message))
+      .finally(() => setStarting(false));
   };
 
   const cancel = () => {
     clearTimeout(pollRef.current);
+    runIdRef.current = run.run_id;
     apiClient
       .post(`/api/forecasts/batch/${run.run_id}/cancel`)
       .then((res) => {
@@ -260,8 +268,8 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
           LSTM max epochs
           <input type="number" min={1} value={epochs} onChange={(e) => setEpochs(e.target.value)} disabled={running} />
         </label>
-        <button className="btn" onClick={forecastAll} disabled={running}>
-          <TrendChartIcon /> {running ? "Forecasting..." : `Forecast all (LSTM + ARIMA)`}
+        <button className="btn" onClick={forecastAll} disabled={running || starting}>
+          <TrendChartIcon /> {starting ? "Queuing forecasts…" : running ? "Forecasting..." : `Forecast all (LSTM + ARIMA)`}
         </button>
         {running && (
           <button className="btn secondary" onClick={cancel} title="Stop this run's remaining jobs">

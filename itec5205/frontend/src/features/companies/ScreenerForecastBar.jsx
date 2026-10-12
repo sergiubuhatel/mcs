@@ -34,9 +34,11 @@ export default function ScreenerForecastBar() {
   const [summary, setSummary] = useState(null);
   const [run, setRun] = useState(null);
   const [error, setError] = useState(null);
+  const [starting, setStarting] = useState(false);
   const [trainingDays, setTrainingDays] = useState(() => getSettings().forecast.training_days);
   const [epochs, setEpochs] = useState(() => getSettings().forecast.lstm_epochs);
   const pollRef = useRef(null);
+  const runIdRef = useRef(null); // responses for any other run are stale
   const loadedKey = useRef(null);
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
@@ -72,9 +74,11 @@ export default function ScreenerForecastBar() {
   const poll = useCallback(
     (runId) => {
       clearTimeout(pollRef.current);
+      runIdRef.current = runId;
       apiClient
         .get(`/api/forecasts/batch/${runId}`)
         .then((res) => {
+          if (runIdRef.current !== runId) return;
           setRun(res.data);
           if (res.data.finished) loadSignals();
           else pollRef.current = setTimeout(() => poll(runId), 2000);
@@ -92,7 +96,9 @@ export default function ScreenerForecastBar() {
   }, [poll]);
 
   const forecastAll = async () => {
+    if (starting) return;
     setError(null);
+    setStarting(true);
     try {
       const tickers = await allResultTickers(filters);
       if (!tickers.length) return;
@@ -106,11 +112,14 @@ export default function ScreenerForecastBar() {
       poll(data.run_id);
     } catch (err) {
       setError(err.response?.data?.error || err.message);
+    } finally {
+      setStarting(false);
     }
   };
 
   const cancel = () => {
     clearTimeout(pollRef.current);
+    runIdRef.current = run.run_id;
     apiClient
       .post(`/api/forecasts/batch/${run.run_id}/cancel`)
       .then((res) => {
@@ -155,8 +164,8 @@ export default function ScreenerForecastBar() {
           {running ? (
             <button className="btn secondary" onClick={cancel} title="Stop this run's remaining jobs">Cancel run</button>
           ) : (
-            <button className="btn" onClick={forecastAll} disabled={results.length === 0}>
-              <TrendChartIcon /> Run Forecasts (LSTM + ARIMA)
+            <button className="btn" onClick={forecastAll} disabled={results.length === 0 || starting}>
+              <TrendChartIcon /> {starting ? "Queuing forecasts…" : "Run Forecasts (LSTM + ARIMA)"}
             </button>
           )}
         </div>
