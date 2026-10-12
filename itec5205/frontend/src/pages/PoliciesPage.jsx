@@ -32,7 +32,7 @@ function criteriaCell(kind) {
     const id = p[`${kind}_criteria_id`];
     if (!id && KINDS[kind].optional) {
       return (
-        <span className="crit-chip none" title="No data criteria: the run uses the data already stored">
+        <span className="crit-chip none" title={KINDS[kind].noneChip}>
           <Icon width={13} height={13} /> None
         </span>
       );
@@ -145,7 +145,7 @@ export default function PoliciesPage() {
       return;
     }
     // A new policy starts with each kind's default criteria, or with the
-    // only one when there's just one. Data criteria stays optional: only a
+    // only one when there's just one. Optional kinds (data, prediction): only a
     // default pre-selects it.
     const form = { ...EMPTY };
     for (const k of Object.keys(KINDS)) {
@@ -319,7 +319,8 @@ export default function PoliciesPage() {
         <table style={{ tableLayout: "fixed", width: "100%" }}>
           <colgroup>
             {visibleColumns.map((c) => <col key={c.key} style={c.width ? { width: c.width } : undefined} />)}
-            <col style={{ width: 70 }} />
+            {/* wider while a row shows its Stop button */}
+            <col style={{ width: pager.rows.some((p) => ACTIVE.includes(p.last_run?.status)) ? 100 : 70 }} />
           </colgroup>
           <thead>
             <tr>
@@ -347,10 +348,15 @@ export default function PoliciesPage() {
                   ))}
                   <td>
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center" }}>
+                      {active && (
+                        <button className="btn secondary btn-sm stop-btn icon-only" onClick={() => cancel(p)} title="Stop run" aria-label="Stop run">
+                          <StopIcon width={13} height={13} />
+                        </button>
+                      )}
                       <ActionMenu
                         extraItems={[
                           active
-                            ? { label: "Cancel run", icon: StopIcon, onClick: () => cancel(p) }
+                            ? { label: "Stop run", icon: StopIcon, onClick: () => cancel(p) }
                             : { label: "Run", icon: PlayIcon, onClick: () => run(p) },
                           { label: "View", icon: EyeIcon, onClick: () => setActiveId(p._key) },
                         ]}
@@ -369,7 +375,13 @@ export default function PoliciesPage() {
       </div>
 
       {activePolicy && (
-        <PolicyRunPanel policy={activePolicy} refreshKey={runKey} onClose={() => setActiveId(null)} onChanged={loadPolicies} />
+        <PolicyRunPanel
+          policy={activePolicy}
+          refreshKey={runKey}
+          onClose={() => setActiveId(null)}
+          onChanged={loadPolicies}
+          onStop={(runId) => cancel({ last_run: { _key: runId } })}
+        />
       )}
 
       <ConfirmDeleteModal
@@ -418,12 +430,12 @@ export default function PoliciesPage() {
                 <div key={kind}>
                   <label>{meta.title}{!meta.optional && <Req />}</label>
                   <select value={editor.form[field]} onChange={(e) => setField(field, e.target.value)}>
-                    <option value="">{meta.optional ? "— none (don't import, use the stored data) —" : "— pick one —"}</option>
+                    <option value="">{meta.optional ? meta.noneOption : "— pick one —"}</option>
                     {options.map((c) => <option key={c._key} value={c._key}>{c.name}</option>)}
                   </select>
                   <p className="muted" style={{ margin: "3px 0 0" }}>
                     {chosen ? describeCriteria(kind, chosen) : meta.optional ? (
-                      "Without one, the run screens and forecasts on the data already imported."
+                      meta.noneHint
                     ) : options.length === 0 ? (
                       <>None yet — <Link to={`/criteria/${kind}`}>create {meta.singular}</Link>.</>
                     ) : meta.blurb}

@@ -11,11 +11,13 @@ import {
   PieChartIcon,
   SearchIcon,
   SpinnerIcon,
+  StopIcon,
   TrendChartIcon,
   WorkflowIcon,
   XCircleIcon,
 } from "../../layout/icons";
 import { getSettings } from "../settings/settings";
+import { KINDS } from "./criteriaConfig";
 
 export const ACTIVE = ["queued", "running"];
 
@@ -94,7 +96,7 @@ function StepCard({ step, data, run }) {
       if (data.up_to_date) body += ` · ${data.up_to_date} already up to date`;
     } else if (data.total) body = `Importing ${data.completed}/${data.total}${data.up_to_date ? ` · ${data.up_to_date} up to date` : ""}`;
   }
-  if (step.key === "data" && status === "skipped") body = "No data criteria — used the data already stored";
+  if (status === "skipped" && KINDS[step.kind]?.skipped) body = KINDS[step.kind].skipped;
   if (step.key === "screen" && data?.tickers != null) body = `${data.tickers} companies matched`;
   if (step.key === "forecast" && data?.counts) {
     body = Object.entries(data.counts)
@@ -163,7 +165,8 @@ function ForecastTable({ rows }) {
 }
 
 /** Latest run of a policy (live while it's active) + its run history. */
-export default function PolicyRunPanel({ policy, refreshKey, onClose, onChanged }) {
+export default function PolicyRunPanel({ policy, refreshKey, onClose, onChanged, onStop }) {
+  const [stopping, setStopping] = useState(null); // run id a Stop was sent for
   const [runs, setRuns] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -208,6 +211,19 @@ export default function PolicyRunPanel({ policy, refreshKey, onClose, onChanged 
             </div>
           )}
         </div>
+        {active && onStop && (
+          <button
+            className="btn secondary stop-btn"
+            onClick={() => {
+              setStopping(run._key);
+              onStop(run._key);
+            }}
+            disabled={stopping === run._key}
+            title="Stop this run: queued and running jobs are cancelled"
+          >
+            <StopIcon width={14} height={14} /> {stopping === run._key ? "Stopping…" : "Stop"}
+          </button>
+        )}
         <button className="close-btn" onClick={onClose} title="Close" aria-label="Close" style={{ position: "static" }}>
           <CloseIcon width={18} height={18} />
         </button>

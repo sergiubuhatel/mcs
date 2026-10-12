@@ -244,6 +244,9 @@ button.ticker-chip:disabled { cursor: not-allowed; opacity: 0.45; }
 .dark .count-badge { color: #93c5fd; }
 .count-badge.green { background: rgba(22, 163, 74, 0.14); color: #15803d; }
 .dark .count-badge.green { color: #4ade80; }
+.btn.stop-btn { display: inline-flex; align-items: center; gap: 5px; color: #dc2626; border-color: #dc2626; }
+.dark .btn.stop-btn { color: #f87171; border-color: #f87171; }
+.btn.stop-btn.icon-only { padding: 5px 7px; }
 .count-badge.red { background: rgba(220, 38, 38, 0.12); color: #b91c1c; }
 .dark .count-badge.red { color: #f87171; }
 .count-badge.grey { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }

@@ -8,9 +8,10 @@ A policy references four reusable criteria documents (collection
                  tickers, how many years of history, what to import, only
                  what's missing); without it the run uses the stored data
   screen      -- the Fundamental Analysis search (sector/industry/q/ranges)
-  prediction  -- forecast horizons (e.g. 3 days, 1 month), the training
-                 window (business days, or months/years of them), which
-                 models must forecast the move, and the minimum move
+  prediction  -- optional: forecast horizons (e.g. 3 days, 1 month), the
+                 training window (business days, or months/years of them),
+                 which models must forecast the move, and the minimum move;
+                 without it every screened company goes to the portfolio step
   portfolio   -- the RL training options (mode, limits, company counts, ...)
 
 Running a policy is `tasks.policy_tasks.run_policy`; this module holds the
@@ -23,7 +24,7 @@ from datetime import date, datetime, timezone
 from ..db.arango_client import get_db
 
 KINDS = ("data", "screen", "prediction", "portfolio")
-OPTIONAL_KINDS = ("data",)
+OPTIONAL_KINDS = ("data", "prediction")
 
 # Trading days per unit (21 per month, matching horizons.py).
 HORIZON_UNITS = {"days": 1, "weeks": 5, "months": 21, "years": 252}

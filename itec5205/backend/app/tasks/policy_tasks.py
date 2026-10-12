@@ -163,76 +163,80 @@ def run_policy(self, run_id: str):
         check_stop()
 
         # ---- 3. forecast -----------------------------------------------
-        needed = models_needed(pred_c["models"])
-        forecast_days = max(MAX_HORIZON_DAYS, max(horizon_days(h) for h in pred_c["horizons"]))
-        stats = history_stats(tickers, training_start(pred_c["training"]))
-        db = get_db()
-        stored = {
-            "lstm": {d["_key"]: d for d in db.collection("price_predictions").get_many(tickers)},
-            "arima": {d["_key"]: d for d in db.collection("arima_predictions").get_many(tickers)},
-        }
-        tasks = {m: {} for m in needed}
-        reused = {m: 0 for m in needed}
-        skipped = []
-        for t in tickers:
-            st = stats.get(t)
-            lookback = lookback_for(pred_c["training"], st) if st else 0
-            if not st or min(lookback, st["total"]) < MIN_HISTORY_DAYS:
-                skipped.append(t)  # too little history to forecast; fails the prediction step
-                continue
-            for model in needed:
-                epochs = pred_c["epochs"] if model == "lstm" else None
-                if pred_c["reuse_forecasts"] and forecast_reusable(stored[model].get(t), lookback, st, forecast_days, epochs):
-                    reused[model] += 1
+        if pred_c is None:
+            step("forecast", 1, f"No prediction criteria -- all {len(tickers)} screened companies go to the portfolio step",
+                 status="skipped")
+        else:
+            needed = models_needed(pred_c["models"])
+            forecast_days = max(MAX_HORIZON_DAYS, max(horizon_days(h) for h in pred_c["horizons"]))
+            stats = history_stats(tickers, training_start(pred_c["training"]))
+            db = get_db()
+            stored = {
+                "lstm": {d["_key"]: d for d in db.collection("price_predictions").get_many(tickers)},
+                "arima": {d["_key"]: d for d in db.collection("arima_predictions").get_many(tickers)},
+            }
+            tasks = {m: {} for m in needed}
+            reused = {m: 0 for m in needed}
+            skipped = []
+            for t in tickers:
+                st = stats.get(t)
+                lookback = lookback_for(pred_c["training"], st) if st else 0
+                if not st or min(lookback, st["total"]) < MIN_HISTORY_DAYS:
+                    skipped.append(t)  # too little history to forecast; fails the prediction step
                     continue
-                if model == "lstm":
-                    res = train_lstm_prediction.delay(ticker=t, epochs=pred_c["epochs"], lookback_days=lookback, forecast_days=forecast_days)
-                else:
-                    res = train_arima_prediction.delay(ticker=t, lookback_days=lookback, forecast_days=forecast_days)
-                tasks[model][t] = res.id
-                children.append(res.id)
+                for model in needed:
+                    epochs = pred_c["epochs"] if model == "lstm" else None
+                    if pred_c["reuse_forecasts"] and forecast_reusable(stored[model].get(t), lookback, st, forecast_days, epochs):
+                        reused[model] += 1
+                        continue
+                    if model == "lstm":
+                        res = train_lstm_prediction.delay(ticker=t, epochs=pred_c["epochs"], lookback_days=lookback, forecast_days=forecast_days)
+                    else:
+                        res = train_arima_prediction.delay(ticker=t, lookback_days=lookback, forecast_days=forecast_days)
+                    tasks[model][t] = res.id
+                    children.append(res.id)
 
-        total = sum(len(v) for v in tasks.values())
-        while True:
-            counts = {m: {"total": len(tasks[m]), "done": 0, "failed": 0, "running": 0, "reused": reused[m]} for m in needed}
-            for m in needed:
-                for task_id in tasks[m].values():
-                    state = AsyncResult(task_id, app=celery_app).state
-                    if state == "SUCCESS":
-                        counts[m]["done"] += 1
-                    elif state in ("FAILURE", "REVOKED"):
-                        counts[m]["failed"] += 1
-                    elif state in ("STARTED", "PROGRESS"):
-                        counts[m]["running"] += 1
-            finished = sum(c["done"] + c["failed"] for c in counts.values())
-            parts = [
-                f"{m.upper()} {c['done'] + c['failed']}/{c['total']}" + (f" (+{c['reused']} reused)" if c["reused"] else "")
-                for m, c in counts.items()
-            ]
-            waiting = finished < total and not any(c["running"] for c in counts.values())
+            total = sum(len(v) for v in tasks.values())
+            while True:
+                counts = {m: {"total": len(tasks[m]), "done": 0, "failed": 0, "running": 0, "reused": reused[m]} for m in needed}
+                for m in needed:
+                    for task_id in tasks[m].values():
+                        state = AsyncResult(task_id, app=celery_app).state
+                        if state == "SUCCESS":
+                            counts[m]["done"] += 1
+                        elif state in ("FAILURE", "REVOKED"):
+                            counts[m]["failed"] += 1
+                        elif state in ("STARTED", "PROGRESS"):
+                            counts[m]["running"] += 1
+                finished = sum(c["done"] + c["failed"] for c in counts.values())
+                parts = [
+                    f"{m.upper()} {c['done'] + c['failed']}/{c['total']}" + (f" (+{c['reused']} reused)" if c["reused"] else "")
+                    for m, c in counts.items()
+                ]
+                waiting = finished < total and not any(c["running"] for c in counts.values())
+                step(
+                    "forecast", finished / total if total else 1,
+                    ("Waiting for a free forecast worker · " if waiting else "Forecasting · ") + " · ".join(parts),
+                    status="running", counts=counts, skipped=skipped,
+                )
+                if finished >= total:
+                    break
+                check_stop()
+                time.sleep(POLL_SECONDS)
+
+            rows = evaluate_forecasts(tickers, pred_c)
+            passed = [r["ticker"] for r in rows if r["passed"]]
             step(
-                "forecast", finished / total if total else 1,
-                ("Waiting for a free forecast worker · " if waiting else "Forecasting · ") + " · ".join(parts),
-                status="running", counts=counts, skipped=skipped,
+                "forecast", 1, f"{len(passed)} of {len(tickers)} companies pass the prediction criteria",
+                status="done", passed=len(passed), rows=rows,
             )
-            if finished >= total:
-                break
-            check_stop()
-            time.sleep(POLL_SECONDS)
-
-        rows = evaluate_forecasts(tickers, pred_c)
-        passed = [r["ticker"] for r in rows if r["passed"]]
-        step(
-            "forecast", 1, f"{len(passed)} of {len(tickers)} companies pass the prediction criteria",
-            status="done", passed=len(passed), rows=rows,
-        )
-        if len(passed) < 2:
-            raise PolicyRunError(f"Only {len(passed)} companies pass the prediction criteria -- need at least 2")
-        dropped = [t for t in tickers if t not in set(passed)]
-        if dropped:
-            reason = {r["ticker"]: {"reason": r["reason"], "models": r["models"]} for r in rows if not r["passed"]}
-            reason["_rule"] = f"policy prediction criteria '{run['criteria']['prediction']['name']}'"
-            pool = refine_pool(pool["_key"], drop=dropped, reason=reason)
+            if len(passed) < 2:
+                raise PolicyRunError(f"Only {len(passed)} companies pass the prediction criteria -- need at least 2")
+            dropped = [t for t in tickers if t not in set(passed)]
+            if dropped:
+                reason = {r["ticker"]: {"reason": r["reason"], "models": r["models"]} for r in rows if not r["passed"]}
+                reason["_rule"] = f"policy prediction criteria '{run['criteria']['prediction']['name']}'"
+                pool = refine_pool(pool["_key"], drop=dropped, reason=reason)
         save(pool_id=pool["_key"])
         check_stop()
 

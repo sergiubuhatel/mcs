@@ -8,12 +8,21 @@ export const KINDS = {
     title: "Data Criteria",
     singular: "data criteria",
     optional: true, // a policy without one skips the import and uses the stored data
+    noneOption: "— none (don't import, use the stored data) —",
+    noneHint: "Without one, the run screens and forecasts on the data already imported.",
+    noneChip: "No data criteria: the run uses the data already stored",
+    skipped: "No data criteria — used the data already stored",
     blurb: "The Yahoo Finance import a policy can run first, so it screens and forecasts on fresh data.",
   },
   screen: { title: "Screening Criteria", singular: "screening criteria", blurb: "The Stock Screener search: which companies a policy starts from." },
   prediction: {
     title: "Prediction Criteria",
     singular: "prediction criteria",
+    optional: true, // a policy without one skips forecasting: every screened company goes to the portfolio step
+    noneOption: "— none (no forecasts, every screened company goes on) —",
+    noneHint: "Without one, the run skips forecasting and builds the portfolio from every screened company.",
+    noneChip: "No prediction criteria: every screened company goes to the portfolio step",
+    skipped: "No prediction criteria — every screened company went on",
     blurb: "When to forecast (e.g. 3 days, 1 month), how much history to train on, and which forecasts a company must pass.",
   },
   portfolio: {

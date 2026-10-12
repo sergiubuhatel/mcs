@@ -160,7 +160,7 @@ def policy_run(policy_id):
     criteria = {}
     for kind in svc.KINDS:
         if kind in svc.OPTIONAL_KINDS and not policy.get(f"{kind}_criteria_id"):
-            criteria[kind] = None  # no import: the run uses the data already stored
+            criteria[kind] = None  # skipped: no import (stored data) / no forecast filter
             continue
         doc = svc.get_criteria(kind, policy[f"{kind}_criteria_id"])
         if doc is None:
