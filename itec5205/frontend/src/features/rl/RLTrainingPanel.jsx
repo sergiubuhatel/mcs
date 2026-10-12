@@ -2,8 +2,9 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { trainRequested, reset } from "./rlSlice";
+import { updateRequested as updatePoolRequested } from "../pools/poolsSlice";
 import { fetchRequested as fetchPortfoliosRequested } from "../portfolios/portfoliosSlice";
-import { PieChartIcon } from "../../layout/icons";
+import { CheckIcon, PieChartIcon } from "../../layout/icons";
 import Req from "../../components/Req";
 import { getSettings } from "../settings/settings";
 
@@ -66,6 +67,12 @@ export default function RLTrainingPanel({ pool }) {
       })
     );
   };
+
+  // Mandatory companies are saved on the pool, so they apply to every run from it.
+  const mandatory = pool.required_tickers || [];
+  const setMandatory = (tickers) => dispatch(updatePoolRequested({ id: pool._key, required_tickers: tickers }));
+  const toggleMandatory = (t) => setMandatory(mandatory.includes(t) ? mandatory.filter((x) => x !== t) : [...mandatory, t]);
+  const tooManyMandatory = maxCompanies !== "" && mandatory.length > Number(maxCompanies);
 
   const countBoundsInvalid = minCompanies !== "" && maxCompanies !== "" && Number(minCompanies) > Number(maxCompanies);
   const training = status === "starting" || status === "training";
@@ -178,6 +185,45 @@ export default function RLTrainingPanel({ pool }) {
           </div>
         )}
       </div>
+      <div style={{ margin: "10px 0 4px" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          Mandatory stocks{mandatory.length > 0 && <span className="count-badge">{mandatory.length}</span>}
+          {mandatory.length > 0 && (
+            <a onClick={() => !training && setMandatory([])} style={{ cursor: "pointer", fontSize: "0.8rem", fontWeight: 400 }}>
+              Clear
+            </a>
+          )}
+        </label>
+        <p className="muted" style={{ margin: "2px 0 6px" }}>
+          Click a company to make it mandatory: it is always part of the generated portfolio (also when it isn't Strong or
+          trending up). Saved with the pool.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          {pool.tickers.map((t) => {
+              const on = mandatory.includes(t);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  className={`ticker-chip${on ? " mandatory" : ""}`}
+                  onClick={() => toggleMandatory(t)}
+                  disabled={training}
+                  aria-pressed={on}
+                  title={on ? `${t} is mandatory — click to make it optional` : `Make ${t} mandatory`}
+                >
+                  {on && <CheckIcon />}
+                  {t}
+                </button>
+              );
+            })}
+        </div>
+      </div>
+      {tooManyMandatory && (
+        <p className="error-text" style={{ margin: "4px 0" }}>
+          {mandatory.length} mandatory stocks but at most {maxCompanies} companies: all mandatory ones are kept, so the portfolio will
+          have {mandatory.length}.
+        </p>
+      )}
       <p className="muted" style={{ margin: "4px 0 8px" }}>
         {mode === "subset" &&
           "Candidates: companies whose price over the trend window tracks a straight line upward (K-ratio). "}
@@ -257,6 +303,15 @@ export default function RLTrainingPanel({ pool }) {
                 `. Only ${result.holdings.length} companies could be used — fewer than the minimum of ${result.min_companies}.`}
             </p>
           )}
+          {result.mandatory && (
+            <p className={result.mandatory.not_in_input.length || result.mandatory.left_out.length ? "error-text" : "muted"}>
+              {result.mandatory.included.length > 0 && `Mandatory, included: ${result.mandatory.included.join(", ")}. `}
+              {result.mandatory.not_in_input.length > 0 &&
+                `Not in the candidates, ignored: ${result.mandatory.not_in_input.join(", ")}. `}
+              {result.mandatory.left_out.length > 0 &&
+                `Left out for too little price history: ${result.mandatory.left_out.join(", ")}.`}
+            </p>
+          )}
           {result.constraints && (
             <p className={result.constraints.satisfied ? "muted" : "error-text"}>
               Constraints ({[
@@ -287,7 +342,12 @@ export default function RLTrainingPanel({ pool }) {
                 .sort((a, b) => b.weight - a.weight)
                 .map((h) => (
                   <tr key={h.ticker}>
-                    <td style={{ textAlign: "left" }}>{h.ticker}</td>
+                    <td style={{ textAlign: "left" }}>
+                      {h.ticker}
+                      {result.mandatory?.included.includes(h.ticker) && (
+                        <span className="ticker-chip mandatory" style={{ marginLeft: 6 }}>mandatory</span>
+                      )}
+                    </td>
                     <td className="weight">{(h.weight * 100).toFixed(2)}%</td>
                   </tr>
                 ))}

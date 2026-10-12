@@ -6,6 +6,7 @@ import { reset as resetRl } from "../features/rl/rlSlice";
 import RLTrainingPanel from "../features/rl/RLTrainingPanel";
 import SignalBoard from "../features/signals/SignalBoard";
 import RefinementHistory from "../features/signals/RefinementHistory";
+import EditPoolModal from "../features/pools/EditPoolModal";
 import ActionMenu from "../components/ActionMenu";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -36,34 +37,37 @@ const POOL_COLUMNS = [
     locked: true,
     width: 340,
     sortable: true,
-    render: (p, ctx) =>
-      ctx.isEditing ? (
-        <input value={ctx.editName} onChange={(e) => ctx.setEditName(e.target.value)} style={{ width: "100%" }} />
-      ) : (
-        <a onClick={() => ctx.selectPool(p._key)} title={p.name} style={{ ...ellipsis, cursor: "pointer" }}>
-          {p.name}
-        </a>
-      ),
+    render: (p, ctx) => (
+      <a onClick={() => ctx.selectPool(p._key)} title={p.name} style={{ ...ellipsis, cursor: "pointer" }}>
+        {p.name}
+      </a>
+    ),
   },
   {
     key: "tickers",
     label: "Tickers",
-    render: (p, ctx) =>
-      ctx.isEditing && ctx.editMode === "full" ? (
-        <input
-          value={ctx.editTickers}
-          onChange={(e) => ctx.setEditTickers(e.target.value)}
-          style={{ width: "100%" }}
-          placeholder="Comma-separated tickers"
-        />
+    render: (p) => (
+      <span title={p.tickers.join(", ")} style={{ display: "flex", gap: 4, overflow: "hidden", whiteSpace: "nowrap" }}>
+        {p.tickers.slice(0, PREVIEW_TICKERS).map((t) => (
+          <span key={t} className={`ticker-chip${(p.required_tickers || []).includes(t) ? " mandatory" : ""}`}>{t}</span>
+        ))}
+        {p.tickers.length > PREVIEW_TICKERS && <span className="ticker-chip">+{p.tickers.length - PREVIEW_TICKERS}</span>}
+      </span>
+    ),
+  },
+  {
+    key: "mandatory",
+    label: "Mandatory",
+    width: 110,
+    sortable: true,
+    render: (p) => {
+      const req = p.required_tickers || [];
+      return req.length ? (
+        <span className="count-badge" title={`Always in the generated portfolio: ${req.join(", ")}`}>{req.length}</span>
       ) : (
-        <span title={p.tickers.join(", ")} style={{ display: "flex", gap: 4, overflow: "hidden", whiteSpace: "nowrap" }}>
-          {p.tickers.slice(0, PREVIEW_TICKERS).map((t) => (
-            <span key={t} className="ticker-chip">{t}</span>
-          ))}
-          {p.tickers.length > PREVIEW_TICKERS && <span className="ticker-chip">+{p.tickers.length - PREVIEW_TICKERS}</span>}
-        </span>
-      ),
+        <span className="muted">–</span>
+      );
+    },
   },
   { key: "size", label: "Pool size", width: 100, sortable: true, render: (p) => <span className="count-badge">{p.tickers.length}</span> },
   { key: "created_at", label: "Created", width: 120, sortable: true, render: (p) => fmtDate(p.created_at) },
@@ -99,6 +103,7 @@ const ABOUT = {
 const TIPS = [
   { title: "Create focused pools", text: "Screen first (e.g. growth, low P/E); RL and forecasts run on every company in the pool." },
   { title: "Forecast, then train RL", text: "Run Forecast all on the signal board so the RL builder can use only Strong signals." },
+  { title: "Mandatory stocks", text: "Mark companies in the RL builder that must be in the portfolio; refining by signal keeps them." },
   { title: "Compare iterations", text: "Refine, retrain, and check the refinement history for the best portfolio." },
 ];
 
@@ -109,10 +114,7 @@ export default function PoolsPage() {
   // Changes when an RL run finishes, so the signal board / history pick up the new portfolio.
   const rlResultId = useSelector((s) => s.rl.result?.portfolio_id);
   const [activePoolId, setActivePoolId] = useState(null);
-  const [editingId, setEditingId] = useState(null);
-  const [editMode, setEditMode] = useState("full"); // "full" | "rename"
-  const [editName, setEditName] = useState("");
-  const [editTickers, setEditTickers] = useState("");
+  const [editTarget, setEditTarget] = useState(null); // pool open in the Edit dialog
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [query, setQuery] = useState("");
 
@@ -129,7 +131,7 @@ export default function PoolsPage() {
   }, [items, query]);
   const { sorted, sort, toggle } = useSort(
     filtered,
-    { name: (p) => p.name, size: (p) => p.tickers.length, created_at: (p) => p.created_at, iteration: (p) => p.iteration || 0 },
+    { name: (p) => p.name, size: (p) => p.tickers.length, mandatory: (p) => (p.required_tickers || []).length, created_at: (p) => p.created_at, iteration: (p) => p.iteration || 0 },
     { key: "created_at", dir: "desc" }
   );
   const pager = usePager(sorted, Number(getSettings().general.list_page_size));
@@ -139,31 +141,9 @@ export default function PoolsPage() {
     setActivePoolId(id);
   };
 
-  const startEdit = (p) => {
-    setEditingId(p._key);
-    setEditMode("full");
-    setEditName(p.name);
-    setEditTickers(p.tickers.join(", "));
-  };
-
-  const startRename = (p) => {
-    setEditingId(p._key);
-    setEditMode("rename");
-    setEditName(p.name);
-  };
-
-  const cancelEdit = () => setEditingId(null);
-
-  const saveEdit = (id) => {
-    const changes = { id, name: editName.trim() };
-    if (editMode === "full") {
-      changes.tickers = editTickers
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
-    }
+  const saveEdit = (changes) => {
     dispatch(updateRequested(changes));
-    setEditingId(null);
+    setEditTarget(null);
   };
 
   const confirmDelete = () => {
@@ -172,7 +152,7 @@ export default function PoolsPage() {
   };
 
   const duplicatePool = (p) => {
-    dispatch(createRequested({ name: `${p.name} (copy)`, tickers: p.tickers, filters: p.filters }));
+    dispatch(createRequested({ name: `${p.name} (copy)`, tickers: p.tickers, filters: p.filters, required_tickers: p.required_tickers }));
   };
 
   const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("poolsGrid", POOL_COLUMNS);
@@ -186,7 +166,7 @@ export default function PoolsPage() {
     { icon: WorkflowIcon, color: "#f59e0b", label: "Refined pools", value: refined, sub: "iteration 1 or later" },
     { icon: BarChartIcon, color: "#3b82f6", label: "Largest pool", value: largest ? largest.tickers.length : "–", sub: largest ? `tickers · ${largest.name}` : "–", title: largest?.name },
   ];
-  const leftAligned = (key) => key !== "created_at" && key !== "iteration" && key !== "size";
+  const leftAligned = (key) => !["created_at", "iteration", "size", "mandatory"].includes(key);
 
   return (
     <div>
@@ -243,8 +223,7 @@ export default function PoolsPage() {
           </thead>
           <tbody>
             {pager.rows.map((p) => {
-              const isEditing = editingId === p._key;
-              const ctx = { isEditing, editMode, editName, setEditName, editTickers, setEditTickers, selectPool };
+              const ctx = { selectPool };
               return (
                 <tr key={p._key} className={p._key === activePoolId ? "selected" : ""}>
                   {visibleColumns.map((c) => (
@@ -253,19 +232,12 @@ export default function PoolsPage() {
                     </td>
                   ))}
                   <td>
-                    {isEditing ? (
-                      <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
-                        <button className="btn" onClick={() => saveEdit(p._key)}>Save</button>
-                        <button className="btn secondary" onClick={cancelEdit}>Cancel</button>
-                      </div>
-                    ) : (
-                      <ActionMenu
-                        onRename={() => startRename(p)}
-                        onEdit={() => startEdit(p)}
-                        onDuplicate={() => duplicatePool(p)}
-                        onDelete={() => setDeleteTarget(p)}
-                      />
-                    )}
+                    <ActionMenu
+                      onRename={() => setEditTarget(p)}
+                      onEdit={() => setEditTarget(p)}
+                      onDuplicate={() => duplicatePool(p)}
+                      onDelete={() => setDeleteTarget(p)}
+                    />
                   </td>
                 </tr>
               );
@@ -292,6 +264,8 @@ export default function PoolsPage() {
       )}
 
       <InfoPanels about={ABOUT} tips={TIPS} />
+
+      <EditPoolModal pool={editTarget} onClose={() => setEditTarget(null)} onSave={saveEdit} />
 
       <ConfirmDeleteModal
         isOpen={!!deleteTarget}

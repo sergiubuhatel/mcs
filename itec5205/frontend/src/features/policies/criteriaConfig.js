@@ -65,6 +65,7 @@ export function criteriaDefaults() {
       max_weight_range_pct: p.max_weight_range_pct,
       min_companies: p.min_companies,
       max_companies: p.max_companies,
+      required_tickers: [],
     },
   };
 }
@@ -105,6 +106,8 @@ export function autoCriteriaName(kind, c) {
   else if (isSet(min)) parts.push(`≥ ${min} companies`);
   else if (isSet(max)) parts.push(`≤ ${max} companies`);
   if (c.mode === "subset") parts.push("steady trend");
+  const required = tickerList(c.required_tickers);
+  if (required.length) parts.push(`must hold ${required.join(", ")}`);
   return parts.length ? parts.join(", ") : "Whole pool, no limits";
 }
 
@@ -149,9 +152,14 @@ export function describeCriteria(kind, c) {
   const min = c.min_companies ?? "";
   const max = c.max_companies ?? "";
   if (min !== "" || max !== "") parts.push(`${min === "" ? "auto" : min}–${max === "" ? "auto" : max} companies`);
+  const required = tickerList(c.required_tickers);
+  if (required.length) parts.push(`mandatory ${required.join(", ")}`);
   parts.push(`${Number(c.timesteps).toLocaleString()} steps`);
   return parts.join(", ");
 }
+
+// Stored criteria keep a list; the editor keeps the typed text.
+const tickerList = (v) => (Array.isArray(v) ? v : String(v || "").split(/[\s,]+/)).filter(Boolean);
 
 // Blank inputs travel as null (= no limit / auto), numbers as numbers.
 export const blankToNull = (v) => (v === "" || v === undefined ? null : v);

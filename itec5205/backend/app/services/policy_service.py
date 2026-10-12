@@ -160,7 +160,17 @@ def _normalize_portfolio(body: dict) -> dict:
         "max_weight_range_pct": _num(body.get("max_weight_range_pct"), float, 0, 100, field="max weight range"),
         "min_companies": min_c,
         "max_companies": max_c,
+        # Must be in the portfolio -- when they reach this step (a company
+        # dropped by the screen or the forecast filter is ignored).
+        "required_tickers": _tickers(body.get("required_tickers")),
     }
+
+
+def _tickers(value) -> list[str]:
+    """A ticker list from a list or a comma/space separated string, upper-cased, de-duplicated."""
+    if isinstance(value, str):
+        value = value.replace(",", " ").split()
+    return list(dict.fromkeys(str(t).strip().upper() for t in value or [] if str(t).strip()))
 
 
 NORMALIZERS = {"data": _normalize_data, "screen": _normalize_screen, "prediction": _normalize_prediction, "portfolio": _normalize_portfolio}

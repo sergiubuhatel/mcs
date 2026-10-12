@@ -28,16 +28,20 @@ def train():
     universe = body.get("universe")
     pool_id = body.get("pool_id")
     mode = body.get("mode", "full")
+    required = [t.upper() for t in body.get("required_tickers") or []]
     if pool_id:
         pool = get_pool(pool_id)
         if pool is None:
             return jsonify({"error": f"Pool '{pool_id}' not found"}), 404
         universe = pool["tickers"]
+        required = list(dict.fromkeys(required + pool.get("required_tickers", [])))
         if mode == "strong":
             # Only the companies the signal board currently rates Strong; from
             # here on it trains like "full" mode over that narrower universe.
             board = build_signals(universe, pool=pool, portfolio=latest_portfolio_for_pool(pool_id))
             universe = [r["ticker"] for r in board["rows"] if r["signal"] == SIGNAL_STRONG]
+            # Mandatory pool companies stay in even when they aren't Strong.
+            universe += [t for t in required if t in set(pool["tickers"]) and t not in set(universe)]
             if len(universe) < 2:
                 return jsonify({"error": f"Only {len(universe)} Strong companies in this pool -- need at least 2 (run Forecast all first)"}), 400
     elif mode == "strong":
@@ -56,6 +60,7 @@ def train():
         max_volatility=_optional(body.get("max_volatility"), float),
         min_return=_optional(body.get("min_return"), float),
         max_weight_range=_optional(body.get("max_weight_range"), float),
+        required_tickers=required,
         pool_id=pool_id,
     )
     return jsonify({"task_id": task.id}), 202

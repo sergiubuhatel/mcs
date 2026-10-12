@@ -217,22 +217,39 @@ def _candidate_rank(metrics: dict, max_volatility: float | None, min_return: flo
     return (violation > 0, round(violation, 6), objective)
 
 
-def _project_to_simplex(v: np.ndarray) -> np.ndarray:
-    """Euclidean projection onto {w >= 0, sum(w) = 1} (long-only, fully invested)."""
+def _project_to_simplex(v: np.ndarray, total: float = 1.0) -> np.ndarray:
+    """Euclidean projection onto {w >= 0, sum(w) = total} (long-only, fully invested)."""
+    if total <= 0:
+        return np.zeros_like(v)
     u = np.sort(v)[::-1]
     css = np.cumsum(u)
-    rho = np.nonzero(u * np.arange(1, len(v) + 1) > css - 1)[0][-1]
-    return np.maximum(v - (css[rho] - 1) / (rho + 1), 0.0)
+    rho = np.nonzero(u * np.arange(1, len(v) + 1) > css - total)[0][-1]
+    return np.maximum(v - (css[rho] - total) / (rho + 1), 0.0)
 
 
-def _efficient_frontier(returns: np.ndarray, points: int = FRONTIER_POINTS, iters: int = 500) -> list[np.ndarray]:
+def _required_floor(columns: list[str], required: list[str] | None) -> np.ndarray:
+    """Per-company lower weight bound: MIN_SELECTED_WEIGHT for mandatory
+    companies (so the optimizer can't drop them), 0 for the rest."""
+    req = set(required or [])
+    floor = np.array([MIN_SELECTED_WEIGHT if c in req else 0.0 for c in columns])
+    return floor if floor.sum() < 1 else floor / floor.sum()  # (only with ~200 mandatory)
+
+
+def _efficient_frontier(
+    returns: np.ndarray, points: int = FRONTIER_POINTS, iters: int = 500, floor: np.ndarray | None = None
+) -> list[np.ndarray]:
     """Long-only mean-variance frontier: for each trade-off t, minimize
     annual variance - t * annual return over the simplex with accelerated
     projected gradient (a convex QP, so this converges to the true optimum).
     t = 0 is the minimum-variance portfolio; large t tends to the single
     highest-return asset. Projection yields exact zeros, so the frontier
-    portfolios are naturally sparse -- that's what sizes the selection."""
+    portfolios are naturally sparse -- that's what sizes the selection.
+    `floor` (optional) is a per-company minimum weight: w = floor + x with x
+    on the simplex scaled to 1 - sum(floor), so the mandatory companies stay
+    in every frontier portfolio."""
     n = returns.shape[1]
+    floor = np.zeros(n) if floor is None else floor
+    free = 1.0 - floor.sum()
     mu = returns.mean(axis=0) * TRADING_DAYS_PER_YEAR
     cov = np.cov(returns, rowvar=False, ddof=0) * TRADING_DAYS_PER_YEAR
     step = 1.0 / (2.0 * max(np.linalg.eigvalsh(cov)[-1], 1e-12))
@@ -242,17 +259,19 @@ def _efficient_frontier(returns: np.ndarray, points: int = FRONTIER_POINTS, iter
     for t in np.concatenate([[0.0], np.geomspace(1e-3, 1e3, points - 1)]):
         y, w_prev, momentum = w.copy(), w.copy(), 1.0
         for _ in range(iters):
-            w_next = _project_to_simplex(y - step * (2.0 * cov @ y - t * mu))
+            w_next = floor + _project_to_simplex(y - step * (2.0 * cov @ y - t * mu) - floor, free)
             momentum_next = (1 + (1 + 4 * momentum**2) ** 0.5) / 2
             y = w_next + ((momentum - 1) / momentum_next) * (w_next - w_prev)
             w_prev, w, momentum = w_next, w_next, momentum_next
         frontier.append(w.copy())
-    frontier.append(np.eye(n)[int(np.argmax(mu))])  # the max-return end point exactly
+    frontier.append(floor + free * np.eye(n)[int(np.argmax(mu))])  # the max-return end point exactly
     return frontier
 
 
-def _drop_small_positions(w: np.ndarray) -> np.ndarray:
-    kept = np.where(w >= MIN_SELECTED_WEIGHT, w, 0.0)
+def _drop_small_positions(w: np.ndarray, floor: np.ndarray | None = None) -> np.ndarray:
+    """Zero out positions below MIN_SELECTED_WEIGHT (mandatory ones, floor > 0, are kept)."""
+    keep = w >= MIN_SELECTED_WEIGHT if floor is None else (w >= MIN_SELECTED_WEIGHT) | (floor > 0)
+    kept = np.where(keep, w, 0.0)
     return kept / kept.sum() if kept.sum() > 0 else w
 
 
@@ -275,6 +294,7 @@ def optimize_selection(
     min_return: float | None = None,
     min_count: int | None = None,
     max_count: int | None = None,
+    required: list[str] | None = None,
 ) -> dict:
     """Choose which companies (and a baseline weighting of them) best meet
     the volatility ceiling / return floor over the past year, by walking the
@@ -289,46 +309,57 @@ def optimize_selection(
 
     Returns {tickers, weights (dict), metrics, feasible}. `feasible` is False
     when no long-only mix of these companies meets the limits; the closest
-    frontier point is returned then."""
+    frontier point is returned then. `required` companies are always kept
+    (those without a year of history can't be, and are left out)."""
     returns_df = returns_past_year(tickers)
     if not returns_df.empty:
         returns_df = returns_df.dropna(axis=1, thresh=int(len(returns_df) * 0.9)).fillna(0.0)
     if returns_df.shape[1] < 2:
         raise ValueError("Not enough tickers with a year of price history to optimize over")
-    return _optimize(returns_df, max_volatility, min_return, min_count, max_count)
+    return _optimize(returns_df, max_volatility, min_return, min_count, max_count, required)
 
 
 def _optimize(
-    returns_df, max_volatility: float | None, min_return: float | None, min_count: int | None, max_count: int | None
+    returns_df,
+    max_volatility: float | None,
+    min_return: float | None,
+    min_count: int | None,
+    max_count: int | None,
+    required: list[str] | None = None,
 ) -> dict:
     """`optimize_selection` over an already-fetched returns DataFrame."""
     columns = list(returns_df.columns)
+    required = [t for t in (required or []) if t in set(columns)]
     returns = returns_df.values
-    frontier = _efficient_frontier(returns)
+    floor = _required_floor(columns, required)
+    is_required = floor > 0
+    frontier = _efficient_frontier(returns, floor=floor)
     # Rank each candidate as it will actually be returned -- with positions
     # below MIN_SELECTED_WEIGHT dropped -- so a point that meets a limit by a
     # hair doesn't slip past it once those slivers are removed.
     best = min(
-        (_drop_small_positions(w) for w in _interpolate_frontier(frontier)),
+        (_drop_small_positions(w, floor) for w in _interpolate_frontier(frontier)),
         key=lambda w: _candidate_rank(metrics_from_returns(returns, w), max_volatility, min_return),
     )
 
-    # Order by optimal weight, breaking ties (e.g. zero weights) by mean return.
+    # Mandatory companies first, then by optimal weight, breaking ties (e.g.
+    # zero weights) by mean return.
     mean_returns = returns.mean(axis=0)
-    order = sorted(range(len(columns)), key=lambda i: (-best[i], -mean_returns[i]))
-    auto_size = sum(1 for i in order if best[i] >= MIN_SELECTED_WEIGHT)
-    lo = max(2, min_count or 2)  # RL training needs at least 2 assets
+    rank = lambda w: lambda i: (not is_required[i], -w[i], -mean_returns[i])  # noqa: E731
+    order = sorted(range(len(columns)), key=rank(best))
+    auto_size = sum(1 for i in order if best[i] >= MIN_SELECTED_WEIGHT or is_required[i])
+    lo = max(2, min_count or 2, len(required))  # RL training needs at least 2 assets
     hi = max(lo, max_count) if max_count is not None else len(columns)
     size = min(max(auto_size, lo), hi, len(columns))
     keep = order[:size]
     if size != auto_size and size < len(columns):
         candidate_sets = {
-            tuple(sorted(sorted(range(len(columns)), key=lambda i: (-w[i], -mean_returns[i]))[:size]))
+            tuple(sorted(sorted(range(len(columns)), key=rank(w))[:size]))
             for w in frontier
         }
         # Re-solve over each set; min == max == size keeps all of its companies.
         results = [
-            _optimize(returns_df.iloc[:, list(subset)], max_volatility, min_return, size, size)
+            _optimize(returns_df.iloc[:, list(subset)], max_volatility, min_return, size, size, required)
             for subset in candidate_sets
         ]
         return min(results, key=lambda r: _candidate_rank(r["metrics"], max_volatility, min_return))
@@ -354,6 +385,7 @@ def select_universe(
     lookback_days: int = 252,
     max_volatility: float | None = None,
     min_return: float | None = None,
+    required: list[str] | None = None,
 ) -> dict:
     """Decide which companies the agent trains on.
 
@@ -365,6 +397,8 @@ def select_universe(
       that is what drops companies and sizes the portfolio, within
       [min_count, max_count].
     - "full" mode with no limits and no count bounds trains on every ticker.
+    - `required` companies (those in `tickers`) are always kept: they skip
+      the trend filter and the optimizer can't drop them.
 
     Returns {tickers, selection (K-ratio rows, subset mode only), optimizer
     (optimize_selection's result, or None)}."""
@@ -372,19 +406,22 @@ def select_universe(
         raise ValueError(f"Min companies ({min_count}) is greater than max companies ({max_count})")
     constrained = max_volatility is not None or min_return is not None
     bounded = min_count is not None or max_count is not None
+    required = [t for t in dict.fromkeys(required or []) if t in set(tickers)]
     candidates, ranked = tickers, None
     if mode == "subset":
         ranked = rank_by_trend_consistency(tickers, lookback_days=lookback_days)
-        if len(ranked) < 2:
+        trending = [r["ticker"] for r in ranked if r["ticker"] not in set(required)]
+        if len(required) + len(trending) < 2:
             raise ValueError("Fewer than 2 tickers in this universe have an upward price trend to select from")
         if min_count is not None and min_count == max_count and not constrained:
-            chosen = ranked[: max(2, min(min_count, len(ranked)))]
-            return {"tickers": [r["ticker"] for r in chosen], "selection": chosen, "optimizer": None}
-        candidates = [r["ticker"] for r in ranked]
+            chosen = required + trending[: max(2, min_count) - len(required)]
+            selection = [r for r in ranked if r["ticker"] in set(chosen)]
+            return {"tickers": chosen, "selection": selection, "optimizer": None}
+        candidates = required + trending
     elif not constrained and not bounded:
         return {"tickers": tickers, "selection": None, "optimizer": None}
 
-    optimizer = optimize_selection(candidates, max_volatility, min_return, min_count, max_count)
+    optimizer = optimize_selection(candidates, max_volatility, min_return, min_count, max_count, required)
     chosen = set(optimizer["tickers"])
     selection = [r for r in ranked if r["ticker"] in chosen] if ranked is not None else None
     return {"tickers": optimizer["tickers"], "selection": selection, "optimizer": optimizer}

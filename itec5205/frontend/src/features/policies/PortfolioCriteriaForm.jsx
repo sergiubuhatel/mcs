@@ -1,4 +1,5 @@
 import Req from "../../components/Req";
+import TickerPicker from "../../components/TickerPicker";
 
 // The same options as "Generate low-risk / high-return portfolio with RL"
 // (RLTrainingPanel), saved. Blank limits / counts = no limit / auto.
@@ -56,6 +57,14 @@ export default function PortfolioCriteriaForm({ value, onChange }) {
           <label>Training timesteps<Req /></label>
           <input type="number" step="1000" value={value.timesteps} onChange={(e) => set({ timesteps: e.target.value })} />
         </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <label title="These companies are always part of the portfolio, as long as they pass the earlier steps">Mandatory stocks</label>
+          <TickerPicker
+            value={value.required_tickers || []}
+            onChange={(required_tickers) => set({ required_tickers })}
+            placeholder="none — type a ticker or company name, then Enter"
+          />
+        </div>
         {value.mode === "subset" && (
           <div>
             <label>Trend window<Req /></label>
@@ -73,7 +82,8 @@ export default function PortfolioCriteriaForm({ value, onChange }) {
       <p className="muted" style={{ margin: 0 }}>
         With any limit or company count set, a mean-variance optimizer picks the companies first; the PPO agent then trains on
         them, and its weights are blended toward the optimizer's allocation if they miss a limit. Max weight range caps
-        max(weight) − min(weight), e.g. 10 = no two holdings more than 10 percentage points apart.
+        max(weight) − min(weight), e.g. 10 = no two holdings more than 10 percentage points apart. Mandatory stocks are
+        always kept in the portfolio when they reach this step; one dropped by the screen or the forecast filter is ignored.
       </p>
     </div>
   );

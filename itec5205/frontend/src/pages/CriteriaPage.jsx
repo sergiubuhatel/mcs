@@ -30,7 +30,7 @@ function toForm(kind, doc) {
   if (kind === "data") return { ...base, tickers: Array.isArray(base.tickers) ? base.tickers.join(", ") : base.tickers || "" };
   if (kind === "prediction") return { ...base, min_change_pct: nullToBlank(base.min_change_pct) };
   if (kind === "portfolio") {
-    const out = { ...base };
+    const out = { ...base, required_tickers: base.required_tickers || [] };
     for (const k of PORTFOLIO_OPTIONAL) out[k] = nullToBlank(out[k]);
     return out;
   }
@@ -56,7 +56,14 @@ function toPayload(kind, form) {
       reuse_forecasts: form.reuse_forecasts,
     };
   }
-  const out = { ...common, mode: form.mode, trend_window_days: Number(form.trend_window_days), risk_aversion: form.risk_aversion, timesteps: form.timesteps };
+  const out = {
+    ...common,
+    mode: form.mode,
+    trend_window_days: Number(form.trend_window_days),
+    risk_aversion: form.risk_aversion,
+    timesteps: form.timesteps,
+    required_tickers: form.required_tickers || [],
+  };
   for (const k of PORTFOLIO_OPTIONAL) out[k] = blankToNull(form[k]);
   return out;
 }

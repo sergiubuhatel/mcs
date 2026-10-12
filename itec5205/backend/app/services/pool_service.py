@@ -10,18 +10,27 @@ from datetime import datetime, timezone
 from ..db.arango_client import get_db
 
 
-def create_pool(name: str, tickers: list[str], filters: dict | None = None, lineage: dict | None = None) -> dict:
+def create_pool(
+    name: str,
+    tickers: list[str],
+    filters: dict | None = None,
+    lineage: dict | None = None,
+    required_tickers: list[str] | None = None,
+) -> dict:
     """`filters` holds the screener search the pool came from (sector/industry/
     q/ranges, in API units) so the fundamentals check can be re-run later.
-    `lineage` is set only for refined pools (see `refine_pool`)."""
+    `lineage` is set only for refined pools (see `refine_pool`).
+    `required_tickers`: pool companies that must be in its RL portfolio."""
     if not tickers:
         raise ValueError("A pool needs at least one ticker")
     db = get_db()
     key = str(uuid.uuid4())
+    members = [t.upper() for t in tickers]
     doc = {
         "_key": key,
         "name": name,
-        "tickers": [t.upper() for t in tickers],
+        "tickers": members,
+        "required_tickers": [t for t in dict.fromkeys(t.upper() for t in required_tickers or []) if t in set(members)],
         "filters": filters or {},
         "created_at": datetime.now(timezone.utc).isoformat(),
         # Refinement loop: iteration 0 is a pool saved off the screener;
@@ -46,7 +55,11 @@ def get_pool(pool_id: str) -> dict | None:
     return col.get(pool_id) if col.has(pool_id) else None
 
 
-def update_pool(pool_id: str, name: str | None = None, tickers: list[str] | None = None) -> dict | None:
+def update_pool(
+    pool_id: str, name: str | None = None, tickers: list[str] | None = None, required_tickers: list[str] | None = None
+) -> dict | None:
+    """`required_tickers`: companies that must be in the portfolio RL builds
+    from this pool -- kept to those in the pool (also when `tickers` changes)."""
     db = get_db()
     col = db.collection("pools")
     if not col.has(pool_id):
@@ -59,6 +72,11 @@ def update_pool(pool_id: str, name: str | None = None, tickers: list[str] | None
         patch["name"] = name
     if tickers is not None:
         patch["tickers"] = [t.upper() for t in tickers]
+    if tickers is not None or required_tickers is not None:
+        current = col.get(pool_id)
+        members = set(patch.get("tickers", current["tickers"]))
+        wanted = current.get("required_tickers", []) if required_tickers is None else required_tickers
+        patch["required_tickers"] = [t for t in dict.fromkeys(t.upper() for t in wanted) if t in members]
     if patch:
         col.update({"_key": pool_id, **patch})
     return col.get(pool_id)
@@ -82,6 +100,7 @@ def refine_pool(pool_id: str, drop: list[str], reason: dict | None = None, name:
         raise LookupError("Pool not found")
     drop_set = {t.upper() for t in drop}
     kept = [t for t in parent["tickers"] if t not in drop_set]
+    required = [t for t in parent.get("required_tickers", []) if t in set(kept)]
     if len(kept) < 2:
         raise ValueError("Refinement would leave fewer than 2 tickers")
     iteration = parent.get("iteration", 0) + 1
@@ -97,6 +116,7 @@ def refine_pool(pool_id: str, drop: list[str], reason: dict | None = None, name:
             "iteration": iteration,
             "dropped": sorted(drop_set & set(parent["tickers"])),
             "refine_reason": reason or {},
+            "required_tickers": required,
         },
     )
 

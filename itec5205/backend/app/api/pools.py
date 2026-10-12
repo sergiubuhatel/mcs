@@ -29,7 +29,7 @@ def create():
     if not name or not tickers:
         return jsonify({"error": "'name' and 'tickers' are required"}), 400
     try:
-        pool = create_pool(name=name, tickers=tickers, filters=body.get("filters"))
+        pool = create_pool(name=name, tickers=tickers, filters=body.get("filters"), required_tickers=body.get("required_tickers"))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify(pool), 201
@@ -40,10 +40,11 @@ def update(pool_id: str):
     body = request.get_json(force=True) or {}
     name = body.get("name")
     tickers = body.get("tickers")
-    if name is None and tickers is None:
-        return jsonify({"error": "Nothing to update -- pass 'name' and/or 'tickers'"}), 400
+    required = body.get("required_tickers")
+    if name is None and tickers is None and required is None:
+        return jsonify({"error": "Nothing to update -- pass 'name', 'tickers' and/or 'required_tickers'"}), 400
     try:
-        pool = update_pool(pool_id, name=name, tickers=tickers)
+        pool = update_pool(pool_id, name=name, tickers=tickers, required_tickers=required)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     if pool is None:
@@ -79,6 +80,9 @@ def refine(pool_id: str):
         drop = [r["ticker"] for r in board["rows"] if r["signal"] != SIGNAL_STRONG]
     else:
         drop = [t.upper() for t in body.get("drop") or []]
+    if rule:
+        # A rule never drops the pool's mandatory companies.
+        drop = [t for t in drop if t not in set(pool.get("required_tickers", []))]
     if not drop:
         return jsonify({"error": "Nothing to drop for this rule"}), 400
 

@@ -28,19 +28,24 @@ def train_rl_portfolio(
     min_return: float | None = None,
     pool_id: str | None = None,
     max_weight_range: float | None = None,
+    required_tickers: list[str] | None = None,
 ):
     """The optimizer decides how many companies to keep, within the optional
     [min_companies, max_companies] bounds (see `rl_service.select_universe`). `max_volatility` / `min_return`
     are annualized fractions (0.25 = 25%); `max_weight_range` caps
-    max(weight) - min(weight) across the holdings (0.10 = 10 points)."""
+    max(weight) - min(weight) across the holdings (0.10 = 10 points).
+    `required_tickers` must end up in the portfolio -- those that are in the
+    input universe; the rest are ignored and reported."""
     room = self.request.id
     requested = universe or default_universe()
+    mandatory = [t.upper() for t in dict.fromkeys(required_tickers or [])]
+    required = [t for t in mandatory if t in set(requested)]
 
     self.update_state(state="PROGRESS", meta={"stage": "selecting"})
     socketio.emit("rl_progress", {"stage": "selecting"}, room=room)
     chosen = select_universe(
         requested, mode=mode, min_count=min_companies, max_count=max_companies, lookback_days=lookback_days,
-        max_volatility=max_volatility, min_return=min_return,
+        max_volatility=max_volatility, min_return=min_return, required=required,
     )
     universe, selection, optimizer = chosen["tickers"], chosen["selection"], chosen["optimizer"]
     auto_sized = optimizer is not None and (min_companies is None or min_companies != max_companies)
@@ -55,6 +60,15 @@ def train_rl_portfolio(
     )
     constraints = result["constraints"]
     excluded = excluded_for_history(requested, result["tickers"], mode, optimizer is not None, lookback_days)
+    mandatory_report = None
+    if mandatory:
+        mandatory_report = {
+            "requested": mandatory,
+            "included": [t for t in required if t in set(result["tickers"])],
+            "not_in_input": [t for t in mandatory if t not in set(requested)],
+            # In the input but too little price history to train on.
+            "left_out": [t for t in required if t not in set(result["tickers"])],
+        }
     if constraints is not None and optimizer is not None:
         # Whether *any* long-only mix of the candidates meets the limits, and
         # the best that's achievable -- so an unmet limit is explained, not silent.
@@ -75,6 +89,11 @@ def train_rl_portfolio(
         notes += f", min annual return={min_return:.0%}"
     if max_weight_range is not None:
         notes += f", max weight range={max_weight_range:.1%}"
+    if mandatory_report:
+        if mandatory_report["included"]:
+            notes += ", mandatory: " + ", ".join(mandatory_report["included"])
+        if mandatory_report["not_in_input"]:
+            notes += ", mandatory but not in the input (ignored): " + ", ".join(mandatory_report["not_in_input"])
     if excluded:
         notes += ", left out for too little price history: " + ", ".join(
             f"{row['ticker']} ({row['days']} days)" for row in excluded
@@ -106,6 +125,7 @@ def train_rl_portfolio(
             "subset_size_auto": auto_sized,
             "constraints": constraints,
             "excluded": excluded,
+            "mandatory": mandatory_report,
             "pool_id": pool_id,
         }
     )
@@ -119,6 +139,7 @@ def train_rl_portfolio(
         "subset_size_auto": auto_sized,
         "constraints": constraints,
         "excluded": excluded,
+        "mandatory": mandatory_report,
         "min_companies": min_companies,
     }
     socketio.emit("rl_progress", {"stage": "done", **summary}, room=room)

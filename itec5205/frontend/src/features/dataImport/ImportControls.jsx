@@ -138,7 +138,7 @@ export const DEFAULT_IMPORT_OPTIONS = {
 export const defaultImportOptions = () => ({ ...DEFAULT_IMPORT_OPTIONS, ...getSettings().data });
 
 export const parseTickers = (text) =>
-  (text || "").split(",").map((t) => t.trim().toUpperCase()).filter(Boolean);
+  [...new Set((text || "").split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean))];
 
 export const importOptionsInvalid = (v) =>
   (v.scope === "specific" && parseTickers(v.tickers).length === 0) ||

@@ -219,6 +219,24 @@ th.sorted .sort-arrow { opacity: 1; }
 .default-badge { display: inline-flex; align-items: center; gap: 3px; padding: 1px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; background: rgba(37, 99, 235, 0.14); color: #1d4ed8; white-space: nowrap; flex-shrink: 0; }
 .dark .default-badge { color: #93c5fd; }
 .ticker-chip { display: inline-block; padding: 1px 7px; border-radius: 5px; font-size: 0.74rem; font-weight: 500; background: var(--color-bg-tertiary); color: var(--color-text-primary); border: 1px solid var(--color-divider); }
+button.ticker-chip { cursor: pointer; font-family: inherit; line-height: 1.5; display: inline-flex; align-items: center; }
+.ticker-chip.mandatory { background: rgba(217, 119, 6, 0.14); border-color: #d97706; color: #b45309; font-weight: 700; }
+.dark .ticker-chip.mandatory { color: #fbbf24; }
+.ticker-chip.mandatory svg { width: 11px; height: 11px; margin-right: 3px; flex-shrink: 0; }
+.ticker-picker { position: relative; }
+.ticker-picker-box { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 6px; min-height: 38px; border: 1px solid var(--color-divider); border-radius: 6px; background: var(--color-bg-primary); }
+.ticker-picker-box:focus-within { border-color: var(--btn-accent); }
+.ticker-picker-box.disabled { opacity: 0.6; }
+.ticker-picker-box input { flex: 1; min-width: 180px; border: none !important; outline: none; box-shadow: none !important; background: transparent; padding: 4px; }
+.ticker-picker-box .chip-name { margin-left: 5px; }
+.ticker-picker-box .chip-name { font-weight: 400; opacity: 0.85; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ticker-picker-list { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 2px); margin: 0; padding: 4px 0; list-style: none; max-height: 280px; overflow-y: auto; background: var(--color-bg-primary); border: 1px solid var(--color-divider); border-radius: 6px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); }
+.ticker-picker-list li { display: flex; gap: 10px; padding: 6px 10px; cursor: pointer; font-size: 0.85rem; }
+.ticker-picker-list li strong { min-width: 52px; }
+.ticker-picker-list li span { color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ticker-picker-list li.active { background: rgba(37, 99, 235, 0.12); }
+.ticker-picker-list li.empty { cursor: default; color: #dc2626; }
+.dark .ticker-picker-list li.empty { color: #f87171; }
 .count-badge { display: inline-block; min-width: 26px; padding: 1px 7px; border-radius: 6px; font-size: 0.76rem; font-weight: 700; text-align: center; background: rgba(37, 99, 235, 0.14); color: #1d4ed8; font-variant-numeric: tabular-nums; }
 .dark .count-badge { color: #93c5fd; }
 .count-badge.green { background: rgba(22, 163, 74, 0.14); color: #15803d; }
