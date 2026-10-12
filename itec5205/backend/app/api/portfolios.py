@@ -2,6 +2,7 @@
 
 from flask import Blueprint, jsonify, request
 
+from ..services.portfolio_forecast import portfolio_forecast
 from ..services.portfolio_service import (
     compute_performance_series,
     create_portfolio,
@@ -49,6 +50,19 @@ def performance(portfolio_id: str):
     days = int(request.args.get("days", 500))
     series = compute_performance_series(portfolio["holdings"], lookback_days=days)
     return jsonify({"portfolio_id": portfolio_id, "series": series})
+
+
+@bp.get("/<portfolio_id>/forecast")
+def forecast(portfolio_id: str):
+    """The portfolio's expected path (LSTM and ARIMA) and 95% band, from its
+    holdings' stored forecasts -- see services/portfolio_forecast.py."""
+    portfolio = get_portfolio(portfolio_id)
+    if portfolio is None:
+        return jsonify({"error": "Portfolio not found"}), 404
+    result = portfolio_forecast(portfolio["holdings"])
+    if result is None:
+        return jsonify({"error": "None of the holdings has a forecast yet -- run Forecast all"}), 404
+    return jsonify({"portfolio_id": portfolio_id, **result})
 
 
 @bp.put("/<portfolio_id>")

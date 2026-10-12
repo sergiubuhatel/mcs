@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiClient } from "../api/client";
 import { INTERVALS, filterByInterval } from "../utils/dateRanges";
-import { tooltipProps } from "../utils/chartTheme";
 import { useColumnConfig } from "../utils/useColumnConfig";
 import ActionMenu from "../components/ActionMenu";
 import ColumnPicker from "../components/ColumnPicker";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
+import ForecastChart, { FORECAST_COLORS } from "../components/ForecastChart";
 import Modal from "../components/Modal";
 import Req from "../components/Req";
 import { StatTiles } from "../components/PageParts";
@@ -150,6 +149,8 @@ export default function PortfolioDetailPage() {
   const [sortBy, setSortBy] = useState("weight");
   const [sortDir, setSortDir] = useState("desc");
   const [board, setBoard] = useState(null);
+  const [forecast, setForecast] = useState(null); // growth factors from /forecast, or {error}
+  const [showForecast, setShowForecast] = useState(true);
   const [renaming, setRenaming] = useState(null); // name being edited, or null
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("portfolioHoldings", HOLDINGS_COLUMNS);
@@ -177,6 +178,15 @@ export default function PortfolioDetailPage() {
       })
       .catch((err) => setError(apiError(err)));
   }, [id]);
+
+  // Where the portfolio is heading: reloaded whenever the signal board
+  // changes (e.g. after its Forecast all run trained new forecasts).
+  useEffect(() => {
+    apiClient
+      .get(`/api/portfolios/${id}/forecast`)
+      .then((r) => setForecast(r.data))
+      .catch((err) => setForecast({ error: apiError(err) }));
+  }, [id, board]);
 
   const rename = (e) => {
     e.preventDefault();
@@ -231,6 +241,20 @@ export default function PortfolioDetailPage() {
     );
 
   const rangeSeries = filterByInterval(series, range);
+  // Forecast growth factors (1 = today) -> index values from the last point.
+  const lastIndex = series?.length ? series[series.length - 1].value : null;
+  const forecastIndex =
+    forecast && !forecast.error && lastIndex != null
+      ? {
+          dates: forecast.dates,
+          lstm: forecast.lstm.map((g) => g * lastIndex),
+          arima: forecast.arima.map((g) => g * lastIndex),
+          lower: forecast.lower.map((g) => g * lastIndex),
+          upper: forecast.upper.map((g) => g * lastIndex),
+        }
+      : null;
+  const pctOf = (g) => `${g >= 1 ? "+" : ""}${((g - 1) * 100).toFixed(1)}%`;
+  const missingForecasts = forecast && !forecast.error ? [...new Set([...forecast.missing.lstm, ...forecast.missing.arima])] : [];
   const periodChangePct = windowChangePct(rangeSeries);
   const periodVolatility = computeVolatilityFromSeries(rangeSeries);
   // Tiles always use the past year (same window as the 1Y chart / My Portfolios).
@@ -420,7 +444,12 @@ export default function PortfolioDetailPage() {
               <span className="muted">| Expected annual return: <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(portfolio.expected_return)}</strong></span>
             )}
           </div>
-          <div style={{ display: "flex", gap: 4 }}>
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            {forecastIndex && (
+              <label className="muted" style={{ display: "flex", alignItems: "center", gap: 5, marginRight: 8, fontSize: "0.8rem" }} title="Where the portfolio is heading: its holdings' LSTM and ARIMA forecasts with a 95% band">
+                <input type="checkbox" checked={showForecast} onChange={(e) => setShowForecast(e.target.checked)} /> Forecast
+              </label>
+            )}
             {INTERVALS.map((iv) => (
               <button
                 key={iv.key}
@@ -436,21 +465,41 @@ export default function PortfolioDetailPage() {
         {rangeSeries.length === 0 ? (
           <p className="muted">Not enough price history to chart this portfolio yet.</p>
         ) : (
-          <ResponsiveContainer width="100%" height={230}>
-            <AreaChart data={rangeSeries} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="perfFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#2563eb" stopOpacity={0.45} />
-                  <stop offset="100%" stopColor="#2563eb" stopOpacity={0.03} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={40} />
-              <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10 }} width={48} />
-              <Tooltip {...tooltipProps} formatter={(value) => [Number(value).toFixed(2), "Index value"]} />
-              <Area type="monotone" dataKey="value" stroke="#2563eb" strokeWidth={2.5} fill="url(#perfFill)" dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <ForecastChart
+            history={rangeSeries}
+            forecast={showForecast ? forecastIndex : null}
+            format={(v) => Number(v).toFixed(1)}
+            historyName="Index value"
+            area
+            height={280}
+          />
+        )}
+        {showForecast && forecast && !forecast.error && (
+          <div className="forecast-strip">
+            <span className="muted">Forecast from {forecast.data_end ? `the ${forecast.data_end} close` : "the last close"}:</span>
+            {Object.entries(forecast.horizons).map(([h, v]) => (
+              <span key={h} className="forecast-chip" title={`${h} (${v.date}): ARIMA 95% band ${pctOf(v.lower)} to ${pctOf(v.upper)}`}>
+                <strong>{h}</strong>
+                <span style={{ color: FORECAST_COLORS.lstm }}>LSTM {pctOf(v.lstm)}</span>
+                <span style={{ color: FORECAST_COLORS.arima }}>ARIMA {pctOf(v.arima)}</span>
+                <span className="muted">95%: {pctOf(v.lower)} … {pctOf(v.upper)}</span>
+              </span>
+            ))}
+            <span
+              className="help-dot"
+              role="img"
+              title="Each holding's stored LSTM and ARIMA forecast, combined with the portfolio weights. The band is ARIMA's 95% interval for the whole portfolio: each stock's interval combined using how the holdings moved together over the past year (correlation), so it is narrower than the stocks' bands added up."
+              aria-label="How the portfolio forecast is computed"
+            >?</span>
+          </div>
+        )}
+        {missingForecasts.length > 0 && (
+          <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.8rem" }}>
+            No forecast yet for {missingForecasts.join(", ")} — counted as flat, with a band from their past-year volatility. Run Forecast all in the signal board below.
+          </p>
+        )}
+        {forecast?.error && (
+          <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.8rem" }}>{forecast.error}</p>
         )}
       </div>
 

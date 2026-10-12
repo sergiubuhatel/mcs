@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiClient } from "../api/client";
+import ForecastChart from "../components/ForecastChart";
 import ForecastPanels from "../features/predictions/ForecastPanels";
 import { INTERVALS, filterByInterval } from "../utils/dateRanges";
-import { tooltipProps } from "../utils/chartTheme";
 import BackButton from "../layout/BackButton";
 import { getSettings } from "../features/settings/settings";
 
@@ -50,6 +49,8 @@ export default function CompanyDetailPage() {
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState(null);
   const [range, setRange] = useState(() => getSettings().general.chart_range);
+  const [forecast, setForecast] = useState(null); // {dates, lstm, arima, lower, upper} or null
+  const [showForecast, setShowForecast] = useState(true);
 
   useEffect(() => {
     setDetail(null);
@@ -58,6 +59,26 @@ export default function CompanyDetailPage() {
       .get(`/api/companies/${ticker}`)
       .then((res) => setDetail(res.data))
       .catch((err) => setError(err.response?.data?.error || err.message));
+    // Stored LSTM / ARIMA forecasts, drawn after the history with ARIMA's 95% band.
+    setForecast(null);
+    const optional = (url) => apiClient.get(url).then((r) => r.data).catch(() => null);
+    Promise.all([optional(`/api/predictions/${ticker}`), optional(`/api/arima/${ticker}`)]).then(([lstm, arima]) => {
+      const ref = arima?.forecast?.length ? arima : lstm;
+      if (!ref?.forecast?.length) return;
+      const byDate = (doc, key) => Object.fromEntries((doc?.forecast || []).map((p) => [p.date, p[key]]));
+      const l = byDate(lstm, "predicted_close");
+      const a = byDate(arima, "predicted_close");
+      const lo = byDate(arima, "lower_95");
+      const hi = byDate(arima, "upper_95");
+      const dates = ref.forecast.map((p) => p.date);
+      setForecast({
+        dates,
+        lstm: lstm ? dates.map((d) => l[d]) : null,
+        arima: arima ? dates.map((d) => a[d]) : null,
+        lower: arima ? dates.map((d) => lo[d]) : null,
+        upper: arima ? dates.map((d) => hi[d]) : null,
+      });
+    });
   }, [ticker]);
 
 
@@ -119,7 +140,7 @@ export default function CompanyDetailPage() {
           <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-                <h3 style={{ margin: 0 }}>Price history</h3>
+                <h3 style={{ margin: 0 }}>Price history{forecast && showForecast ? " and forecast" : ""}</h3>
                 {periodChangePct !== null && (
                   <span style={{ color: changeColor(periodChangePct), fontWeight: 600 }}>
                     {periodChangePct > 0 ? "+" : ""}{periodChangePct.toFixed(2)}% ({range})
@@ -129,7 +150,12 @@ export default function CompanyDetailPage() {
                   <span className="muted">Volatility ({range}): <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(periodVolatility)}</strong></span>
                 )}
               </div>
-              <div style={{ display: "flex", gap: 4 }}>
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                {forecast && (
+                  <label className="muted" style={{ display: "flex", alignItems: "center", gap: 5, marginRight: 8, fontSize: "0.8rem" }} title="LSTM and ARIMA forecasts with ARIMA's 95% interval">
+                    <input type="checkbox" checked={showForecast} onChange={(e) => setShowForecast(e.target.checked)} /> Forecast
+                  </label>
+                )}
                 {INTERVALS.map((iv) => (
                   <button
                     key={iv.key}
@@ -142,15 +168,18 @@ export default function CompanyDetailPage() {
                 ))}
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={rangeHistory}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={40} />
-                <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10 }} />
-                <Tooltip {...tooltipProps} formatter={(value) => [`$${Number(value).toFixed(2)}`, "Close"]} />
-                <Line type="monotone" dataKey="close" stroke="#2563eb" strokeWidth={2.5} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+            <ForecastChart
+              history={rangeHistory.map((h) => ({ date: h.date, value: h.close }))}
+              forecast={showForecast ? forecast : null}
+              format={(v) => `$${Number(v).toFixed(2)}`}
+              historyName="Close"
+              height={300}
+            />
+            {forecast && showForecast && (
+              <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.8rem" }}>
+                Dashed: stored LSTM and ARIMA forecasts; shaded: ARIMA&apos;s 95% interval. Retrain them below.
+              </p>
+            )}
           </div>
         );
       })()}
