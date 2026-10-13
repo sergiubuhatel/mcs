@@ -12,6 +12,7 @@ import {
   SearchIcon,
   TrendChartIcon,
 } from "../layout/icons";
+import { ALL_RESULTS } from "../features/companies/companiesSaga";
 import { filterByInterval } from "../utils/dateRanges";
 import { getSettings, tickerList } from "../features/settings/settings";
 
@@ -296,7 +297,7 @@ function RecentPredictions({ horizonKey, onOpen, refreshKey, onLoaded }) {
   const [showAll, setShowAll] = useState(false);
   useEffect(() => {
     apiClient
-      .get("/api/predictions/recent", { params: { limit: showAll ? 600 : 6 } })
+      .get("/api/predictions/recent", { params: { limit: showAll ? ALL_RESULTS : 6 } })
       .then((r) => {
         setData(r.data);
         onLoaded?.(r.data.predictions);

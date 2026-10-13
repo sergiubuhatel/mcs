@@ -22,6 +22,8 @@ INDEXES = {
 # the database ("imported" -- refreshes them; with existing="skip" it's a no-op).
 UNIVERSES = {**INDEXES, "imported": {"label": "All imported"}}
 DEFAULT_UNIVERSE = "sp500"
+# Most rows one request may ask for ("all results"): above any index size.
+MAX_RESULTS = 5000
 EXISTING_MODES = ("skip", "update", "reimport")
 
 

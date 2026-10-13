@@ -4,7 +4,7 @@ debt indicators, and inspect one company's price history + fundamentals.
 
 from flask import Blueprint, jsonify, request
 
-from ..services.universes import INDEXES
+from ..services.universes import INDEXES, MAX_RESULTS
 from ..services.screening import FILTERABLE_RANGES, get_company_detail, list_industries, list_sectors, search_companies
 
 bp = Blueprint("companies", __name__, url_prefix="/api/companies")
@@ -38,7 +38,7 @@ def list_companies():
         ranges=ranges,
         sort_by=args.get("sort_by", "market_cap"),
         sort_dir=args.get("sort_dir", "desc"),
-        limit=min(int(args.get("limit", 50)), 600),
+        limit=min(int(args.get("limit", 50)), MAX_RESULTS),
         offset=int(args.get("offset", 0)),
     )
     return jsonify(result)

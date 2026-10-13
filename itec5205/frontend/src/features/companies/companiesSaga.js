@@ -56,6 +56,9 @@ export function buildParams(filters) {
   return params;
 }
 
+// `limit` meaning "every result" (the API caps at the same number).
+export const ALL_RESULTS = 5000;
+
 const SIGNAL_RANK = { Strong: 3, Mixed: 2, Weak: 1, Avoid: 0 };
 
 function* handleFetch() {
@@ -67,7 +70,7 @@ function* handleFetch() {
       // every result in the requested order, then filter / sort and page here.
       const signals = yield select((state) => state.companies.signals);
       const bySignal = filters.sortBy === "signal";
-      const params = { ...buildParams(filters), limit: 600, offset: 0 };
+      const params = { ...buildParams(filters), limit: ALL_RESULTS, offset: 0 };
       if (bySignal) Object.assign(params, { sort_by: "market_cap", sort_dir: "desc" }); // tie-break
       const { data } = yield call(apiClient.get, "/api/companies", { params });
       let rows = filters.signal ? data.results.filter((r) => signals[r.ticker] === filters.signal) : data.results;

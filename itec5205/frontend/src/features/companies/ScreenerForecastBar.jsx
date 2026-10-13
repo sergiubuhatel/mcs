@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { apiClient } from "../../api/client";
 import { ArrowDownRightIcon, BarChartIcon, CheckIcon, MixedIcon, TrendDownIcon, TrendChartIcon, TrendUpIcon } from "../../layout/icons";
 import { progressText } from "../signals/SignalBoard";
-import { buildParams, screenCriteria } from "./companiesSaga";
+import { ALL_RESULTS, buildParams, screenCriteria } from "./companiesSaga";
 import { fetchRequested, selectTickers, setFilters, setSignals } from "./companiesSlice";
 import { getSettings } from "../settings/settings";
 
@@ -11,7 +11,7 @@ const RUN_KEY = "screenerForecastRun";
 
 // Every ticker matching the current search (all pages, not just the visible one).
 async function allResultTickers(filters) {
-  const { data } = await apiClient.get("/api/companies", { params: { ...buildParams(filters), limit: 600, offset: 0 } });
+  const { data } = await apiClient.get("/api/companies", { params: { ...buildParams(filters), limit: ALL_RESULTS, offset: 0 } });
   return data.results.map((r) => r.ticker);
 }
 

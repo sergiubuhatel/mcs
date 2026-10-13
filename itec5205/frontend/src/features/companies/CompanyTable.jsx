@@ -5,7 +5,7 @@ import { fetchRequested, setFilters, toggleSelectAll, toggleSelected } from "./c
 import { BookmarkPlusIcon, DownloadIcon, FilterIcon, ListIcon, SpinnerIcon } from "../../layout/icons";
 import { apiClient } from "../../api/client";
 import { SearchBox } from "../../components/PageParts";
-import { buildParams } from "./companiesSaga";
+import { ALL_RESULTS, buildParams } from "./companiesSaga";
 import SavePoolForm from "../pools/SavePoolForm";
 import { sectorColor } from "../../utils/sectorColors";
 import { useColumnConfig } from "../../utils/useColumnConfig";
@@ -230,7 +230,7 @@ export default function CompanyTable() {
   const exportCsv = async () => {
     setExporting(true);
     try {
-      const { data } = await apiClient.get("/api/companies", { params: { ...buildParams(filters), limit: 600, offset: 0 } });
+      const { data } = await apiClient.get("/api/companies", { params: { ...buildParams(filters), limit: ALL_RESULTS, offset: 0 } });
       let rows = data.results;
       if (filters.signal) rows = rows.filter((r) => signals[r.ticker] === filters.signal);
       const cols = visibleColumns.filter((c) => c.csv);
@@ -364,7 +364,8 @@ export default function CompanyTable() {
               <option value={50}>50</option>
               <option value={100}>100</option>
               <option value={250}>250</option>
-              <option value={600}>600 (all)</option>
+              <option value={600}>600</option>
+              <option value={1000}>1000</option>
             </select>
           </label>
           <button

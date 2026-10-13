@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiClient } from "../api/client";
+import { ALL_RESULTS } from "../features/companies/companiesSaga";
 import { CheckIcon, CloseIcon } from "../layout/icons";
 
 const MAX_SUGGESTIONS = 8;
@@ -9,7 +10,7 @@ let companiesPromise = null;
 export function loadCompanies() {
   if (!companiesPromise) {
     companiesPromise = apiClient
-      .get("/api/companies", { params: { limit: 600, offset: 0, sort_by: "ticker", sort_dir: "asc" } })
+      .get("/api/companies", { params: { limit: ALL_RESULTS, offset: 0, sort_by: "ticker", sort_dir: "asc" } })
       .then(({ data }) => data.results.map((r) => ({ ticker: r.ticker, name: r.name || "", price: r.current_price ?? null })))
       .catch((err) => {
         companiesPromise = null; // retry next time

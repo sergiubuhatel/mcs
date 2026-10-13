@@ -10,6 +10,7 @@ from flask import Blueprint, jsonify, request
 from ..db.arango_client import get_db
 from ..services.horizons import MAX_HORIZON_DAYS
 from ..services.lstm_service import DEFAULT_LOOKBACK_DAYS
+from ..services.universes import MAX_RESULTS
 from ..tasks.celery_app import celery_app
 from ..tasks.predict_tasks import train_lstm_prediction
 
@@ -51,9 +52,9 @@ def status(task_id: str):
 @bp.get("/recent")
 def recent_predictions():
     """Tickers with a stored LSTM and/or ARIMA forecast, most recently
-    trained first (``?limit=``, default 8, max 600), with each model's
+    trained first (``?limit=``, default 8, max MAX_RESULTS), with each model's
     per-horizon changes -- for the Price Forecasts page's history list."""
-    limit = max(1, min(int(request.args.get("limit", 8)), 600))
+    limit = max(1, min(int(request.args.get("limit", 8)), MAX_RESULTS))
     rows = list(get_db().aql.execute(
         """
         LET tickers = UNION_DISTINCT(
