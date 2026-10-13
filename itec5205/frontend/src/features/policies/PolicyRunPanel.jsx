@@ -93,8 +93,8 @@ function StepCard({ step, data, run }) {
   if (step.key === "data" && data?.requested != null) {
     if (data.status === "done") {
       body = data.imported ? `Imported ${data.imported}${data.failed ? `, ${data.failed} failed` : ""}` : "Nothing to import";
-      if (data.up_to_date) body += ` · ${data.up_to_date} already up to date`;
-    } else if (data.total) body = `Importing ${data.completed}/${data.total}${data.up_to_date ? ` · ${data.up_to_date} up to date` : ""}`;
+      if (data.up_to_date) body += ` · ${data.up_to_date} skipped (already imported or up to date)`;
+    } else if (data.total) body = `Importing ${data.completed}/${data.total}${data.up_to_date ? ` · ${data.up_to_date} skipped` : ""}`;
   }
   if (status === "skipped" && KINDS[step.kind]?.skipped) body = KINDS[step.kind].skipped;
   if (step.key === "screen" && data?.tickers != null) body = `${data.tickers} companies matched`;

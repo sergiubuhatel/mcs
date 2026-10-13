@@ -185,7 +185,7 @@ function Summary({ refreshKey }) {
           color: "#10b981",
           value: fmtInt(s.companies),
           label: "Companies imported",
-          sub: Object.values(s.universes || {}).map((u) => `${u.label} ${fmtInt(u.imported)} / ${fmtInt(u.size)}`).join(" · ") || "companies with data",
+          sub: ["sp500", "russell3000"].map((k) => s.universes?.[k]).filter(Boolean).map((u) => `${u.label} ${fmtInt(u.imported)} / ${fmtInt(u.size)}`).join(" · ") || "companies with data",
         },
         { icon: BarChartIcon, color: "#3b82f6", value: fmtInt(s.price_rows), label: "Daily prices", sub: `across ${s.tickers_with_prices} tickers` },
         { icon: ClockIcon, color: "#8b5cf6", value: years ? `${years.toFixed(1)} years` : "–", label: "History", sub: `${fmtDate(s.first_date)} – ${fmtDate(s.last_date)}` },
