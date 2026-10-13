@@ -123,10 +123,12 @@ export function ImportStatus() {
   );
 }
 
-// Index lists a whole-index import can cover (backend services/universes.py).
+// Lists a whole-list import can cover (backend services/universes.py):
+// an index, or every company already in the database.
 export const UNIVERSES = {
-  sp500: { label: "S&P 500", size: "~503" },
-  russell3000: { label: "Russell 3000", size: "~2,590" },
+  sp500: { label: "S&P 500", option: "All S&P 500 companies (~503 tickers)" },
+  russell3000: { label: "Russell 3000", option: "All Russell 3000 companies (~2,590 tickers)" },
+  imported: { label: "All imported", option: "All imported companies" },
 };
 
 // What an import does with companies already in the database.
@@ -163,8 +165,12 @@ export const defaultImportOptions = () => {
 export const parseTickers = (text) =>
   [...new Set((text || "").split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean))];
 
+// Refreshing the companies already imported while skipping them imports nothing.
+const skipsEverything = (v) => v.scope === "all" && v.universe === "imported" && existingMode(v) === "skip";
+
 export const importOptionsInvalid = (v) =>
   (v.scope === "specific" && parseTickers(v.tickers).length === 0) ||
+  skipsEverything(v) ||
   (!v.import_history && !v.import_statistics && !v.import_calculated_stats);
 
 const checkLabel = { display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" };
@@ -195,9 +201,12 @@ export function ImportOptionsFields({ value, onChange, name = "import-scope" }) 
               type="radio"
               name={name}
               checked={value.scope === "all" && (value.universe || "sp500") === key}
-              onChange={() => set({ scope: "all", universe: key })}
+              onChange={() =>
+                // Refreshing what's imported: "Skip them" would leave nothing to do.
+                set({ scope: "all", universe: key, ...(key === "imported" && existingMode(value) === "skip" ? { existing: "update" } : {}) })
+              }
             />
-            All {u.label} companies ({u.size} tickers)
+            {u.option}
           </label>
         ))}
         <label style={checkLabel}>
@@ -259,7 +268,11 @@ export function ImportOptionsFields({ value, onChange, name = "import-scope" }) 
       </div>
       {importOptionsInvalid(value) && (
         <p className="error-text" style={{ margin: "4px 0" }}>
-          {value.scope === "specific" && parseTickers(value.tickers).length === 0 ? "List the tickers to import." : "Pick at least one thing to import."}
+          {value.scope === "specific" && parseTickers(value.tickers).length === 0
+            ? "List the tickers to import."
+            : skipsEverything(value)
+              ? "All imported companies with \"Skip them\" imports nothing: pick \"Catch up if out of date\" or \"Re-import them\"."
+              : "Pick at least one thing to import."}
         </p>
       )}
     </div>

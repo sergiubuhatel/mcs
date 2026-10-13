@@ -13,10 +13,14 @@ from .. import config
 from ..db.arango_client import get_db
 from .yahoo_import import get_up_to_date_tickers, read_tickers
 
-UNIVERSES = {
+# Index ticker lists (also the screener's Index filter).
+INDEXES = {
     "sp500": {"label": "S&P 500", "file": lambda: config.TICKERS_FILE},
     "russell3000": {"label": "Russell 3000", "file": lambda: config.RUSSELL3000_FILE},
 }
+# What a whole-list import can cover: an index, or every company already in
+# the database ("imported" -- refreshes them; with existing="skip" it's a no-op).
+UNIVERSES = {**INDEXES, "imported": {"label": "All imported"}}
 DEFAULT_UNIVERSE = "sp500"
 EXISTING_MODES = ("skip", "update", "reimport")
 
@@ -24,6 +28,8 @@ EXISTING_MODES = ("skip", "update", "reimport")
 def universe_tickers(universe: str) -> list[str]:
     if universe not in UNIVERSES:
         raise ValueError(f"'universe' must be one of {', '.join(UNIVERSES)}")
+    if universe == "imported":
+        return sorted(imported_tickers())
     return read_tickers(UNIVERSES[universe]["file"]())
 
 

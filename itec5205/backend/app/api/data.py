@@ -11,7 +11,7 @@ from celery.result import AsyncResult
 from flask import Blueprint, jsonify, request
 
 from ..db.arango_client import get_db
-from ..services.universes import DEFAULT_UNIVERSE, UNIVERSES, existing_mode, imported_tickers, tickers_to_import, universe_tickers
+from ..services.universes import DEFAULT_UNIVERSE, INDEXES, existing_mode, imported_tickers, tickers_to_import, universe_tickers
 from ..services.yahoo_import import _last_closed_session_date
 from ..tasks.celery_app import celery_app
 from ..tasks.import_tasks import import_sp500_data
@@ -101,7 +101,7 @@ def data_summary():
     )), None)
     have = imported_tickers()
     universes = {}
-    for key, u in UNIVERSES.items():
+    for key, u in INDEXES.items():
         try:
             listed = universe_tickers(key)
         except OSError:

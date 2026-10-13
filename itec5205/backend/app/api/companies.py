@@ -4,7 +4,7 @@ debt indicators, and inspect one company's price history + fundamentals.
 
 from flask import Blueprint, jsonify, request
 
-from ..services.universes import UNIVERSES
+from ..services.universes import INDEXES
 from ..services.screening import FILTERABLE_RANGES, get_company_detail, list_industries, list_sectors, search_companies
 
 bp = Blueprint("companies", __name__, url_prefix="/api/companies")
@@ -28,8 +28,8 @@ def list_companies():
             ranges[key] = (lo, hi)
 
     index = args.get("index") or None
-    if index and index not in UNIVERSES:
-        return jsonify({"error": f"'index' must be one of {', '.join(UNIVERSES)}"}), 400
+    if index and index not in INDEXES:
+        return jsonify({"error": f"'index' must be one of {', '.join(INDEXES)}"}), 400
     result = search_companies(
         index=index,
         sector=args.get("sector") or None,

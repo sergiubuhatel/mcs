@@ -23,7 +23,7 @@ from datetime import date, datetime, timezone
 
 from ..db.arango_client import get_db
 from .rl_service import WEIGHT_RANGE_BASES
-from .universes import DEFAULT_UNIVERSE, UNIVERSES, existing_mode
+from .universes import DEFAULT_UNIVERSE, INDEXES, UNIVERSES, existing_mode
 
 KINDS = ("data", "screen", "prediction", "portfolio")
 OPTIONAL_KINDS = ("data", "prediction")
@@ -102,8 +102,8 @@ def _normalize_screen(body: dict) -> dict:
         if lo is not None or hi is not None:
             ranges[key] = [lo, hi]
     index = screen.get("index") or ""
-    if index and index not in UNIVERSES:
-        raise ValueError(f"'index' must be one of {', '.join(UNIVERSES)}")
+    if index and index not in INDEXES:
+        raise ValueError(f"'index' must be one of {', '.join(INDEXES)}")
     return {
         "filters": body.get("filters") or {},
         "screen": {

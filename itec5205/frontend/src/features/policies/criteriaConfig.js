@@ -178,7 +178,8 @@ export function uniqueName(name, items, ownId = null) {
 function describeData(c) {
   const what = [c.import_history && "history", c.import_statistics && "statistics", c.import_calculated_stats && "calculated stats"].filter(Boolean);
   const tickers = Array.isArray(c.tickers) ? c.tickers.join(", ") : c.tickers;
-  const scope = c.scope === "specific" ? tickers || "no tickers" : `All ${universeLabel(c)}`;
+  const label = universeLabel(c);
+  const scope = c.scope === "specific" ? tickers || "no tickers" : label.startsWith("All") ? label : `All ${label}`;
   return { scope, years: `${c.years}Y`, what: what.join(" + ") || "nothing", existing: existingMode(c) };
 }
 
