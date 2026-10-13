@@ -17,7 +17,7 @@ import { KINDS, criteriaDefaults, autoCriteriaName, blankToNull, describeCriteri
 import ScreenCriteriaForm from "../features/policies/ScreenCriteriaForm";
 import PredictionCriteriaForm from "../features/policies/PredictionCriteriaForm";
 import PortfolioCriteriaForm from "../features/policies/PortfolioCriteriaForm";
-import { ImportOptionsFields, importOptionsInvalid, parseTickers } from "../features/dataImport/ImportControls";
+import { ImportOptionsFields, existingMode, importOptionsInvalid, parseTickers } from "../features/dataImport/ImportControls";
 
 const apiError = (err) => err.response?.data?.error || err.message;
 // Portfolio criteria fields where blank = no limit / auto.
@@ -27,7 +27,14 @@ const PORTFOLIO_OPTIONAL = ["max_volatility_pct", "min_return_pct", "max_weight_
 function toForm(kind, doc) {
   const defaults = criteriaDefaults();
   const base = { ...defaults[kind], ...(doc || {}) };
-  if (kind === "data") return { ...base, tickers: Array.isArray(base.tickers) ? base.tickers.join(", ") : base.tickers || "" };
+  if (kind === "data") {
+    return {
+      ...base,
+      universe: base.universe || "sp500",
+      existing: doc ? existingMode(doc) : existingMode(base), // older criteria only have only_missing
+      tickers: Array.isArray(base.tickers) ? base.tickers.join(", ") : base.tickers || "",
+    };
+  }
   if (kind === "prediction") return { ...base, min_change_pct: nullToBlank(base.min_change_pct) };
   if (kind === "portfolio") {
     const out = { ...base, required_tickers: base.required_tickers || [], excluded_tickers: base.excluded_tickers || [] };
@@ -42,8 +49,8 @@ function toPayload(kind, form) {
   const common = { name: form.name.trim(), description: form.description || "" };
   if (kind === "screen") return { ...common, filters: form.filters, screen: screenCriteria(form.filters) };
   if (kind === "data") {
-    const { scope, years, only_missing, import_history, import_statistics, import_calculated_stats } = form;
-    return { ...common, scope, tickers: parseTickers(form.tickers), years, only_missing, import_history, import_statistics, import_calculated_stats };
+    const { scope, universe, years, existing, import_history, import_statistics, import_calculated_stats } = form;
+    return { ...common, scope, universe, tickers: parseTickers(form.tickers), years, existing, import_history, import_statistics, import_calculated_stats };
   }
   if (kind === "prediction") {
     return {
@@ -75,7 +82,7 @@ function DataCriteriaForm({ value, onChange }) {
     <div>
       <ImportOptionsFields value={value} onChange={onChange} name="data-criteria-scope" />
       <p className="muted" style={{ margin: 0 }}>
-        Runs as step 1 of every policy that uses it; with "only what's missing", a run on already up-to-date data skips the import.
+        Runs as step 1 of every policy that uses it; when every company is already imported (or up to date), the run skips the import.
       </p>
     </div>
   );

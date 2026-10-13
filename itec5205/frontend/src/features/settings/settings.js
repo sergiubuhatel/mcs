@@ -13,8 +13,9 @@ export const DEFAULT_SETTINGS = {
   },
   data: {
     scope: "all",
+    universe: "sp500", // whole-index list: "sp500" | "russell3000"
     years: 10,
-    only_missing: true,
+    existing: "skip", // companies already imported: "skip" | "update" | "reimport"
     import_history: true,
     import_statistics: true,
     import_calculated_stats: true,
@@ -123,7 +124,7 @@ async function applyScreening(dispatch, s) {
     try {
       const { data } = await apiClient.get(`/api/criteria/screen/${s.start_criteria_id}`);
       const f = (data.criteria || data).filters || {};
-      Object.assign(filters, { sector: f.sector || "", industry: f.industry || "", q: f.q || "", ranges: f.ranges || {}, units: f.units || {} });
+      Object.assign(filters, { index: f.index || "", sector: f.sector || "", industry: f.industry || "", q: f.q || "", ranges: f.ranges || {}, units: f.units || {} });
     } catch {
       // deleted criteria: start with an empty search
     }

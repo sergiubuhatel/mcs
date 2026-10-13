@@ -14,6 +14,7 @@ import {
   SearchIcon,
 } from "../layout/icons";
 import { MODEL_RULES, TRAINING_UNITS } from "../features/policies/criteriaConfig";
+import { EXISTING_MODES, UNIVERSES } from "../features/dataImport/ImportControls";
 import { DEFAULT_SETTINGS, getSavedSettings, getSettings, saveSettings } from "../features/settings/settings";
 import { INTERVALS } from "../utils/dateRanges";
 
@@ -65,8 +66,9 @@ const SECTIONS = [
     color: "#10b981",
     text: "The Market Data import form and new Data Filters.",
     fields: [
+      { key: "universe", label: "Companies to import", type: "select", options: opts(Object.entries(UNIVERSES).map(([value, u]) => ({ value, label: `All ${u.label} (${u.size})` }))), help: "Index list the import form starts with (S&P 500 unless you change it)." },
+      { key: "existing", label: "Companies already imported", type: "select", options: opts(EXISTING_MODES.map(({ value, label }) => ({ value, label }))), help: "Skip them, catch them up when their prices are behind, or re-import them." },
       { key: "years", label: "History since", type: "select", options: opts([1, 2, 5, 10, 15, 20].map((y) => ({ value: y, label: `${y} year${y === 1 ? "" : "s"} ago` }))), number: true, help: "How far back price history starts (same choices as the import form)." },
-      { key: "only_missing", label: "Only import what's missing", type: "toggle", help: "Skip tickers whose prices are already up to date." },
       { key: "import_history", label: "Import price history", type: "toggle", help: "Daily prices from Yahoo Finance." },
       { key: "import_statistics", label: "Import statistics", type: "toggle", help: "Fundamentals: valuation, profitability, debt, growth." },
       { key: "import_calculated_stats", label: "Calculated statistics", type: "toggle", help: "1-year change and volatility computed from the stored prices." },

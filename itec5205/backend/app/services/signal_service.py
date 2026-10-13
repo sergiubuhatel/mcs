@@ -109,9 +109,10 @@ def passes_screen(tickers: list[str], screen: dict | None) -> dict[str, bool] | 
     if not screen:
         return None
     ranges = {k: (v[0], v[1]) for k, v in (screen.get("ranges") or {}).items()}
-    if not (ranges or screen.get("sector") or screen.get("industry") or screen.get("q")):
+    if not (ranges or screen.get("sector") or screen.get("industry") or screen.get("q") or screen.get("index")):
         return None
     hits = search_companies(
+        index=screen.get("index") or None,
         sector=screen.get("sector") or None,
         industry=screen.get("industry") or None,
         query=screen.get("q") or None,

@@ -25,14 +25,14 @@ export const CRITERIA_PAGES = {
       title: "About data criteria",
       text: "A data criteria is the Market Data import form, saved. It is optional on a policy: without one, the run uses the data already stored.",
       features: [
-        { icon: DatabaseIcon, color: "#10b981", title: "Which companies", text: "All 503 S&P 500 tickers, or a list you type." },
+        { icon: DatabaseIcon, color: "#10b981", title: "Which companies", text: "All S&P 500 (503) or Russell 3000 (~2,590) tickers, or a list you type; already-imported companies can be skipped." },
         { icon: ClockIcon, color: "#8b5cf6", title: "How far back", text: "1 to 20 years of daily prices. Forecasts train on 10 years by default." },
         { icon: BarChartIcon, color: "#3b82f6", title: "What to import", text: "Price history, statistics and calculated statistics, in any combination." },
         { icon: DownloadIcon, color: "#f59e0b", title: "Only what's missing", text: "Skips tickers already up to date, so a run on fresh data imports nothing." },
       ],
     },
     tips: [
-      { title: "Keep one everyday set", text: "All S&P 500, 10 years, only what's missing: cheap to run before every policy." },
+      { title: "Keep one everyday set", text: "All S&P 500, 10 years, catch up if out of date: cheap to run before every policy." },
       { title: "Mark it as default", text: "Use ⋯ → Set as default; new policies then start with it selected." },
       { title: "Leave it off when you're iterating", text: "A policy without data criteria skips the import entirely." },
     ],

@@ -15,7 +15,6 @@ from datetime import date, datetime, timezone
 
 from celery.result import AsyncResult
 
-from .. import config
 from ..db.arango_client import get_db
 from ..services.horizons import MAX_HORIZON_DAYS
 from ..services.lstm_service import MIN_HISTORY_DAYS
@@ -30,7 +29,7 @@ from ..services.policy_service import (
 )
 from ..services.pool_service import create_pool, refine_pool
 from ..services.screening import search_companies
-from ..services.yahoo_import import get_up_to_date_tickers, read_tickers
+from ..services.universes import DEFAULT_UNIVERSE, existing_mode, tickers_to_import, universe_tickers
 from .arima_tasks import train_arima_prediction
 from .celery_app import celery_app
 from .import_tasks import import_sp500_data
@@ -104,19 +103,17 @@ def run_policy(self, run_id: str):
             step("data", 1, "No data criteria -- using the data already stored", status="skipped")
         else:
             step("data", 0, "Checking what needs importing...", status="running")
-            wanted = data_c["tickers"] if data_c["scope"] == "specific" else read_tickers(config.TICKERS_FILE)
-            to_import = wanted
-            if data_c["only_missing"] and data_c["import_history"]:
-                up_to_date = get_up_to_date_tickers()
-                to_import = [t for t in wanted if t not in up_to_date]
+            universe = data_c.get("universe") or DEFAULT_UNIVERSE
+            wanted = data_c["tickers"] if data_c["scope"] == "specific" else universe_tickers(universe)
+            to_import = tickers_to_import(wanted, existing_mode(data_c), data_c["import_history"])
             skipped = len(wanted) - len(to_import)
             if not to_import:
-                step("data", 1, "Data already up to date", status="done", requested=len(wanted), up_to_date=skipped, imported=0, failed=0)
+                step("data", 1, "Nothing to import: every company is already imported or up to date", status="done", requested=len(wanted), up_to_date=skipped, imported=0, failed=0)
             else:
                 imp = import_sp500_data.delay(
                     tickers=to_import, years=data_c["years"], import_history=data_c["import_history"],
                     import_statistics=data_c["import_statistics"], import_calculated_stats=data_c["import_calculated_stats"],
-                    scope=data_c["scope"], source="policy",
+                    scope=data_c["scope"], source="policy", universe=universe, skipped=len(wanted) - len(to_import),
                 )
                 children.append(imp.id)
                 while True:
@@ -149,6 +146,7 @@ def run_policy(self, run_id: str):
         step("screen", 0, "Searching companies with the screen criteria...", status="running")
         s = screen_c["screen"]
         hits = search_companies(
+            index=s.get("index") or None,
             sector=s.get("sector") or None,
             industry=s.get("industry") or None,
             query=s.get("q") or None,

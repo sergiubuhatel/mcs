@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { apiClient } from "../../api/client";
 import { buildParams } from "../companies/companiesSaga";
-import { FILTER_GROUPS, UNIT_LABELS, UNIT_MULTIPLIERS } from "../companies/filterFields";
+import { FILTER_GROUPS, INDEXES, UNIT_LABELS, UNIT_MULTIPLIERS } from "../companies/filterFields";
 
 // `filters` has the screener's shape (see companiesSlice): percent fields as
 // typed (20 = 20%), unit fields (market cap, FCF) in stored units, plus
@@ -46,7 +46,7 @@ export default function ScreenCriteriaForm({ filters, onChange }) {
   const setUnit = (key, unit) => set({ units: { ...units, [key]: unit } });
 
   const copyFromScreener = () =>
-    set({ sector: screenerFilters.sector, industry: screenerFilters.industry, q: screenerFilters.q, ranges: { ...screenerFilters.ranges } });
+    set({ index: screenerFilters.index || "", sector: screenerFilters.sector, industry: screenerFilters.industry, q: screenerFilters.q, ranges: { ...screenerFilters.ranges } });
 
   return (
     <div>
@@ -62,6 +62,13 @@ export default function ScreenCriteriaForm({ filters, onChange }) {
         <div>
           <label>Search Companies</label>
           <input value={filters.q || ""} onChange={(e) => set({ q: e.target.value })} placeholder="e.g. Apple or AAPL" />
+        </div>
+        <div>
+          <label>Index</label>
+          <select value={filters.index || ""} onChange={(e) => set({ index: e.target.value })}>
+            <option value="">All imported companies</option>
+            {INDEXES.map((i) => <option key={i.value} value={i.value}>{i.label}</option>)}
+          </select>
         </div>
         <div>
           <label>Sector</label>

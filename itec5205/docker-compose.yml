@@ -10,6 +10,7 @@ x-backend-env: &backend-env
   ARANGO_PASSWORD: ${ARANGO_PASSWORD:-root}
   REDIS_URL: redis://redis:6379/0
   TICKERS_FILE: /data/tickers.txt
+  RUSSELL3000_FILE: /data/russell3000.txt
   RL_MODELS_DIR: /data/rl_models
   CORS_ORIGINS: http://localhost:5173,http://localhost:8080
   # One math thread per process: workers run several processes side by side,
@@ -27,6 +28,7 @@ x-backend: &backend
   environment: *backend-env
   volumes:
     - ./tickers.txt:/data/tickers.txt:ro
+    - ./russell3000.txt:/data/russell3000.txt:ro
     - rl_models:/data/rl_models
   depends_on:
     redis:

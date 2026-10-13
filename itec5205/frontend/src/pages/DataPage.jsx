@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { apiClient } from "../api/client";
-import { ImportPanel, ImportStatus } from "../features/dataImport/ImportControls";
+import { ImportPanel, ImportStatus, UNIVERSES } from "../features/dataImport/ImportControls";
 import {
   BarChartIcon,
   ClockIcon,
@@ -32,7 +32,10 @@ const fmtWhen = (iso) =>
 const fmtDate = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "–");
 
 function companiesLabel(run) {
-  if (run.scope === "all") return `S&P 500 (${run.total})`;
+  if (run.scope === "all") {
+    const label = (UNIVERSES[run.universe] || UNIVERSES.sp500).label;
+    return run.skipped ? `${label} (${run.total} new of ${run.total + run.skipped})` : `${label} (${run.total})`;
+  }
   if (run.tickers?.length) return run.tickers.join(", ");
   return `${run.total} companies`;
 }
@@ -53,10 +56,10 @@ function CardHeader({ icon: Icon, color, title, subtitle, action }) {
 }
 
 const TIPS = [
-  { icon: DatabaseIcon, color: "#10b981", title: "Data source", text: "Daily prices and fundamentals from Yahoo Finance, for the 503 S&P 500 tickers." },
+  { icon: DatabaseIcon, color: "#10b981", title: "Data source", text: "Daily prices and fundamentals from Yahoo Finance, for the S&P 500 (503 tickers) or the Russell 3000 (~2,590)." },
   { icon: ClockIcon, color: "#8b5cf6", title: "Time range", text: "Forecasts train on 10 years (~2,515 trading days) by default: import at least 10 years." },
   { icon: BarChartIcon, color: "#f59e0b", title: "Import options", text: "Statistics feed the screener; history and calculated statistics feed charts and forecasts." },
-  { icon: TrendChartIcon, color: "#3b82f6", title: "Missing data", text: "\"Only import what's missing\" re-imports only the tickers behind the last trading day." },
+  { icon: TrendChartIcon, color: "#3b82f6", title: "Already imported", text: "\"Skip them\" imports only new companies; \"Catch up if out of date\" refreshes only those behind the last trading day. Set the default in Settings." },
   { icon: WorkflowIcon, color: "#6366f1", title: "Automate it", text: <>Save these options as a <Link to="/criteria/data">Data Criteria</Link> and a policy imports before every run.</> },
 ];
 
@@ -180,9 +183,9 @@ function Summary({ refreshKey }) {
         {
           icon: DatabaseIcon,
           color: "#10b981",
-          value: `${s.in_universe} / ${s.universe}`,
-          label: "S&P 500 imported",
-          sub: s.companies > s.in_universe ? `+${s.companies - s.in_universe} left the index` : "companies with data",
+          value: fmtInt(s.companies),
+          label: "Companies imported",
+          sub: Object.values(s.universes || {}).map((u) => `${u.label} ${fmtInt(u.imported)} / ${fmtInt(u.size)}`).join(" · ") || "companies with data",
         },
         { icon: BarChartIcon, color: "#3b82f6", value: fmtInt(s.price_rows), label: "Daily prices", sub: `across ${s.tickers_with_prices} tickers` },
         { icon: ClockIcon, color: "#8b5cf6", value: years ? `${years.toFixed(1)} years` : "–", label: "History", sub: `${fmtDate(s.first_date)} – ${fmtDate(s.last_date)}` },

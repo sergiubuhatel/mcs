@@ -34,11 +34,12 @@ export function screenCriteria(filters) {
     ranges[m[1]] = ranges[m[1]] || [null, null];
     ranges[m[1]][m[2] === "min" ? 0 : 1] = value;
   }
-  return { sector: filters.sector || "", industry: filters.industry || "", q: filters.q || "", ranges };
+  return { index: filters.index || "", sector: filters.sector || "", industry: filters.industry || "", q: filters.q || "", ranges };
 }
 
 export function buildParams(filters) {
   const params = {
+    index: filters.index || undefined,
     sector: filters.sector || undefined,
     industry: filters.industry || undefined,
     q: filters.q || undefined,

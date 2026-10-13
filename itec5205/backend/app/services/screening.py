@@ -3,6 +3,7 @@ indicators, backed by a single AQL query joining companies + stock_stats.
 """
 
 from ..db.arango_client import get_db
+from .universes import universe_tickers
 
 # Whitelisted sortable fields -> which merged-document attribute they map to.
 # Only whitelisted values are ever interpolated into the AQL string, so this
@@ -83,6 +84,7 @@ def search_companies(
     industry: str | None = None,
     query: str | None = None,
     ranges: dict[str, tuple[float | None, float | None]] | None = None,
+    index: str | None = None,
     sort_by: str = "market_cap",
     sort_dir: str = "desc",
     limit: int = 50,
@@ -91,7 +93,8 @@ def search_companies(
     """Filter/sort/paginate the company universe.
 
     ``ranges`` maps a key from FILTERABLE_RANGES to a (min, max) tuple; either
-    side may be None to leave that bound open.
+    side may be None to leave that bound open. ``index`` ("sp500" |
+    "russell3000") keeps only companies in that index's ticker list.
     """
     db = get_db()
 
@@ -107,6 +110,9 @@ def search_companies(
     if industry:
         filter_clauses.append("company.industry == @industry")
         bind_vars["industry"] = industry
+    if index:
+        filter_clauses.append("company._key IN @index_tickers")
+        bind_vars["index_tickers"] = universe_tickers(index)
     if query:
         filter_clauses.append("(CONTAINS(UPPER(company.name), UPPER(@query)) OR CONTAINS(UPPER(company._key), UPPER(@query)))")
         bind_vars["query"] = query

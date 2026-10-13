@@ -15,7 +15,8 @@ CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", REDIS_URL)
 SOCKETIO_REDIS_URL = os.environ.get("SOCKETIO_REDIS_URL", REDIS_URL.rsplit("/", 1)[0] + "/1")
 
 # Path is relative to the repo root (mounted the same way in every container).
-TICKERS_FILE = os.environ.get("TICKERS_FILE", "/data/tickers.txt")
+TICKERS_FILE = os.environ.get("TICKERS_FILE", "/data/tickers.txt")  # S&P 500
+RUSSELL3000_FILE = os.environ.get("RUSSELL3000_FILE", "/data/russell3000.txt")
 RL_MODELS_DIR = os.environ.get("RL_MODELS_DIR", "/data/rl_models")
 
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")

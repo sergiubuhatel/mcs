@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { clearFilters, fetchIndustriesRequested, fetchRequested, fetchSectorsRequested, setFilters } from "./companiesSlice";
 import BackButton from "../../layout/BackButton";
 import { ChevronDownIcon, CloseIcon, EraserIcon, SearchIcon, SlidersIcon } from "../../layout/icons";
-import { FILTER_GROUPS, UNIT_LABELS, UNIT_MULTIPLIERS, activeFilters } from "./filterFields";
+import { FILTER_GROUPS, INDEXES, UNIT_LABELS, UNIT_MULTIPLIERS, activeFilters } from "./filterFields";
 import { getSettings } from "../settings/settings";
 
 const EMPTY_UNIT_VALUES = { market_cap: ["", ""], free_cash_flow: ["", ""] };
@@ -63,6 +63,7 @@ export default function CompanyFilters() {
   // Removing a chip clears that one field and re-runs the search.
   const removeFilter = (field) => {
     if (field === "q") dispatch(setFilters({ q: "" }));
+    else if (field === "index") dispatch(setFilters({ index: "" }));
     else if (field === "sector") {
       dispatch(setFilters({ sector: "", industry: "" }));
       dispatch(fetchIndustriesRequested());
@@ -122,7 +123,7 @@ export default function CompanyFilters() {
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Stock Screener</h2>
-          <p className="muted" style={{ margin: 0 }}>Filter S&amp;P 500 companies using fundamental metrics</p>
+          <p className="muted" style={{ margin: 0 }}>Filter S&amp;P 500 and Russell 3000 companies using fundamental metrics</p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button className="btn secondary" type="button" onClick={clear} title="Clear every search field and signal filter"><EraserIcon /> Clear All</button>
@@ -138,6 +139,15 @@ export default function CompanyFilters() {
             <SearchIcon width={15} height={15} />
             <input id="screener-q" value={filters.q} onChange={(e) => dispatch(setFilters({ q: e.target.value }))} placeholder="Search companies (e.g. Apple or AAPL)" />
           </label>
+        </div>
+        <div>
+          <label htmlFor="screener-index">Index</label>
+          <select id="screener-index" value={filters.index || ""} onChange={(e) => dispatch(setFilters({ index: e.target.value }))}>
+            <option value="">All imported companies</option>
+            {INDEXES.map((i) => (
+              <option key={i.value} value={i.value}>{i.label}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label htmlFor="screener-sector">Sector</label>

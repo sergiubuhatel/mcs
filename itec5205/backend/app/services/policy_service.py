@@ -23,6 +23,7 @@ from datetime import date, datetime, timezone
 
 from ..db.arango_client import get_db
 from .rl_service import WEIGHT_RANGE_BASES
+from .universes import DEFAULT_UNIVERSE, UNIVERSES, existing_mode
 
 KINDS = ("data", "screen", "prediction", "portfolio")
 OPTIONAL_KINDS = ("data", "prediction")
@@ -62,6 +63,9 @@ def _normalize_data(body: dict) -> dict:
     scope = body.get("scope", "all")
     if scope not in ("all", "specific"):
         raise ValueError("'scope' must be 'all' or 'specific'")
+    universe = body.get("universe") or DEFAULT_UNIVERSE
+    if universe not in UNIVERSES:
+        raise ValueError(f"'universe' must be one of {', '.join(UNIVERSES)}")
     tickers = body.get("tickers") or []
     if isinstance(tickers, str):
         tickers = tickers.split(",")
@@ -74,12 +78,15 @@ def _normalize_data(body: dict) -> dict:
     flags = {k: bool(body.get(k, True)) for k in ("import_history", "import_statistics", "import_calculated_stats")}
     if not any(flags.values()):
         raise ValueError("Pick at least one of history, statistics, calculated statistics")
+    existing = existing_mode(body)
     return {
         "scope": scope,
+        "universe": universe if scope == "all" else None,
         "tickers": tickers if scope == "specific" else [],
         "years": years,
-        # Like the Data page: only for the full universe, and only with history.
-        "only_missing": bool(body.get("only_missing", True)) and scope == "all",
+        # What to do with companies already in the database (services/universes.py).
+        "existing": existing,
+        "only_missing": existing == "update",  # kept for older readers
         **flags,
     }
 
@@ -94,9 +101,13 @@ def _normalize_screen(body: dict) -> dict:
         lo, hi = _num(lo, field=f"{key} min"), _num(hi, field=f"{key} max")
         if lo is not None or hi is not None:
             ranges[key] = [lo, hi]
+    index = screen.get("index") or ""
+    if index and index not in UNIVERSES:
+        raise ValueError(f"'index' must be one of {', '.join(UNIVERSES)}")
     return {
         "filters": body.get("filters") or {},
         "screen": {
+            "index": index,
             "sector": screen.get("sector") or "",
             "industry": screen.get("industry") or "",
             "q": (screen.get("q") or "").strip(),

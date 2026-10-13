@@ -434,7 +434,7 @@ table.compact th, table.compact td { padding: 4px 8px; }
 
 /* Stock Screener (reference screenshot 2026-10-11): filter groups with
    counts, active-filter chips, Forecast Analysis tiles, results toolbar. */
-.screener-search-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.screener-search-row { display: grid; grid-template-columns: 1.4fr 0.8fr 1fr 1fr; gap: 12px; margin-bottom: 14px; }
 .screener-search-row .search-box input { width: 100%; }
 .screener-search-row select { width: 100%; }
 @media (max-width: 900px) { .screener-search-row { grid-template-columns: 1fr; } }

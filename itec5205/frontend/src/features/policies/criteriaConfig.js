@@ -1,5 +1,5 @@
 import { describeFilters } from "../companies/filterFields";
-import { defaultImportOptions } from "../dataImport/ImportControls";
+import { defaultImportOptions, existingMode, universeLabel } from "../dataImport/ImportControls";
 import { getSettings } from "../settings/settings";
 
 // In run order: a policy imports (data), screens, predicts, then builds the portfolio.
@@ -49,7 +49,7 @@ export function criteriaDefaults() {
     screen: {
       name: "",
       description: "",
-      filters: { sector: "", industry: "", q: "", ranges: {}, units: { market_cap: s.market_cap_unit, free_cash_flow: s.fcf_unit } },
+      filters: { index: "", sector: "", industry: "", q: "", ranges: {}, units: { market_cap: s.market_cap_unit, free_cash_flow: s.fcf_unit } },
     },
     prediction: {
       name: "",
@@ -127,7 +127,7 @@ export function autoCriteriaName(kind, c) {
   if (kind === "data") {
     const d = describeData(c);
     const full = c.import_history && c.import_statistics && c.import_calculated_stats;
-    return `${d.scope} · ${d.years} history${full ? "" : ` · ${d.what}`}${d.missing ? " · only missing" : ""}`;
+    return `${d.scope} · ${d.years} history${full ? "" : ` · ${d.what}`} · ${EXISTING_SHORT[d.existing]}`;
   }
   if (kind === "screen") return describeFilters(c.filters || {}) || "All companies";
   if (kind === "prediction") {
@@ -178,15 +178,22 @@ export function uniqueName(name, items, ownId = null) {
 function describeData(c) {
   const what = [c.import_history && "history", c.import_statistics && "statistics", c.import_calculated_stats && "calculated stats"].filter(Boolean);
   const tickers = Array.isArray(c.tickers) ? c.tickers.join(", ") : c.tickers;
-  const scope = c.scope === "specific" ? tickers || "no tickers" : "All S&P 500";
-  return { scope, years: `${c.years}Y`, what: what.join(" + ") || "nothing", missing: c.scope === "all" && c.only_missing && c.import_history };
+  const scope = c.scope === "specific" ? tickers || "no tickers" : `All ${universeLabel(c)}`;
+  return { scope, years: `${c.years}Y`, what: what.join(" + ") || "nothing", existing: existingMode(c) };
 }
+
+const EXISTING_SHORT = { skip: "new only", update: "only missing", reimport: "re-import all" };
+const EXISTING_LONG = {
+  skip: ", only companies not imported yet",
+  update: ", only what's missing",
+  reimport: ", always re-fetched",
+};
 
 export function describeCriteria(kind, c) {
   if (!c) return "";
   if (kind === "data") {
     const d = describeData(c);
-    return `${d.scope}: ${d.what} since ${c.years} year${Number(c.years) === 1 ? "" : "s"} ago${d.missing ? ", only what's missing" : ", always re-fetched"}`;
+    return `${d.scope}: ${d.what} since ${c.years} year${Number(c.years) === 1 ? "" : "s"} ago${EXISTING_LONG[d.existing]}`;
   }
   if (kind === "screen") return describeFilters(c.filters || {}) || "All companies (no filters)";
   if (kind === "prediction") {

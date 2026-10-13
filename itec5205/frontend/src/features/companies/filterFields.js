@@ -91,11 +91,19 @@ function formatBound(field, value) {
 
 const isSet = (v) => v !== "" && v !== null && v !== undefined && !Number.isNaN(Number(v));
 
+// Index lists the screener can limit companies to (backend services/universes.py).
+export const INDEXES = [
+  { value: "sp500", label: "S&P 500" },
+  { value: "russell3000", label: "Russell 3000" },
+];
+export const indexLabel = (value) => INDEXES.find((i) => i.value === value)?.label || "";
+
 // One entry per filled-in search field, in form order: { id, label, field }
 // where `field` is "q" / "sector" / "industry" or a range key. Drives the
 // screener's removable "Active filters" chips and the auto pool names.
 export function activeFilters(filters) {
   const out = [];
+  if (filters.index) out.push({ id: "index", field: "index", label: indexLabel(filters.index) });
   if (filters.q?.trim()) out.push({ id: "q", field: "q", label: `"${filters.q.trim()}"` });
   if (filters.sector) out.push({ id: "sector", field: "sector", label: filters.sector });
   if (filters.industry) out.push({ id: "industry", field: "industry", label: filters.industry });

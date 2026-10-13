@@ -33,7 +33,8 @@ MAX_WORKERS = 6
 MAX_LISTED_TICKERS = 25
 
 
-def _record_start(task_id: str, tickers: list[str], scope: str, source: str, options: dict) -> datetime:
+def _record_start(task_id: str, tickers: list[str], scope: str, source: str, options: dict,
+                  universe: str | None, skipped: int) -> datetime:
     started = datetime.now(timezone.utc)
     get_db().collection("import_runs").insert({
         "_key": task_id,
@@ -41,6 +42,8 @@ def _record_start(task_id: str, tickers: list[str], scope: str, source: str, opt
         "status": "running",
         "source": source,  # "manual" | "resume" | "policy"
         "scope": scope,  # "all" | "specific"
+        "universe": universe,  # "sp500" | "russell3000" when scope is "all"
+        "skipped": skipped,  # requested tickers left out (already imported / up to date)
         "total": len(tickers),
         "tickers": tickers if len(tickers) <= MAX_LISTED_TICKERS else None,
         **options,
@@ -67,10 +70,12 @@ def import_sp500_data(
     import_calculated_stats: bool = True,
     scope: str = "specific",
     source: str = "manual",
+    universe: str | None = "sp500",
+    skipped: int = 0,
 ):
     options = {"years": years, "import_history": import_history, "import_statistics": import_statistics,
                "import_calculated_stats": import_calculated_stats}
-    started = _record_start(self.request.id, tickers, scope, source, options)
+    started = _record_start(self.request.id, tickers, scope, source, options, universe if scope == "all" else None, skipped)
     try:
         result = _run_import(self, tickers, years, interval, import_history, import_statistics, import_calculated_stats)
     except Exception as exc:

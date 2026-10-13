@@ -123,19 +123,42 @@ export function ImportStatus() {
   );
 }
 
+// Index lists a whole-index import can cover (backend services/universes.py).
+export const UNIVERSES = {
+  sp500: { label: "S&P 500", size: "~503" },
+  russell3000: { label: "Russell 3000", size: "~2,590" },
+};
+
+// What an import does with companies already in the database.
+export const EXISTING_MODES = [
+  { value: "skip", label: "Skip them", help: "Import only companies that aren't in the database yet" },
+  { value: "update", label: "Catch up if out of date", help: "Re-fetch only companies whose prices are behind the last trading day" },
+  { value: "reimport", label: "Re-import them", help: "Fetch every company again and overwrite its data" },
+];
+
+/** `existing` of options/criteria; older ones only have `only_missing`. */
+export const existingMode = (o) => o.existing || (o.only_missing === false ? "reimport" : "update");
+
+/** "S&P 500" / "Russell 3000" for whole-index options, else null. */
+export const universeLabel = (o) => (o.scope === "specific" ? null : (UNIVERSES[o.universe] || UNIVERSES.sp500).label);
+
 // Import options: `tickers` is the comma-separated text as typed.
 export const DEFAULT_IMPORT_OPTIONS = {
-  scope: "all", // "all" | "specific"
+  scope: "all", // "all" (a whole index, `universe`) | "specific"
+  universe: "sp500",
   tickers: "",
   years: 10,
-  only_missing: true,
+  existing: "skip",
   import_history: true,
   import_statistics: true,
   import_calculated_stats: true,
 };
 
 /** Import options to start from: the Settings page's data defaults. */
-export const defaultImportOptions = () => ({ ...DEFAULT_IMPORT_OPTIONS, ...getSettings().data });
+export const defaultImportOptions = () => {
+  const d = { ...DEFAULT_IMPORT_OPTIONS, ...getSettings().data };
+  return { ...d, existing: existingMode(d) };
+};
 
 export const parseTickers = (text) =>
   [...new Set((text || "").split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean))];
@@ -166,10 +189,17 @@ export function ImportOptionsFields({ value, onChange, name = "import-scope" }) 
     <div className="import-fields">
       <div className="import-fields-title">Select companies</div>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", margin: "4px 0 10px" }}>
-        <label style={checkLabel}>
-          <input type="radio" name={name} checked={value.scope === "all"} onChange={() => set({ scope: "all" })} />
-          All S&amp;P 500 companies (~503 tickers)
-        </label>
+        {Object.entries(UNIVERSES).map(([key, u]) => (
+          <label key={key} style={checkLabel}>
+            <input
+              type="radio"
+              name={name}
+              checked={value.scope === "all" && (value.universe || "sp500") === key}
+              onChange={() => set({ scope: "all", universe: key })}
+            />
+            All {u.label} companies ({u.size} tickers)
+          </label>
+        ))}
         <label style={checkLabel}>
           <input type="radio" name={name} checked={value.scope === "specific"} onChange={() => set({ scope: "specific" })} />
           Specific tickers
@@ -215,17 +245,18 @@ export function ImportOptionsFields({ value, onChange, name = "import-scope" }) 
           help="1-year change and volatility from the prices"
         />
       </div>
-      {value.scope === "all" ? (
-        <OptionCheck
-          checked={value.only_missing}
-          disabled={!value.import_history}
-          onChange={(v) => set({ only_missing: v })}
-          label="Only import what's missing"
-          help="Skip tickers already up to date with the last trading day"
-        />
-      ) : (
-        <p className="muted" style={{ margin: "8px 0" }}>Specific tickers are always re-fetched and will overwrite any existing data for them.</p>
-      )}
+      <div className="filters-grid" style={{ marginTop: 10 }}>
+        <div>
+          <label>Companies already imported</label>
+          <select value={existingMode(value)} onChange={(e) => set({ existing: e.target.value })}>
+            {EXISTING_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+          <span className="muted" style={{ fontSize: "0.78rem" }}>
+            {EXISTING_MODES.find((m) => m.value === existingMode(value)).help}
+            {existingMode(value) === "update" && !value.import_history ? " (needs Import history; without it every company is fetched)" : ""}
+          </span>
+        </div>
+      </div>
       {importOptionsInvalid(value) && (
         <p className="error-text" style={{ margin: "4px 0" }}>
           {value.scope === "specific" && parseTickers(value.tickers).length === 0 ? "List the tickers to import." : "Pick at least one thing to import."}
@@ -242,13 +273,11 @@ export function ImportPanel() {
   const [options, setOptions] = useState(defaultImportOptions);
 
   const submit = () => {
-    // "Only missing" only makes sense for the full-universe scope; typing
-    // specific tickers is a deliberate refresh request and must overwrite
-    // them even if they're already imported.
     dispatch(importRequested({
-      tickers: options.scope === "specific" ? parseTickers(options.tickers) : undefined, // undefined -> full S&P 500
+      tickers: options.scope === "specific" ? parseTickers(options.tickers) : undefined, // undefined -> the whole `universe`
+      universe: options.universe || "sp500",
       years: options.years,
-      only_missing: options.scope === "all" && options.only_missing,
+      existing: existingMode(options),
       import_history: options.import_history,
       import_statistics: options.import_statistics,
       import_calculated_stats: options.import_calculated_stats,

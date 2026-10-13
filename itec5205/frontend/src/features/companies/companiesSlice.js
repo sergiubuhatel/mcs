@@ -2,6 +2,7 @@ import { createSlice } from "@reduxjs/toolkit";
 
 const initialState = {
   filters: {
+    index: "", // "" = every company; "sp500" | "russell3000" = only that index
     sector: "",
     industry: "",
     q: "",
@@ -35,6 +36,7 @@ const companiesSlice = createSlice({
     clearFilters(state) {
       state.filters = {
         ...state.filters,
+        index: initialState.filters.index,
         sector: initialState.filters.sector,
         industry: initialState.filters.industry,
         q: initialState.filters.q,

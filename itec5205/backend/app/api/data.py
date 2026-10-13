@@ -10,9 +10,9 @@ from datetime import datetime, timezone
 from celery.result import AsyncResult
 from flask import Blueprint, jsonify, request
 
-from .. import config
 from ..db.arango_client import get_db
-from ..services.yahoo_import import _last_closed_session_date, get_up_to_date_tickers, read_tickers
+from ..services.universes import DEFAULT_UNIVERSE, UNIVERSES, existing_mode, imported_tickers, tickers_to_import, universe_tickers
+from ..services.yahoo_import import _last_closed_session_date
 from ..tasks.celery_app import celery_app
 from ..tasks.import_tasks import import_sp500_data
 from ..tasks.stop_flags import request_stop
@@ -22,25 +22,30 @@ bp = Blueprint("data", __name__, url_prefix="/api/data")
 
 @bp.post("/import")
 def trigger_import():
+    """Body: `tickers` (a list -> scope "specific"), else `universe`
+    ("sp500" default | "russell3000"); `existing` ("skip" | "update" |
+    "reimport", see services/universes.py; older clients send `only_missing`)."""
     body = request.get_json(silent=True) or {}
     tickers = body.get("tickers")
     scope = "specific" if tickers else "all"
-    if not tickers:
-        tickers = read_tickers(config.TICKERS_FILE)
-    tickers = [t.upper() for t in tickers]
+    universe = body.get("universe") or DEFAULT_UNIVERSE
+    try:
+        if not tickers:
+            tickers = universe_tickers(universe)
+        existing = existing_mode(body)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    tickers = list(dict.fromkeys(t.upper() for t in tickers))
 
     import_history = bool(body.get("import_history", True))
     import_statistics = bool(body.get("import_statistics", True))
     import_calculated_stats = bool(body.get("import_calculated_stats", True))
 
-    # "Only missing" is defined by price-history gaps, which is meaningless
-    # for a statistics-only run (a live snapshot field has no notion of a
-    # missing day) -- only apply it when history is actually being pulled.
-    if body.get("only_missing") and import_history:
-        up_to_date = get_up_to_date_tickers()
-        tickers = [t for t in tickers if t not in up_to_date]
-        if not tickers:
-            return jsonify({"task_id": None, "ticker_count": 0, "message": "Everything requested is already imported."}), 200
+    requested = len(tickers)
+    tickers = tickers_to_import(tickers, existing, import_history)
+    if not tickers:
+        return jsonify({"task_id": None, "ticker_count": 0, "requested": requested,
+                        "message": "Everything requested is already imported."}), 200
 
     task = import_sp500_data.delay(
         tickers=tickers,
@@ -51,8 +56,11 @@ def trigger_import():
         import_calculated_stats=import_calculated_stats,
         scope=scope,
         source="manual",
+        universe=universe if scope == "all" else None,
+        skipped=requested - len(tickers),
     )
-    return jsonify({"task_id": task.id, "ticker_count": len(tickers)}), 202
+    return jsonify({"task_id": task.id, "ticker_count": len(tickers), "requested": requested,
+                    "skipped": requested - len(tickers)}), 202
 
 
 @bp.get("/imports")
@@ -91,13 +99,19 @@ def data_summary():
         "FOR r IN import_runs FILTER r.status != 'running' SORT r.created_at DESC LIMIT 1 "
         "RETURN {finished_at: r.finished_at, status: r.status}"
     )), None)
-    universe = read_tickers(config.TICKERS_FILE)
-    in_universe = next(iter(db.aql.execute(
-        "RETURN LENGTH(FOR c IN companies FILTER c._key IN @t RETURN 1)", bind_vars={"t": universe}
-    )))
+    have = imported_tickers()
+    universes = {}
+    for key, u in UNIVERSES.items():
+        try:
+            listed = universe_tickers(key)
+        except OSError:
+            continue  # list file not mounted
+        universes[key] = {"label": u["label"], "size": len(listed), "imported": sum(1 for t in listed if t in have)}
+    universe, in_universe = universes[DEFAULT_UNIVERSE]["size"], universes[DEFAULT_UNIVERSE]["imported"]
     return jsonify({
-        "universe": len(universe),
+        "universe": universe,
         "in_universe": in_universe,  # of the S&P 500 list, how many are imported
+        "universes": universes,  # {sp500|russell3000: {label, size, imported}}
         "companies": db.collection("companies").count(),  # can exceed it: tickers that left the index stay
         "tickers_with_prices": len(per_ticker),
         "price_rows": sum(r["n"] for r in per_ticker),
