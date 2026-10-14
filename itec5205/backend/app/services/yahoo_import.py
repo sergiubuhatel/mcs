@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 import yfinance as yf
+from yfinance.exceptions import YFPricesMissingError, YFTickerMissingError
 
 from ..db.arango_client import get_db
 from .price_metrics import price_history_metrics
@@ -22,18 +23,24 @@ _KEY_SAFE = re.compile(r"[^A-Za-z0-9_\-:.@()+,=;$!*'%]")
 
 # NYSE/Nasdaq regular session close, in the exchange's own timezone -- used
 # to decide whether "today" already has a final close or is still live.
+# Yahoo's daily bar keeps showing the last trade for a while after 16:00
+# (closing-auction prints arrive late), so a session only counts as closed
+# once this settle time has also passed -- otherwise a provisional close gets
+# stored and never corrected (catch-up only fetches dates after the last one).
 _MARKET_TZ = ZoneInfo("America/New_York")
 _MARKET_CLOSE_HOUR = 16
+_CLOSE_SETTLE_MINUTES = 30
 
 
 def _last_closed_session_date() -> date:
     """Most recent calendar date whose regular session has already
-    finished. Before today's close this is yesterday. Weekends step back to
+    finished. Before today's close (+ settle time) this is yesterday. Weekends step back to
     Friday -- a Saturday cutoff has no close to reach, so "only what's
     missing" would re-import every ticker all weekend. (Market holidays
     aren't known here; on one, every ticker still looks one day behind.)"""
     now_et = datetime.now(_MARKET_TZ)
-    day = now_et.date() - timedelta(days=1) if now_et.hour < _MARKET_CLOSE_HOUR else now_et.date()
+    settled = now_et.replace(hour=_MARKET_CLOSE_HOUR, minute=_CLOSE_SETTLE_MINUTES, second=0, microsecond=0)
+    day = now_et.date() if now_et >= settled else now_et.date() - timedelta(days=1)
     while day.weekday() >= 5:  # Saturday, Sunday
         day -= timedelta(days=1)
     return day
@@ -162,7 +169,13 @@ def fetch_ticker_history(
     """
     yf_ticker = yf.Ticker(ticker)
     start = since if since else (date.today() - timedelta(days=365 * years)).isoformat()
-    history = yf_ticker.history(start=start, interval=interval)
+    # raise_errors: by default yfinance swallows failures (incl. HTTP 429)
+    # and returns an empty frame, which looked like "already caught up" --
+    # the ticker then counted as imported with no new rows.
+    try:
+        history = yf_ticker.history(start=start, interval=interval, raise_errors=True)
+    except (YFPricesMissingError, YFTickerMissingError):
+        history = pd.DataFrame()
 
     if history.empty:
         if since:

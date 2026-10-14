@@ -19,8 +19,13 @@ and, once set, cancels every not-yet-started ticker and returns normally (a
 never got picked up -- which is exactly what /import/resume needs.
 """
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
+import threading
+import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timezone
+
+from yfinance.exceptions import YFRateLimitError
 
 from ..db.arango_client import get_db
 from ..extensions import socketio
@@ -29,6 +34,74 @@ from .celery_app import celery_app
 from .stop_flags import clear_stop, is_stop_requested
 
 MAX_WORKERS = 6
+# Yahoo answers bursts with HTTP 429 (and then 401 "Invalid Crumb", since the
+# crumb fetch is rate-limited too). A whole-universe run used to fail every
+# ticker after the first ~550; now a 429 pauses ALL threads and the ticker is
+# retried. Pause doubles per consecutive hit, reset by any success.
+RATE_LIMIT_RETRIES = 8
+RATE_LIMIT_PAUSE = 30
+RATE_LIMIT_MAX_PAUSE = 300
+
+logger = logging.getLogger(__name__)
+
+
+class _ImportStopped(Exception):
+    """A ticker that was waiting out a rate-limit pause when Stop came in."""
+
+
+def _is_rate_limited(exc: Exception) -> bool:
+    if isinstance(exc, YFRateLimitError):
+        return True
+    text = str(exc)
+    return "Too Many Requests" in text or "Invalid Crumb" in text or "429" in text
+
+
+class _YahooThrottle:
+    """Shared by the pool's threads: one 429 pauses every thread, since the
+    limit is per client IP, not per ticker."""
+
+    def __init__(self, stop: threading.Event):
+        self._lock = threading.Lock()
+        self._resume_at = 0.0
+        self._strikes = 0
+        self._stop = stop
+
+    def wait(self):
+        while True:
+            if self._stop.is_set():
+                raise _ImportStopped()
+            delay = self._resume_at - time.monotonic()
+            if delay <= 0:
+                return
+            self._stop.wait(min(delay, 1.0))
+
+    def hit(self, ticker: str):
+        with self._lock:
+            now = time.monotonic()
+            if now < self._resume_at:
+                return  # another thread already paused everyone
+            pause = min(RATE_LIMIT_PAUSE * 2 ** self._strikes, RATE_LIMIT_MAX_PAUSE)
+            self._strikes += 1
+            self._resume_at = now + pause
+        logger.warning("Yahoo rate limit at %s -- pausing all import threads for %d s", ticker, pause)
+
+    def ok(self):
+        with self._lock:
+            self._strikes = 0
+
+
+def _import_with_retry(throttle: _YahooThrottle, ticker: str, **options) -> dict:
+    for attempt in range(RATE_LIMIT_RETRIES + 1):
+        throttle.wait()
+        try:
+            result = import_ticker(ticker, **options)
+        except Exception as exc:  # noqa: BLE001
+            if not _is_rate_limited(exc) or attempt == RATE_LIMIT_RETRIES:
+                raise
+            throttle.hit(ticker)
+            continue
+        throttle.ok()
+        return result
 # Tickers listed by name on a run record (more = "N companies" only).
 MAX_LISTED_TICKERS = 25
 
@@ -99,40 +172,49 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
     completed = 0
     room = self.request.id
     stopping = False
+    stop_event = threading.Event()
+    throttle = _YahooThrottle(stop_event)
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         future_to_ticker = {
             pool.submit(
-                import_ticker, t, years=years, interval=interval,
+                _import_with_retry, throttle, t, years=years, interval=interval,
                 import_history=import_history, import_statistics=import_statistics,
                 import_calculated_stats=import_calculated_stats,
             ): t
             for t in tickers
         }
 
-        for future in as_completed(future_to_ticker):
-            ticker = future_to_ticker[future]
+        pending = set(future_to_ticker)
+        while pending:
+            # Timed wait instead of as_completed: during a rate-limit pause no
+            # ticker finishes for minutes, and Stop must still be noticed.
+            done, pending = wait(pending, timeout=1.0, return_when=FIRST_COMPLETED)
+            for future in done:
+                ticker = future_to_ticker[future]
 
-            if future.cancelled():
-                remaining.append(ticker)
-                continue
+                if future.cancelled():
+                    remaining.append(ticker)
+                    continue
+                try:
+                    succeeded.append(future.result())
+                except _ImportStopped:
+                    remaining.append(ticker)  # was paused when Stop came in -- resume picks it up
+                    continue
+                except Exception as exc:  # noqa: BLE001 - keep going for the rest of the universe
+                    failed.append({"ticker": ticker, "error": str(exc)})
+                completed += 1
 
-            completed += 1
-            try:
-                succeeded.append(future.result())
-            except Exception as exc:  # noqa: BLE001 - keep going for the rest of the universe
-                failed.append({"ticker": ticker, "error": str(exc)})
-
-            progress = {"ticker": ticker, "completed": completed, "total": total, "succeeded": len(succeeded), "failed": len(failed)}
-            self.update_state(state="PROGRESS", meta=progress)
-            socketio.emit("import_progress", progress, room=room)
+                progress = {"ticker": ticker, "completed": completed, "total": total, "succeeded": len(succeeded), "failed": len(failed)}
+                self.update_state(state="PROGRESS", meta=progress)
+                socketio.emit("import_progress", progress, room=room)
 
             if not stopping and is_stop_requested(room):
                 stopping = True
                 clear_stop(room)
-                for other_future, other_ticker in future_to_ticker.items():
-                    if other_future.cancel():
-                        pass  # not yet started -- surfaces as .cancelled() above, added to `remaining`
+                stop_event.set()
+                for other_future in pending:
+                    other_future.cancel()  # not yet started -- surfaces as .cancelled() above, added to `remaining`
 
     records = sum((s.get("history_rows") or 0) for s in succeeded)  # price rows written
     if stopping:
