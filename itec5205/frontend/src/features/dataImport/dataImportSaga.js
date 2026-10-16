@@ -72,7 +72,7 @@ function* handleImport(action) {
     const taskId = data.task_id;
 
     if (!taskId) {
-      // Nothing to do (e.g. "only missing" found everything already imported).
+      // Nothing to do: every requested company is already up to date.
       yield put(importSucceeded({ stage: "done", total: 0, succeeded_count: 0, failed_count: 0, message: data.message }));
       return;
     }

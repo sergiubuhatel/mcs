@@ -73,6 +73,9 @@ COLLECTIONS = {
     "import_runs": [
         {"type": "persistent", "fields": ["created_at"], "unique": False},
     ],
+    # Companies an import found delisted and removed (`_key` = ticker);
+    # whole-list imports leave them out (services/delisting.py).
+    "delisted_tickers": [],
     # App-wide initial values (Settings page): one document, `_key` "app".
     "settings": [],
     # Order Calculator plan (targets + accounts): one document, `_key` "default".

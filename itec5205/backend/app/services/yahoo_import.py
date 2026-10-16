@@ -198,6 +198,10 @@ def fetch_ticker_history(
     df["previous"] = df["close"].shift(1).round(2)
     df["value_change"] = (df["close"] - df["previous"]).round(2)
     df["percentage_change"] = ((df["close"] - df["previous"]) / df["previous"] * 100).round(2)
+    # A previous close that rounds to $0.00 (e.g. DEC before 2023-11-30) gives
+    # an infinite % change, which ArangoDB rejects ("Expecting digit") and
+    # which failed the whole ticker on every import.
+    df["percentage_change"] = df["percentage_change"].replace([float("inf"), float("-inf")], float("nan"))
 
     if since:
         since_date = pd.Timestamp(since).date()

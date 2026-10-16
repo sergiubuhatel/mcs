@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
 import { importRequested, reset as resetImport, resumeRequested, stopRequested } from "./dataImportSlice";
+import Modal from "../../components/Modal";
 import Req from "../../components/Req";
 import { CloseIcon, DatabaseIcon, DownloadIcon, StopIcon } from "../../layout/icons";
 import { getSettings } from "../settings/settings";
@@ -26,6 +27,83 @@ function fmtEta(seconds) {
   if (hours < 24) return `~${hours.toFixed(1)} hr`;
   const days = hours / 24;
   return `~${days.toFixed(1)} d`;
+}
+
+// "DEC: error" lines for a hover title; entries are {ticker, error}.
+export function failedLines(failed) {
+  return (failed || []).map((f) => (f.error ? `${f.ticker}: ${f.error}` : f.ticker)).join("\n");
+}
+
+// Plain-language reading of the raw import errors.
+function failureHint(error) {
+  if (!error) return "Reason not recorded (imports before Oct 16, 2026 saved only the ticker).";
+  if (/No data returned|possibly delisted|not found|404/i.test(error))
+    return "Yahoo Finance has no data for this ticker: it was delisted, renamed or isn't listed on Yahoo. Retrying won't help.";
+  if (/Too Many Requests|429|Invalid Crumb|rate/i.test(error))
+    return "Yahoo Finance kept rate-limiting this ticker. Retrying later usually works.";
+  if (/VPackError|Expecting digit/i.test(error))
+    return "The database rejected a value from Yahoo (e.g. an infinite % change). Fixed on Oct 16, 2026; retry it.";
+  if (/timed out|timeout|Connection/i.test(error)) return "Network problem reaching Yahoo Finance. Retry it.";
+  return "Unexpected error while importing this ticker.";
+}
+
+/** Table of failed tickers with a plain reason + the raw error; entries are {ticker, error}. */
+export function FailedList({ failed, count }) {
+  const more = (count || 0) - (failed || []).length;
+  return (
+    <>
+      <table>
+        <thead>
+          <tr>
+            <th style={{ width: 90 }}>Ticker</th>
+            <th>Why it failed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(failed || []).map((f) => (
+            <tr key={f.ticker}>
+              <td style={{ fontWeight: 600, color: "#dc2626", verticalAlign: "top" }}>{f.ticker}</td>
+              <td>
+                <div>{failureHint(f.error)}</div>
+                {f.error && (
+                  <div className="muted" style={{ fontSize: "0.78rem", fontFamily: "monospace", wordBreak: "break-word" }}>{f.error}</div>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {more > 0 && <p className="muted">+{more} more; the full list is in Recent imports (⋮ → View) once the import ends.</p>}
+    </>
+  );
+}
+
+function FailedDetailsModal({ isOpen, onClose, failed, count }) {
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`Failed tickers (${count || 0})`} maxWidth={760}>
+      <FailedList failed={failed} count={count} />
+    </Modal>
+  );
+}
+
+function FailedTickers({ failed, count }) {
+  const [open, setOpen] = useState(false);
+  if (!count) return null;
+  const names = (failed || []).map((f) => f.ticker);
+  const more = count - names.length;
+  return (
+    <>
+      <button
+        className="shrink-0 text-xs font-semibold"
+        style={{ color: "#dc2626", background: "none", border: "none", padding: 0, cursor: "pointer", textDecoration: "underline dotted" }}
+        title="Show why they failed"
+        onClick={() => setOpen(true)}
+      >
+        {count} failed{names.length ? `: ${names.join(", ")}${more > 0 ? ` +${more}` : ""}` : ""}
+      </button>
+      <FailedDetailsModal isOpen={open} onClose={() => setOpen(false)} failed={failed} count={count} />
+    </>
+  );
 }
 
 // Import gets a dedicated status widget (not the bottom bar's generic
@@ -55,6 +133,9 @@ export function ImportStatus() {
   const elapsedSeconds = startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0;
   const etaSeconds =
     progress?.completed ? (elapsedSeconds * (progress.total - progress.completed)) / progress.completed : null;
+  // Yahoo rate limit: the backend pauses every thread, so nothing completes
+  // until paused_until (epoch seconds) -- say so instead of looking frozen.
+  const pausedSeconds = progress?.paused_until ? Math.max(0, Math.ceil(progress.paused_until - Date.now() / 1000)) : 0;
 
   return (
     <div
@@ -74,9 +155,19 @@ export function ImportStatus() {
             <div className="text-xs font-semibold" style={{ color: "var(--color-text-primary)" }}>
               {status === "stopping" ? "Stopping import..." : "Importing stock data..."}
             </div>
-            <div className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-              Current: {progress?.ticker ?? "-"}
-            </div>
+            {pausedSeconds > 0 ? (
+              <div
+                className="text-xs"
+                style={{ color: "#d97706" }}
+                title={`Yahoo Finance returned "too many requests" at ${progress.paused_at}. All import threads wait, then retry automatically.`}
+              >
+                Yahoo rate limit · resuming in {pausedSeconds} s
+              </div>
+            ) : (
+              <div className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                Current: {progress?.ticker ?? "-"}
+              </div>
+            )}
           </div>
           <span className="shrink-0 text-xs font-semibold" style={{ color: "var(--color-text-primary)" }}>
             {progress ? `${progress.completed}/${progress.total} (${percent}%)` : "starting..."}
@@ -84,6 +175,12 @@ export function ImportStatus() {
           <div className="progress-bar flex-1" style={{ margin: 0 }}>
             <div style={{ width: `${percent}%` }} />
           </div>
+          <FailedTickers failed={progress?.failed_tickers} count={progress?.failed} />
+          {progress?.delisted > 0 && (
+            <span className="shrink-0 text-xs font-semibold" style={{ color: "#d97706" }} title="Delisted on Yahoo Finance: removed from the database">
+              ⚠ {progress.delisted} delisted
+            </span>
+          )}
           <span className="shrink-0 text-xs" style={{ color: "var(--color-text-secondary)" }}>
             Elapsed {fmtDuration(elapsedSeconds)} · ETA {fmtEta(etaSeconds)}
           </span>
@@ -99,7 +196,17 @@ export function ImportStatus() {
 
       {status === "done" && (
         <span className="flex-1 text-xs" style={{ color: "#16a34a" }}>
-          {result?.message ?? `Done — ${result?.succeeded_count ?? 0} imported, ${result?.failed_count ?? 0} failed`}
+          {result?.message ?? `Done — ${result?.succeeded_count ?? 0} imported`}
+        </span>
+      )}
+      {(status === "done" || stopped) && <FailedTickers failed={result?.failed} count={result?.failed_count} />}
+      {(status === "done" || stopped) && result?.delisted?.length > 0 && (
+        <span
+          className="shrink-0 text-xs font-semibold"
+          style={{ color: "#d97706" }}
+          title={`Delisted on Yahoo Finance, removed from the database: ${result.delisted.map((d) => d.ticker).join(", ")}`}
+        >
+          ⚠ {result.delisted.length} delisted, removed
         </span>
       )}
       {stopped && (
@@ -124,16 +231,19 @@ export function ImportStatus() {
 }
 
 // Lists a whole-list import can cover (backend services/universes.py):
-// an index, or every company already in the database.
+// everything (both indexes + any other company already imported), or one index.
 export const UNIVERSES = {
+  all: { label: "All", option: "All (S&P 500 + Russell 3000 + other imported companies)" },
   sp500: { label: "S&P 500", option: "All S&P 500 companies (~503 tickers)" },
   russell3000: { label: "Russell 3000", option: "All Russell 3000 companies (~2,590 tickers)" },
-  imported: { label: "All imported", option: "All imported companies" },
 };
+export const DEFAULT_UNIVERSE = "all";
+// Older criteria/import runs say "imported" (folded into "all").
+export const universeKey = (u) => (u === "imported" ? "all" : UNIVERSES[u] ? u : DEFAULT_UNIVERSE);
 
 // What an import does with companies already in the database.
 export const EXISTING_MODES = [
-  { value: "skip", label: "Skip them", help: "Import only companies that aren't in the database yet" },
+  { value: "skip", label: "Skip them", help: "Import only companies that aren't in the database yet; when there are none, catch up the ones behind instead" },
   { value: "update", label: "Catch up if out of date", help: "Re-fetch only companies whose prices are behind the last trading day" },
   { value: "reimport", label: "Re-import them", help: "Fetch every company again and overwrite its data" },
 ];
@@ -142,12 +252,12 @@ export const EXISTING_MODES = [
 export const existingMode = (o) => o.existing || (o.only_missing === false ? "reimport" : "update");
 
 /** "S&P 500" / "Russell 3000" for whole-index options, else null. */
-export const universeLabel = (o) => (o.scope === "specific" ? null : (UNIVERSES[o.universe] || UNIVERSES.sp500).label);
+export const universeLabel = (o) => (o.scope === "specific" ? null : UNIVERSES[universeKey(o.universe)].label);
 
 // Import options: `tickers` is the comma-separated text as typed.
 export const DEFAULT_IMPORT_OPTIONS = {
   scope: "all", // "all" (a whole index, `universe`) | "specific"
-  universe: "sp500",
+  universe: DEFAULT_UNIVERSE,
   tickers: "",
   years: 10,
   existing: "skip",
@@ -165,12 +275,8 @@ export const defaultImportOptions = () => {
 export const parseTickers = (text) =>
   [...new Set((text || "").split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean))];
 
-// Refreshing the companies already imported while skipping them imports nothing.
-const skipsEverything = (v) => v.scope === "all" && v.universe === "imported" && existingMode(v) === "skip";
-
 export const importOptionsInvalid = (v) =>
   (v.scope === "specific" && parseTickers(v.tickers).length === 0) ||
-  skipsEverything(v) ||
   (!v.import_history && !v.import_statistics && !v.import_calculated_stats);
 
 const checkLabel = { display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" };
@@ -200,11 +306,8 @@ export function ImportOptionsFields({ value, onChange, name = "import-scope" }) 
             <input
               type="radio"
               name={name}
-              checked={value.scope === "all" && (value.universe || "sp500") === key}
-              onChange={() =>
-                // Refreshing what's imported: "Skip them" would leave nothing to do.
-                set({ scope: "all", universe: key, ...(key === "imported" && existingMode(value) === "skip" ? { existing: "update" } : {}) })
-              }
+              checked={value.scope === "all" && universeKey(value.universe) === key}
+              onChange={() => set({ scope: "all", universe: key })}
             />
             {u.option}
           </label>
@@ -270,9 +373,7 @@ export function ImportOptionsFields({ value, onChange, name = "import-scope" }) 
         <p className="error-text" style={{ margin: "4px 0" }}>
           {value.scope === "specific" && parseTickers(value.tickers).length === 0
             ? "List the tickers to import."
-            : skipsEverything(value)
-              ? "All imported companies with \"Skip them\" imports nothing: pick \"Catch up if out of date\" or \"Re-import them\"."
-              : "Pick at least one thing to import."}
+            : "Pick at least one thing to import."}
         </p>
       )}
     </div>
@@ -288,7 +389,7 @@ export function ImportPanel() {
   const submit = () => {
     dispatch(importRequested({
       tickers: options.scope === "specific" ? parseTickers(options.tickers) : undefined, // undefined -> the whole `universe`
-      universe: options.universe || "sp500",
+      universe: universeKey(options.universe),
       years: options.years,
       existing: existingMode(options),
       import_history: options.import_history,

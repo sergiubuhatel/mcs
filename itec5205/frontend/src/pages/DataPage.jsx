@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { apiClient } from "../api/client";
-import { ImportPanel, ImportStatus, UNIVERSES } from "../features/dataImport/ImportControls";
+import ActionMenu from "../components/ActionMenu";
+import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
+import Modal from "../components/Modal";
+import { EXISTING_MODES, FailedList, ImportPanel, ImportStatus, UNIVERSES, universeKey } from "../features/dataImport/ImportControls";
 import {
   BarChartIcon,
   ClockIcon,
   DatabaseIcon,
   DownloadIcon,
+  EyeIcon,
   LightbulbIcon,
   SlidersIcon,
   TrendChartIcon,
@@ -33,7 +37,7 @@ const fmtDate = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString(undefin
 
 function companiesLabel(run) {
   if (run.scope === "all") {
-    const label = (UNIVERSES[run.universe] || UNIVERSES.sp500).label;
+    const label = UNIVERSES[universeKey(run.universe)].label;
     return run.skipped ? `${label} (${run.total} new of ${run.total + run.skipped})` : `${label} (${run.total})`;
   }
   if (run.tickers?.length) return run.tickers.join(", ");
@@ -84,28 +88,125 @@ function Tips() {
   );
 }
 
-function OptionChips({ run }) {
-  const chips = [
-    run.import_history && ["H", "Price history"],
-    run.import_statistics && ["S", "Statistics"],
-    run.import_calculated_stats && ["C", "Calculated statistics"],
-  ].filter(Boolean);
+
+const EXISTING_LABEL = Object.fromEntries(EXISTING_MODES.map((m) => [m.value, m.label]));
+
+function fmtDuration(seconds) {
+  if (seconds == null) return "–";
+  const s = Math.round(seconds);
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
+}
+
+// Everything recorded about one import run, with every failed ticker and why.
+function ImportRunModal({ runKey, onClose }) {
+  const [run, setRun] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!runKey) return;
+    setRun(null);
+    setError(null);
+    apiClient.get(`/api/data/imports/${runKey}`).then((r) => setRun(r.data)).catch((e) => setError(e.response?.data?.error || e.message));
+  }, [runKey]);
+
+  const st = run && (STATUS[run.status] || { label: run.status, tone: "info" });
+  const failed = run && (run.failed_errors || (run.failed_tickers || []).map((ticker) => ({ ticker })));
+  const what = run && [run.import_history && "Price history", run.import_statistics && "Statistics", run.import_calculated_stats && "Calculated statistics"].filter(Boolean);
+  const rows = run
+    ? [
+        ["Started", fmtWhen(run.created_at)],
+        ["Finished", run.finished_at ? fmtWhen(run.finished_at) : "–"],
+        ["Duration", fmtDuration(run.wall_seconds)],
+        ["Source", SOURCE[run.source] || run.source],
+        ["Companies", run.scope === "all" ? UNIVERSES[universeKey(run.universe)].option : run.tickers?.join(", ") || `${run.total} companies`],
+        ["Already imported", run.existing ? EXISTING_LABEL[run.existing] || run.existing : "–"],
+        ["Requested", run.skipped ? `${fmtInt(run.total + run.skipped)} (${fmtInt(run.skipped)} skipped, ${fmtInt(run.total)} fetched)` : fmtInt(run.total)],
+        ["Since", run.import_history ? `${run.years} years ago` : "–"],
+        ["Imported", what.join(", ") || "–"],
+        ["Succeeded", fmtInt(run.succeeded)],
+        ["Failed", fmtInt(run.failed ?? 0)],
+        ...(run.remaining ? [["Not started (stopped)", fmtInt(run.remaining)]] : []),
+        ["New price rows", fmtInt(run.records)],
+        ...(run.error ? [["Error", run.error]] : []),
+      ]
+    : [];
+
   return (
-    <span style={{ display: "inline-flex", gap: 4 }}>
-      {chips.map(([k, title]) => (
-        <span key={k} className="opt-chip" title={title}>{k}</span>
-      ))}
-    </span>
+    <Modal isOpen={!!runKey} onClose={onClose} title="Import details" maxWidth={760}>
+      {error && <p className="error-text">{error}</p>}
+      {!run && !error && <p className="muted">Loading…</p>}
+      {run && (
+        <>
+          <div style={{ marginBottom: 12 }}>
+            <span className={`status-pill ${st.tone}`}>{st.label}</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(140px, max-content) 1fr", gap: "6px 16px", fontSize: "0.88rem" }}>
+            {rows.map(([k, v]) => (
+              <Fragment key={k}>
+                <span className="muted">{k}</span>
+                <span style={{ wordBreak: "break-word" }}>{v}</span>
+              </Fragment>
+            ))}
+          </div>
+          {run.delisted?.length > 0 && (
+            <>
+              <h4 style={{ margin: "18px 0 6px", color: "#d97706" }}>⚠ Delisted, removed from the database ({run.delisted.length})</h4>
+              <p className="muted" style={{ margin: "0 0 6px", fontSize: "0.82rem" }}>
+                Yahoo Finance has no quote and no price history for the last month for these companies. They were removed (company,
+                prices, statistics, forecasts, pool lists; portfolios keep their holdings) and whole-list imports skip them from now on.
+                Type one under "Specific tickers" to try it again.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: 90 }}>Ticker</th>
+                    <th>Yahoo Finance said</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {run.delisted.map((d) => (
+                    <tr key={d.ticker}>
+                      <td style={{ fontWeight: 600, color: "#d97706" }}>{d.ticker}</td>
+                      <td className="muted" style={{ fontFamily: "monospace", fontSize: "0.78rem", wordBreak: "break-word" }}>{d.error}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+          {failed.length > 0 && (
+            <>
+              <h4 style={{ margin: "18px 0 6px" }}>Failed tickers ({fmtInt(run.failed)})</h4>
+              <FailedList failed={failed} count={run.failed} />
+            </>
+          )}
+        </>
+      )}
+    </Modal>
   );
 }
 
 function RecentImports({ refreshKey }) {
   const [data, setData] = useState({ runs: [], total: 0 });
   const [showAll, setShowAll] = useState(false);
+  const [viewKey, setViewKey] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     apiClient.get("/api/data/imports", { params: { limit: showAll ? 200 : RECENT } }).then((r) => setData(r.data)).catch(() => {});
-  }, [refreshKey, showAll]);
+  }, [refreshKey, showAll, reload]);
+
+  const confirmDelete = async () => {
+    const run = deleteTarget;
+    setDeleteTarget(null);
+    try {
+      await apiClient.delete(`/api/data/imports/${run._key}`);
+    } catch (e) {
+      window.alert(e.response?.data?.error || e.message);
+    }
+    setReload((n) => n + 1);
+  };
 
   return (
     <div className="card" style={{ minWidth: 0 }}>
@@ -132,33 +233,40 @@ function RecentImports({ refreshKey }) {
                 <th>Date &amp; time</th>
                 <th>Companies</th>
                 <th style={{ textAlign: "left" }}>Since</th>
-                <th style={{ textAlign: "left" }}>Options</th>
                 <th style={{ textAlign: "left" }}>Source</th>
                 <th style={{ textAlign: "left" }}>Status</th>
                 <th title="Daily price rows added by the import (0 = already up to date)">New prices</th>
                 <th>Duration</th>
+                <th style={{ textAlign: "center", width: 70 }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {data.runs.map((run) => {
                 const st = STATUS[run.status] || { label: run.status, tone: "info" };
-                const failedTitle = run.failed_tickers?.length ? `Failed: ${run.failed_tickers.join(", ")}` : run.error || "";
+                const delistedCount = run.delisted?.length || 0;
                 return (
                   <tr key={run._key}>
                     <td>{fmtWhen(run.created_at)}</td>
                     <td title={companiesLabel(run)} style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }}>{companiesLabel(run)}</td>
                     <td style={{ textAlign: "left" }}>{run.import_history ? `${run.years} years` : "–"}</td>
-                    <td style={{ textAlign: "left" }}><OptionChips run={run} /></td>
                     <td style={{ textAlign: "left" }}>{SOURCE[run.source] || run.source}</td>
                     <td style={{ textAlign: "left" }}>
-                      <span className={`status-pill ${st.tone}`} title={failedTitle || undefined}>
+                      {/* Counts only; which tickers and why is in ⋮ -> View. */}
+                      <span className={`status-pill ${delistedCount && st.tone === "good" ? "warn" : st.tone}`} title="⋮ → View for details">
                         {st.label}
                         {run.failed ? ` · ${run.failed} failed` : ""}
+                        {delistedCount ? ` · ${delistedCount} delisted` : ""}
                         {run.status === "stopped" && run.remaining ? ` · ${run.remaining} left` : ""}
                       </span>
                     </td>
                     <td>{run.status === "running" ? "…" : fmtInt(run.records)}</td>
                     <td>{run.wall_seconds != null ? `${Math.round(run.wall_seconds)} s` : "–"}</td>
+                    <td style={{ textAlign: "center" }}>
+                      <ActionMenu
+                        extraItems={[{ label: "View", icon: EyeIcon, onClick: () => setViewKey(run._key) }]}
+                        onDelete={run.status === "running" ? undefined : () => setDeleteTarget(run)}
+                      />
+                    </td>
                   </tr>
                 );
               })}
@@ -166,6 +274,13 @@ function RecentImports({ refreshKey }) {
           </table>
         </div>
       )}
+      <ImportRunModal runKey={viewKey} onClose={() => setViewKey(null)} />
+      <ConfirmDeleteModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        itemName={deleteTarget ? `import of ${fmtWhen(deleteTarget.created_at)}` : ""}
+      />
     </div>
   );
 }

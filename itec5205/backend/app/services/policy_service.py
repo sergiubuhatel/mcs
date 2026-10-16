@@ -23,7 +23,7 @@ from datetime import date, datetime, timezone
 
 from ..db.arango_client import get_db
 from .rl_service import WEIGHT_RANGE_BASES
-from .universes import DEFAULT_UNIVERSE, INDEXES, UNIVERSES, existing_mode
+from .universes import INDEXES, existing_mode, normalize_universe
 
 KINDS = ("data", "screen", "prediction", "portfolio")
 OPTIONAL_KINDS = ("data", "prediction")
@@ -63,9 +63,7 @@ def _normalize_data(body: dict) -> dict:
     scope = body.get("scope", "all")
     if scope not in ("all", "specific"):
         raise ValueError("'scope' must be 'all' or 'specific'")
-    universe = body.get("universe") or DEFAULT_UNIVERSE
-    if universe not in UNIVERSES:
-        raise ValueError(f"'universe' must be one of {', '.join(UNIVERSES)}")
+    universe = normalize_universe(body.get("universe"))
     tickers = body.get("tickers") or []
     if isinstance(tickers, str):
         tickers = tickers.split(",")

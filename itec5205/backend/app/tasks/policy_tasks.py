@@ -29,7 +29,7 @@ from ..services.policy_service import (
 )
 from ..services.pool_service import create_pool, refine_pool
 from ..services.screening import search_companies
-from ..services.universes import DEFAULT_UNIVERSE, existing_mode, tickers_to_import, universe_tickers
+from ..services.universes import existing_mode, normalize_universe, tickers_to_import, universe_tickers
 from .arima_tasks import train_arima_prediction
 from .celery_app import celery_app
 from .import_tasks import import_sp500_data
@@ -103,9 +103,9 @@ def run_policy(self, run_id: str):
             step("data", 1, "No data criteria -- using the data already stored", status="skipped")
         else:
             step("data", 0, "Checking what needs importing...", status="running")
-            universe = data_c.get("universe") or DEFAULT_UNIVERSE
+            universe = normalize_universe(data_c.get("universe"))
             wanted = data_c["tickers"] if data_c["scope"] == "specific" else universe_tickers(universe)
-            to_import = tickers_to_import(wanted, existing_mode(data_c), data_c["import_history"])
+            to_import, existing = tickers_to_import(wanted, existing_mode(data_c), data_c["import_history"])
             skipped = len(wanted) - len(to_import)
             if not to_import:
                 step("data", 1, "Nothing to import: every company is already imported or up to date", status="done", requested=len(wanted), up_to_date=skipped, imported=0, failed=0)
@@ -114,6 +114,7 @@ def run_policy(self, run_id: str):
                     tickers=to_import, years=data_c["years"], import_history=data_c["import_history"],
                     import_statistics=data_c["import_statistics"], import_calculated_stats=data_c["import_calculated_stats"],
                     scope=data_c["scope"], source="policy", universe=universe, skipped=len(wanted) - len(to_import),
+                    existing=existing,
                 )
                 children.append(imp.id)
                 while True:

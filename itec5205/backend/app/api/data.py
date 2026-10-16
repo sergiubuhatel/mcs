@@ -11,7 +11,7 @@ from celery.result import AsyncResult
 from flask import Blueprint, jsonify, request
 
 from ..db.arango_client import get_db
-from ..services.universes import DEFAULT_UNIVERSE, INDEXES, existing_mode, imported_tickers, tickers_to_import, universe_tickers
+from ..services.universes import INDEXES, existing_mode, normalize_universe, imported_tickers, tickers_to_import, universe_tickers
 from ..services.yahoo_import import _last_closed_session_date
 from ..tasks.celery_app import celery_app
 from ..tasks.import_tasks import import_sp500_data
@@ -23,13 +23,14 @@ bp = Blueprint("data", __name__, url_prefix="/api/data")
 @bp.post("/import")
 def trigger_import():
     """Body: `tickers` (a list -> scope "specific"), else `universe`
-    ("sp500" default | "russell3000"); `existing` ("skip" | "update" |
+    ("all" default = both indexes + every imported company | "sp500" |
+    "russell3000"); `existing` ("skip" | "update" |
     "reimport", see services/universes.py; older clients send `only_missing`)."""
     body = request.get_json(silent=True) or {}
     tickers = body.get("tickers")
     scope = "specific" if tickers else "all"
-    universe = body.get("universe") or DEFAULT_UNIVERSE
     try:
+        universe = normalize_universe(body.get("universe"))
         if not tickers:
             tickers = universe_tickers(universe)
         existing = existing_mode(body)
@@ -42,10 +43,12 @@ def trigger_import():
     import_calculated_stats = bool(body.get("import_calculated_stats", True))
 
     requested = len(tickers)
-    tickers = tickers_to_import(tickers, existing, import_history)
+    tickers, existing = tickers_to_import(tickers, existing, import_history)
     if not tickers:
-        return jsonify({"task_id": None, "ticker_count": 0, "requested": requested,
-                        "message": "Everything requested is already imported."}), 200
+        last = _last_closed_session_date()
+        message = (f"All {requested:,} companies are up to date through {last:%b} {last.day}, {last.year} "
+                   "(a day's close is fetched after 4:30 PM ET).")
+        return jsonify({"task_id": None, "ticker_count": 0, "requested": requested, "message": message}), 200
 
     task = import_sp500_data.delay(
         tickers=tickers,
@@ -58,6 +61,7 @@ def trigger_import():
         source="manual",
         universe=universe if scope == "all" else None,
         skipped=requested - len(tickers),
+        existing=existing,
     )
     return jsonify({"task_id": task.id, "ticker_count": len(tickers), "requested": requested,
                     "skipped": requested - len(tickers)}), 202
@@ -72,7 +76,10 @@ def recent_imports():
     db = get_db()
     total = db.collection("import_runs").count()
     runs = list(db.aql.execute(
-        "FOR r IN import_runs SORT r.created_at DESC LIMIT @n RETURN UNSET(r, '_id', '_rev')",
+        # failed_errors holds every failure (thousands on a bad run); the
+        # list carries the first 25, GET /imports/<key> the whole run.
+        "FOR r IN import_runs SORT r.created_at DESC LIMIT @n "
+        "RETURN MERGE(UNSET(r, '_id', '_rev'), r.failed_errors ? {failed_errors: SLICE(r.failed_errors, 0, 25)} : {})",
         bind_vars={"n": limit},
     ))
     for run in runs:
@@ -80,6 +87,28 @@ def recent_imports():
             run["status"] = "failed"
             db.collection("import_runs").update({"_key": run["_key"], "status": "failed"})
     return jsonify({"runs": runs, "total": total})
+
+
+@bp.get("/imports/<key>")
+def import_run(key):
+    """One import run with every failed ticker and its error."""
+    run = get_db().collection("import_runs").get(key)
+    if not run:
+        return jsonify({"error": "Import not found"}), 404
+    return jsonify({k: v for k, v in run.items() if k not in ("_id", "_rev")})
+
+
+@bp.delete("/imports/<key>")
+def delete_import_run(key):
+    """Remove a run from the import history (the imported data stays)."""
+    col = get_db().collection("import_runs")
+    run = col.get(key)
+    if not run:
+        return jsonify({"error": "Import not found"}), 404
+    if run.get("status") == "running":
+        return jsonify({"error": "Stop the import before deleting it"}), 409
+    col.delete(key)
+    return jsonify({"deleted": key})
 
 
 @bp.get("/summary")
@@ -107,7 +136,7 @@ def data_summary():
         except OSError:
             continue  # list file not mounted
         universes[key] = {"label": u["label"], "size": len(listed), "imported": sum(1 for t in listed if t in have)}
-    universe, in_universe = universes[DEFAULT_UNIVERSE]["size"], universes[DEFAULT_UNIVERSE]["imported"]
+    universe, in_universe = universes["sp500"]["size"], universes["sp500"]["imported"]
     return jsonify({
         "universe": universe,
         "in_universe": in_universe,  # of the S&P 500 list, how many are imported

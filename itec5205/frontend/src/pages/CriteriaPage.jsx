@@ -17,7 +17,7 @@ import { KINDS, criteriaDefaults, autoCriteriaName, blankToNull, describeCriteri
 import ScreenCriteriaForm from "../features/policies/ScreenCriteriaForm";
 import PredictionCriteriaForm from "../features/policies/PredictionCriteriaForm";
 import PortfolioCriteriaForm from "../features/policies/PortfolioCriteriaForm";
-import { ImportOptionsFields, existingMode, importOptionsInvalid, parseTickers } from "../features/dataImport/ImportControls";
+import { ImportOptionsFields, existingMode, importOptionsInvalid, parseTickers, universeKey } from "../features/dataImport/ImportControls";
 
 const apiError = (err) => err.response?.data?.error || err.message;
 // Portfolio criteria fields where blank = no limit / auto.
@@ -30,7 +30,7 @@ function toForm(kind, doc) {
   if (kind === "data") {
     return {
       ...base,
-      universe: base.universe || "sp500",
+      universe: universeKey(base.universe),
       existing: doc ? existingMode(doc) : existingMode(base), // older criteria only have only_missing
       tickers: Array.isArray(base.tickers) ? base.tickers.join(", ") : base.tickers || "",
     };

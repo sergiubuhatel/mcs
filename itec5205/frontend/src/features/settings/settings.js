@@ -13,7 +13,7 @@ export const DEFAULT_SETTINGS = {
   },
   data: {
     scope: "all",
-    universe: "sp500", // whole-index list: "sp500" | "russell3000"
+    universe: "all", // whole list: "all" (both indexes + other imported) | "sp500" | "russell3000"
     years: 10,
     existing: "skip", // companies already imported: "skip" | "update" | "reimport"
     import_history: true,

@@ -66,7 +66,7 @@ const SECTIONS = [
     color: "#10b981",
     text: "The Market Data import form and new Data Filters.",
     fields: [
-      { key: "universe", label: "Companies to import", type: "select", options: opts(Object.entries(UNIVERSES).map(([value, u]) => ({ value, label: u.option }))), help: "Index list the import form starts with (S&P 500 unless you change it)." },
+      { key: "universe", label: "Companies to import", type: "select", options: opts(Object.entries(UNIVERSES).map(([value, u]) => ({ value, label: u.option }))), help: "List the import form starts with (All = S&P 500 + Russell 3000 + other imported companies, unless you change it)." },
       { key: "existing", label: "Companies already imported", type: "select", options: opts(EXISTING_MODES.map(({ value, label }) => ({ value, label }))), help: "Skip them, catch them up when their prices are behind, or re-import them." },
       { key: "years", label: "History since", type: "select", options: opts([1, 2, 5, 10, 15, 20].map((y) => ({ value: y, label: `${y} year${y === 1 ? "" : "s"} ago` }))), number: true, help: "How far back price history starts (same choices as the import form)." },
       { key: "import_history", label: "Import price history", type: "toggle", help: "Daily prices from Yahoo Finance." },

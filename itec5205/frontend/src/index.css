@@ -360,7 +360,6 @@ tr.selected td { background: rgba(37, 99, 235, 0.10); }
 .stat-value { font-size: 1.15rem; font-weight: 700; color: var(--color-text-primary); font-variant-numeric: tabular-nums; line-height: 1.2; }
 .stat-label { font-size: 0.8rem; font-weight: 600; color: var(--color-text-primary); }
 
-.opt-chip { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; font-size: 0.68rem; font-weight: 700; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
 
 /* Status pills: tinted background + strong text, per theme. */
 .status-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.74rem; font-weight: 600; white-space: nowrap; }

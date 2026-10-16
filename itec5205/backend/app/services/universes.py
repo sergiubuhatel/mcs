@@ -11,6 +11,7 @@ import should actually fetch.
 
 from .. import config
 from ..db.arango_client import get_db
+from .delisting import delisted_tickers
 from .yahoo_import import get_up_to_date_tickers, read_tickers
 
 # Index ticker lists (also the screener's Index filter).
@@ -18,21 +19,36 @@ INDEXES = {
     "sp500": {"label": "S&P 500", "file": lambda: config.TICKERS_FILE},
     "russell3000": {"label": "Russell 3000", "file": lambda: config.RUSSELL3000_FILE},
 }
-# What a whole-list import can cover: an index, or every company already in
-# the database ("imported" -- refreshes them; with existing="skip" it's a no-op).
-UNIVERSES = {**INDEXES, "imported": {"label": "All imported"}}
-DEFAULT_UNIVERSE = "sp500"
+# What a whole-list import can cover: "all" = every index plus any other
+# company already in the database (the default), or a single index.
+UNIVERSES = {"all": {"label": "All"}, **INDEXES}
+# "imported" (every company already in the database) was folded into "all";
+# older criteria and import runs still carry it.
+UNIVERSE_ALIASES = {"imported": "all"}
+DEFAULT_UNIVERSE = "all"
 # Most rows one request may ask for ("all results"): above any index size.
 MAX_RESULTS = 5000
 EXISTING_MODES = ("skip", "update", "reimport")
 
 
-def universe_tickers(universe: str) -> list[str]:
+def normalize_universe(universe: str | None) -> str:
+    universe = UNIVERSE_ALIASES.get(universe, universe) or DEFAULT_UNIVERSE
     if universe not in UNIVERSES:
         raise ValueError(f"'universe' must be one of {', '.join(UNIVERSES)}")
-    if universe == "imported":
-        return sorted(imported_tickers())
-    return read_tickers(UNIVERSES[universe]["file"]())
+    return universe
+
+
+def universe_tickers(universe: str) -> list[str]:
+    """The list's tickers minus companies found delisted (services/delisting.py)."""
+    universe = normalize_universe(universe)
+    if universe == "all":
+        tickers = imported_tickers()
+        for index in INDEXES.values():
+            tickers.update(read_tickers(index["file"]()))
+    else:
+        tickers = read_tickers(UNIVERSES[universe]["file"]())
+    gone = delisted_tickers()
+    return sorted(t for t in tickers if t not in gone) if universe == "all" else [t for t in tickers if t not in gone]
 
 
 def existing_mode(body: dict) -> str:
@@ -50,13 +66,18 @@ def imported_tickers() -> set[str]:
     return set(get_db().aql.execute("FOR c IN companies RETURN c._key"))
 
 
-def tickers_to_import(tickers: list[str], existing: str, import_history: bool) -> list[str]:
-    """`tickers` minus the ones `existing` says to leave alone. "update" is
-    about price-history gaps, so without history it fetches everything."""
+def tickers_to_import(tickers: list[str], existing: str, import_history: bool) -> tuple[list[str], str]:
+    """`tickers` minus the ones `existing` says to leave alone, and the mode
+    actually used. "update" is about price-history gaps, so without history it
+    fetches everything. "skip" with no new company left falls back to "update"
+    (the user's rule: an import that would do nothing catches up instead)."""
     if existing == "skip":
         have = imported_tickers()
-        return [t for t in tickers if t not in have]
+        new = [t for t in tickers if t not in have]
+        if new:
+            return new, "skip"
+        existing = "update"
     if existing == "update" and import_history:
         current = get_up_to_date_tickers()
-        return [t for t in tickers if t not in current]
-    return list(tickers)
+        return [t for t in tickers if t not in current], existing
+    return list(tickers), existing

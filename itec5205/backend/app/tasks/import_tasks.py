@@ -29,6 +29,7 @@ from yfinance.exceptions import YFRateLimitError
 
 from ..db.arango_client import get_db
 from ..extensions import socketio
+from ..services.delisting import clear_delisted, confirm_delisted, delisted_tickers, is_delisted_error, purge_ticker
 from ..services.yahoo_import import import_ticker
 from .celery_app import celery_app
 from .stop_flags import clear_stop, is_stop_requested
@@ -41,6 +42,13 @@ MAX_WORKERS = 6
 RATE_LIMIT_RETRIES = 8
 RATE_LIMIT_PAUSE = 30
 RATE_LIMIT_MAX_PAUSE = 300
+# Pacing, so progress stays continuous instead of burst -> 429 -> 30 s stall:
+# after a 429 the throttle spaces ticker starts at least this far apart
+# (doubling per hit, up to the max), then shortens the gap by 1% per success
+# so the pace creeps back up to just under Yahoo's limit.
+PACE_GAP_AFTER_HIT = 0.25
+PACE_GAP_MAX = 5.0
+PACE_GAP_DECAY = 0.99
 
 logger = logging.getLogger(__name__)
 
@@ -58,22 +66,29 @@ def _is_rate_limited(exc: Exception) -> bool:
 
 class _YahooThrottle:
     """Shared by the pool's threads: one 429 pauses every thread, since the
-    limit is per client IP, not per ticker."""
+    limit is per client IP, not per ticker, and slows the pace of ticker
+    starts so the next 429 is unlikely."""
 
     def __init__(self, stop: threading.Event):
         self._lock = threading.Lock()
         self._resume_at = 0.0
         self._strikes = 0
         self._stop = stop
+        self._paused_at = None  # ticker that triggered the current pause
+        self._gap = 0.0  # min seconds between ticker starts (0 = no pacing)
+        self._next_start = 0.0
 
     def wait(self):
         while True:
             if self._stop.is_set():
                 raise _ImportStopped()
-            delay = self._resume_at - time.monotonic()
-            if delay <= 0:
-                return
-            self._stop.wait(min(delay, 1.0))
+            with self._lock:
+                now = time.monotonic()
+                start = max(now, self._resume_at, self._next_start)
+                if start <= now:
+                    self._next_start = now + self._gap
+                    return
+            self._stop.wait(min(start - now, 1.0))
 
     def hit(self, ticker: str):
         with self._lock:
@@ -83,11 +98,24 @@ class _YahooThrottle:
             pause = min(RATE_LIMIT_PAUSE * 2 ** self._strikes, RATE_LIMIT_MAX_PAUSE)
             self._strikes += 1
             self._resume_at = now + pause
-        logger.warning("Yahoo rate limit at %s -- pausing all import threads for %d s", ticker, pause)
+            self._gap = min(max(self._gap * 2, PACE_GAP_AFTER_HIT), PACE_GAP_MAX)
+            self._paused_at = ticker
+        logger.warning("Yahoo rate limit at %s -- pausing all import threads for %d s, then %.2f s between tickers",
+                       ticker, pause, self._gap)
+
+    def status(self) -> dict:
+        """Pause info for the progress payload: wall-clock end of the current
+        pause (epoch seconds) and the ticker that hit the limit, or Nones."""
+        with self._lock:
+            delay = self._resume_at - time.monotonic()
+            if delay <= 0:
+                return {"paused_until": None, "paused_at": None}
+            return {"paused_until": round(time.time() + delay), "paused_at": self._paused_at}
 
     def ok(self):
         with self._lock:
             self._strikes = 0
+            self._gap *= PACE_GAP_DECAY
 
 
 def _import_with_retry(throttle: _YahooThrottle, ticker: str, **options) -> dict:
@@ -145,23 +173,35 @@ def import_sp500_data(
     source: str = "manual",
     universe: str | None = "sp500",
     skipped: int = 0,
+    existing: str | None = None,
 ):
     options = {"years": years, "import_history": import_history, "import_statistics": import_statistics,
                "import_calculated_stats": import_calculated_stats}
-    started = _record_start(self.request.id, tickers, scope, source, options, universe if scope == "all" else None, skipped)
+    started = _record_start(self.request.id, tickers, scope, source, {**options, "existing": existing},
+                            universe if scope == "all" else None, skipped)
     try:
         result = _run_import(self, tickers, years, interval, import_history, import_statistics, import_calculated_stats)
     except Exception as exc:
         _record_end(self.request.id, started, status="failed", error=str(exc))
         raise
     failed = result["failed"]
+    # Delisted companies were removed on purpose -- not a failure.
     status = "stopped" if result["stopped"] else ("completed_with_failures" if failed else "completed")
     _record_end(
         self.request.id, started, status=status, succeeded=result["succeeded_count"], failed=len(failed),
-        failed_tickers=[f["ticker"] for f in failed][:MAX_LISTED_TICKERS], remaining=len(result["remaining_tickers"]),
+        failed_tickers=[f["ticker"] for f in failed][:MAX_LISTED_TICKERS],
+        failed_errors=failed, delisted=result["delisted"], remaining=len(result["remaining_tickers"]),
         records=result.pop("records"),
     )
     return result
+
+
+def _report(self, room, ticker, completed, total, succeeded, failed, pause, delisted):
+    progress = {"ticker": ticker, "completed": completed, "total": total,
+                "succeeded": len(succeeded), "failed": len(failed), "delisted": len(delisted),
+                "failed_tickers": failed[:MAX_LISTED_TICKERS], **pause}
+    self.update_state(state="PROGRESS", meta=progress)
+    socketio.emit("import_progress", progress, room=room)
 
 
 def _run_import(self, tickers, years, interval, import_history, import_statistics, import_calculated_stats):
@@ -172,6 +212,8 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
     completed = 0
     room = self.request.id
     stopping = False
+    delisted = []  # {ticker, error} -- confirmed delisted and removed from the database
+    marked = delisted_tickers()  # a typed ticker marked delisted that imports fine again is un-marked
     stop_event = threading.Event()
     throttle = _YahooThrottle(stop_event)
 
@@ -186,6 +228,8 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
         }
 
         pending = set(future_to_ticker)
+        last_ticker = None
+        last_pause = throttle.status()
         while pending:
             # Timed wait instead of as_completed: during a rate-limit pause no
             # ticker finishes for minutes, and Stop must still be noticed.
@@ -198,16 +242,28 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
                     continue
                 try:
                     succeeded.append(future.result())
+                    if ticker in marked:
+                        clear_delisted(ticker)
                 except _ImportStopped:
                     remaining.append(ticker)  # was paused when Stop came in -- resume picks it up
                     continue
                 except Exception as exc:  # noqa: BLE001 - keep going for the rest of the universe
-                    failed.append({"ticker": ticker, "error": str(exc)})
+                    if is_delisted_error(str(exc)) and confirm_delisted(ticker):
+                        purge_ticker(ticker, str(exc))
+                        delisted.append({"ticker": ticker, "error": str(exc)})
+                    else:
+                        failed.append({"ticker": ticker, "error": str(exc)})
                 completed += 1
+                last_ticker = ticker
+                last_pause = throttle.status()
+                _report(self, room, last_ticker, completed, total, succeeded, failed, last_pause, delisted)
 
-                progress = {"ticker": ticker, "completed": completed, "total": total, "succeeded": len(succeeded), "failed": len(failed)}
-                self.update_state(state="PROGRESS", meta=progress)
-                socketio.emit("import_progress", progress, room=room)
+            # A rate-limit pause starting or ending is news even when no
+            # ticker finished -- otherwise the bar just looks frozen.
+            pause = throttle.status()
+            if pause != last_pause:
+                last_pause = pause
+                _report(self, room, last_ticker, completed, total, succeeded, failed, pause, delisted)
 
             if not stopping and is_stop_requested(room):
                 stopping = True
@@ -225,6 +281,7 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
             "succeeded_count": len(succeeded),
             "failed_count": len(failed),
             "failed": failed,
+            "delisted": delisted,
             "remaining_tickers": remaining,
             "years": years,
             "interval": interval,
@@ -242,6 +299,7 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
         "succeeded_count": len(succeeded),
         "failed_count": len(failed),
         "failed": failed,
+        "delisted": delisted,
         "remaining_tickers": [],
         "years": years,
         "interval": interval,
