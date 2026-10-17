@@ -21,6 +21,10 @@ const PERCENT_RANGE_FIELDS = new Set([
   "day_change",
   "stock_growth_1y",
   "volatility",
+  "max_drawdown",
+  "line_deviation",
+  "worst_month",
+  "trend_return",
 ]);
 
 // The screener search in API units, saved with a pool so the backend can

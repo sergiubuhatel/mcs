@@ -234,6 +234,35 @@ def fetch_ticker_stats(ticker: str, info: dict) -> dict:
     return row
 
 
+def store_calculated_stats(tickers: list[str]) -> int:
+    """Recompute `calculated_stats` for `tickers` from their stored prices
+    (no Yahoo call); returns how many were written."""
+    now = datetime.now(timezone.utc).isoformat()
+    docs = []
+    for ticker, m in price_history_metrics(tickers).items():
+        docs.append({
+            "_key": ticker,
+            "stock_growth_1y": m["growth_1y"],
+            "volatility_1y": m["volatility_1y"],
+            "trend_r2_1y": m["trend_r2_1y"],
+            "line_deviation_1y": m["line_deviation_1y"],
+            "max_drawdown_1y": m["max_drawdown_1y"],
+            "up_months_1y": m["up_months_1y"],
+            "worst_month_1y": m["worst_month_1y"],
+            "trend_return_1y": m["trend_return_1y"],
+            "updated_at": now,
+        })
+    if docs:
+        get_db().collection("calculated_stats").insert_many(docs, overwrite=True)
+    return len(docs)
+
+
+def recalculate_all_calculated_stats(batch: int = 50) -> int:
+    """Backfill `calculated_stats` for every company with stored prices."""
+    tickers = [c["_key"] for c in get_db().collection("companies").all()]
+    return sum(store_calculated_stats(tickers[i:i + batch]) for i in range(0, len(tickers), batch))
+
+
 def import_ticker(
     ticker: str,
     years: int = 2,
@@ -297,16 +326,7 @@ def import_ticker(
         # `import_history`: it reads whatever's already in `stock_prices`
         # (just-upserted above, or from a prior import), so it also works
         # as a standalone backfill for tickers imported before this existed.
-        price_metrics = price_history_metrics([ticker]).get(ticker, {})
-        db.collection("calculated_stats").insert(
-            {
-                "_key": ticker,
-                "stock_growth_1y": price_metrics.get("growth_1y"),
-                "volatility_1y": price_metrics.get("volatility_1y"),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            },
-            overwrite=True,
-        )
+        store_calculated_stats([ticker])
 
     if import_statistics:
         stats_row = fetch_ticker_stats(ticker, info)

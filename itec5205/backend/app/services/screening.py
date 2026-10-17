@@ -43,6 +43,12 @@ SORTABLE_FIELDS = {
     # `stock_stats` is -- so these sort just like any other stored field.
     "stock_growth_1y": "calc.stock_growth_1y",
     "volatility": "calc.volatility_1y",
+    "trend_r2": "calc.trend_r2_1y",
+    "line_deviation": "calc.line_deviation_1y",
+    "max_drawdown": "calc.max_drawdown_1y",
+    "up_months": "calc.up_months_1y",
+    "worst_month": "calc.worst_month_1y",
+    "trend_return": "calc.trend_return_1y",
 }
 
 # Fields that aren't a single stored attribute but a computed expression --
@@ -75,6 +81,12 @@ FILTERABLE_RANGES = {
     # e.g. 0.35 for 35%) -- joined as `calc` in both queries below.
     "stock_growth_1y": "calc.stock_growth_1y",
     "volatility": "calc.volatility_1y",
+    "trend_r2": "calc.trend_r2_1y",
+    "line_deviation": "calc.line_deviation_1y",
+    "max_drawdown": "calc.max_drawdown_1y",
+    "up_months": "calc.up_months_1y",
+    "worst_month": "calc.worst_month_1y",
+    "trend_return": "calc.trend_return_1y",
     "day_change": f"({COMPUTED_SORT_EXPRESSIONS['day_change']})",
 }
 
@@ -169,7 +181,13 @@ def search_companies(
                 earnings_growth_yoy_q: stats.earnings_growth_yoy_q,
                 free_cash_flow: stats.free_cash_flow,
                 stock_growth_1y: calc.stock_growth_1y,
-                volatility: calc.volatility_1y
+                volatility: calc.volatility_1y,
+                trend_r2: calc.trend_r2_1y,
+                line_deviation: calc.line_deviation_1y,
+                max_drawdown: calc.max_drawdown_1y,
+                up_months: calc.up_months_1y,
+                worst_month: calc.worst_month_1y,
+                trend_return: calc.trend_return_1y
             }}
     """
     count_aql = f"""

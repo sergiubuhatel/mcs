@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { apiClient } from "../../api/client";
 import { buildParams } from "../companies/companiesSaga";
-import { FILTER_GROUPS, INDEXES, UNIT_LABELS, UNIT_MULTIPLIERS } from "../companies/filterFields";
+import FilterTabs from "../companies/FilterTabs";
+import { INDEXES, UNIT_LABELS, UNIT_MULTIPLIERS } from "../companies/filterFields";
 
 // `filters` has the screener's shape (see companiesSlice): percent fields as
 // typed (20 = 20%), unit fields (market cap, FCF) in stored units, plus
@@ -85,47 +86,32 @@ export default function ScreenCriteriaForm({ filters, onChange }) {
           </select>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 12 }}>
-        {FILTER_GROUPS.map(({ title, icon: Icon, color, fields }) => (
-          <div key={title} className="filter-group">
-            <h4 style={{ color: "var(--color-text-primary)" }}>
-              <span className="icon-badge" style={{ width: 26, height: 26, background: `${color}26`, color }}>
-                <Icon width={14} height={14} />
-              </span>
-              {title}
-            </h4>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {fields.map(({ key, label, percent, unit }) => {
-                const [min, max] = filters.ranges?.[key] || ["", ""];
-                return (
-                  <div key={key} className="filters-grid" style={{ margin: 0, gridTemplateColumns: "1fr" }}>
-                    <label style={{ margin: 0 }}>{unit ? `${label} ($${UNIT_LABELS[units[key]]})` : label}</label>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <input
-                        placeholder={percent ? "min %" : "min"}
-                        value={unit ? rawUnit(key, min) : min}
-                        onChange={(e) => (unit ? setUnitRange(key, "min", e.target.value) : setRange(key, "min", e.target.value))}
-                        style={{ flex: "1 1 0", minWidth: 0 }}
-                      />
-                      <input
-                        placeholder={percent ? "max %" : "max"}
-                        value={unit ? rawUnit(key, max) : max}
-                        onChange={(e) => (unit ? setUnitRange(key, "max", e.target.value) : setRange(key, "max", e.target.value))}
-                        style={{ flex: "1 1 0", minWidth: 0 }}
-                      />
-                      {unit && (
-                        <select value={units[key]} onChange={(e) => setUnit(key, e.target.value)} style={{ flex: "0 0 auto", width: "auto" }}>
-                          {Object.entries(UNIT_LABELS).map(([u, l]) => <option key={u} value={u}>{l}</option>)}
-                        </select>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
+      <FilterTabs
+        filters={filters}
+        storageKey="criteriaFilterTab"
+        renderInputs={({ key, percent, unit }) => {
+          const [min, max] = filters.ranges?.[key] || ["", ""];
+          return (
+            <>
+              <input
+                placeholder={percent ? "min %" : "min"}
+                value={unit ? rawUnit(key, min) : min}
+                onChange={(e) => (unit ? setUnitRange(key, "min", e.target.value) : setRange(key, "min", e.target.value))}
+              />
+              <input
+                placeholder={percent ? "max %" : "max"}
+                value={unit ? rawUnit(key, max) : max}
+                onChange={(e) => (unit ? setUnitRange(key, "max", e.target.value) : setRange(key, "max", e.target.value))}
+              />
+              {unit && (
+                <select className="ft-unit" value={units[key]} onChange={(e) => setUnit(key, e.target.value)} title="Unit for min / max">
+                  {Object.entries(UNIT_LABELS).map(([u, l]) => <option key={u} value={u} title={l}>{u}</option>)}
+                </select>
+              )}
+            </>
+          );
+        }}
+      />
     </div>
   );
 }

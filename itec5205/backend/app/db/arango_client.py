@@ -41,6 +41,12 @@ COLLECTIONS = {
     "calculated_stats": [
         {"type": "persistent", "fields": ["stock_growth_1y"], "unique": False},
         {"type": "persistent", "fields": ["volatility_1y"], "unique": False},
+        {"type": "persistent", "fields": ["trend_r2_1y"], "unique": False},
+        {"type": "persistent", "fields": ["line_deviation_1y"], "unique": False},
+        {"type": "persistent", "fields": ["max_drawdown_1y"], "unique": False},
+        {"type": "persistent", "fields": ["up_months_1y"], "unique": False},
+        {"type": "persistent", "fields": ["worst_month_1y"], "unique": False},
+        {"type": "persistent", "fields": ["trend_return_1y"], "unique": False},
     ],
     # A named subset of tickers a user saved off a screener search, to use
     # as the candidate universe fed into RL training (search -> pool -> RL).

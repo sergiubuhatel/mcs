@@ -2,14 +2,13 @@ import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { clearFilters, fetchIndustriesRequested, fetchRequested, fetchSectorsRequested, setFilters } from "./companiesSlice";
 import BackButton from "../../layout/BackButton";
-import { ChevronDownIcon, CloseIcon, EraserIcon, SearchIcon, SlidersIcon } from "../../layout/icons";
-import { FILTER_GROUPS, INDEXES, UNIT_LABELS, UNIT_MULTIPLIERS, activeFilters } from "./filterFields";
+import { CloseIcon, EraserIcon, SearchIcon, SlidersIcon } from "../../layout/icons";
+import FilterTabs from "./FilterTabs";
+import { INDEXES, UNIT_LABELS, UNIT_MULTIPLIERS, activeFilters } from "./filterFields";
 import { getSettings } from "../settings/settings";
 
 const EMPTY_UNIT_VALUES = { market_cap: ["", ""], free_cash_flow: ["", ""] };
 const defaultUnits = () => ({ market_cap: getSettings().screening.market_cap_unit, free_cash_flow: getSettings().screening.fcf_unit });
-const COLLAPSED_KEY = "screenerCollapsedGroups";
-const filled = (v) => v !== "" && v !== null && v !== undefined;
 
 export default function CompanyFilters() {
   const dispatch = useDispatch();
@@ -27,13 +26,6 @@ export default function CompanyFilters() {
       })
     )
   );
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(COLLAPSED_KEY) || "{}");
-    } catch {
-      return {};
-    }
-  });
 
   useEffect(() => {
     dispatch(fetchSectorsRequested());
@@ -76,13 +68,6 @@ export default function CompanyFilters() {
     apply();
   };
 
-  const toggleGroup = (title) =>
-    setCollapsed((c) => {
-      const next = { ...c, [title]: !c[title] };
-      localStorage.setItem(COLLAPSED_KEY, JSON.stringify(next));
-      return next;
-    });
-
   const onSectorChange = (e) => {
     dispatch(setFilters({ sector: e.target.value, industry: "" }));
     dispatch(fetchIndustriesRequested());
@@ -113,7 +98,6 @@ export default function CompanyFilters() {
   };
 
   const active = activeFilters(filters);
-  const groupCount = (fields) => fields.filter(({ key }) => (filters.ranges[key] || []).some(filled)).length;
 
   return (
     <form className="card" onSubmit={submit}>
@@ -169,60 +153,32 @@ export default function CompanyFilters() {
         </div>
       </div>
 
-      <div className="screener-groups">
-        {FILTER_GROUPS.map(({ title, icon: Icon, color, fields }) => {
-          const count = groupCount(fields);
-          const isCollapsed = !!collapsed[title];
+      <FilterTabs
+        filters={filters}
+        renderInputs={({ key, label, percent, unit }) => {
+          if (unit) {
+            const [rawMin, rawMax] = rawUnitValues[key] || ["", ""];
+            return (
+              <>
+                <input placeholder="min" value={rawMin} onChange={(e) => onUnitRangeChange(key, "min", e.target.value)} />
+                <input placeholder="max" value={rawMax} onChange={(e) => onUnitRangeChange(key, "max", e.target.value)} />
+                <select className="ft-unit" value={units[key]} onChange={(e) => onUnitChange(key, e.target.value)} title="Unit for min / max" aria-label={`${label} unit`}>
+                  {Object.entries(UNIT_LABELS).map(([u, l]) => (
+                    <option key={u} value={u} title={l}>{u}</option>
+                  ))}
+                </select>
+              </>
+            );
+          }
+          const [min, max] = filters.ranges[key] || ["", ""];
           return (
-            <div key={title} className="filter-group screener-group">
-              <button type="button" className="screener-group-head" onClick={() => toggleGroup(title)} aria-expanded={!isCollapsed}>
-                <span className="icon-badge" style={{ width: 30, height: 30, background: `${color}26`, color }}>
-                  <Icon width={16} height={16} />
-                </span>
-                <span className="screener-group-title">{title}</span>
-                <span className={`count-badge ${count ? "on" : ""}`} title={`${count} active filter${count === 1 ? "" : "s"}`}>{count}</span>
-                <ChevronDownIcon width={16} height={16} style={{ transform: isCollapsed ? "none" : "rotate(180deg)", transition: "transform 0.15s" }} />
-              </button>
-              {!isCollapsed && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-                  {fields.map(({ key, label, percent, unit }) => {
-                    if (unit) {
-                      const [rawMin, rawMax] = rawUnitValues[key] || ["", ""];
-                      return (
-                        <div key={key}>
-                          <label className="unit-label">
-                            {label} ($
-                            <select value={units[key]} onChange={(e) => onUnitChange(key, e.target.value)} title="Unit for min / max" aria-label={`${label} unit`}>
-                              {Object.entries(UNIT_LABELS).map(([u, l]) => (
-                                <option key={u} value={u} title={l}>{u}</option>
-                              ))}
-                            </select>
-                            )
-                          </label>
-                          <div className="range-inputs">
-                            <input placeholder="min" value={rawMin} onChange={(e) => onUnitRangeChange(key, "min", e.target.value)} />
-                            <input placeholder="max" value={rawMax} onChange={(e) => onUnitRangeChange(key, "max", e.target.value)} />
-                          </div>
-                        </div>
-                      );
-                    }
-                    const [min, max] = filters.ranges[key] || ["", ""];
-                    return (
-                      <div key={key}>
-                        <label>{label}</label>
-                        <div className="range-inputs">
-                          <input placeholder={percent ? "min %" : "min"} value={min} onChange={(e) => onRangeChange(key, "min", e.target.value)} />
-                          <input placeholder={percent ? "max %" : "max"} value={max} onChange={(e) => onRangeChange(key, "max", e.target.value)} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            <>
+              <input placeholder={percent ? "min %" : "min"} value={min} onChange={(e) => onRangeChange(key, "min", e.target.value)} />
+              <input placeholder={percent ? "max %" : "max"} value={max} onChange={(e) => onRangeChange(key, "max", e.target.value)} />
+            </>
           );
-        })}
-      </div>
+        }}
+      />
 
       <div className="active-filters">
         <strong>Active filters ({active.length})</strong>
