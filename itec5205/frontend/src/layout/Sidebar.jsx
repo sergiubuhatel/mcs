@@ -21,7 +21,7 @@ import {
 } from "./icons";
 import { APP_VERSION, APP_VERSION_DATE } from "../version";
 
-// One group per step a policy runs, in order, then Policies (which runs them
+// One group per step a workflow runs, in order, then Workflows (which runs them
 // all). Each step's page sits next to its saved criteria (sliders icon).
 // `hint` is the hover text, which also names the icons when collapsed.
 const GROUPS = [
@@ -31,7 +31,7 @@ const GROUPS = [
     color: "#10b981",
     items: [
       { to: "/data", label: "Market Data", icon: DownloadIcon, hint: "Import prices and fundamentals from Yahoo Finance" },
-      { to: "/criteria/data", label: "Data Filters", icon: SlidersIcon, hint: "Saved import settings (data criteria) for policies" },
+      { to: "/criteria/data", label: "Data Filters", icon: SlidersIcon, hint: "Saved import settings (data criteria) for workflows" },
     ],
   },
   {
@@ -40,7 +40,7 @@ const GROUPS = [
     color: "#3b82f6",
     items: [
       { to: "/", end: true, label: "Stock Screener", icon: ListIcon, hint: "Filter the S&P 500 by fundamentals and save a pool" },
-      { to: "/criteria/screen", label: "Screening Criteria", icon: SlidersIcon, hint: "Saved screener searches for policies" },
+      { to: "/criteria/screen", label: "Screening Criteria", icon: SlidersIcon, hint: "Saved screener searches for workflows" },
       { to: "/pools", label: "Stock Pools", icon: BookmarkPlusIcon, hint: "Saved pools: signal board, forecasts and the RL builder" },
     ],
   },
@@ -68,11 +68,11 @@ const GROUPS = [
     color: "#6366f1",
     items: [
       {
-        to: "/policies",
-        label: "Policies",
+        to: "/workflows",
+        label: "Workflows",
         icon: ClipboardCheckIcon,
         hint: "Run Data → Screening → Forecasting → Portfolio automatically and get a portfolio",
-        countKey: "runningPolicies",
+        countKey: "runningWorkflows",
       },
     ],
   },
@@ -101,15 +101,15 @@ const SETTINGS_GROUP = {
 const ACTIVE_RUN = ["queued", "running"];
 const POLL_MS = 10000;
 
-// How many policies are running right now (badge on Policies).
-function useRunningPolicies() {
+// How many workflows are running right now (badge on Workflows).
+function useRunningWorkflows() {
   const [count, setCount] = useState(0);
   useEffect(() => {
     let alive = true;
     const load = () =>
       apiClient
-        .get("/api/policies")
-        .then((r) => alive && setCount(r.data.policies.filter((p) => ACTIVE_RUN.includes(p.last_run?.status)).length))
+        .get("/api/workflows")
+        .then((r) => alive && setCount(r.data.workflows.filter((p) => ACTIVE_RUN.includes(p.last_run?.status)).length))
         .catch(() => {});
     load();
     const id = setInterval(load, POLL_MS);
@@ -140,7 +140,7 @@ function NavItem({ item, collapsed, counts }) {
 }
 
 export default function Sidebar({ collapsed }) {
-  const counts = { runningPolicies: useRunningPolicies() };
+  const counts = { runningWorkflows: useRunningWorkflows() };
   return (
     <aside
       className="flex h-full flex-col border-r shrink-0 transition-[width]"

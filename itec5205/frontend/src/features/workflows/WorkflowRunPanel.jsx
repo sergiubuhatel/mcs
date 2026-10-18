@@ -164,8 +164,8 @@ function ForecastTable({ rows }) {
   );
 }
 
-/** Latest run of a policy (live while it's active) + its run history. */
-export default function PolicyRunPanel({ policy, refreshKey, onClose, onChanged, onStop }) {
+/** Latest run of a workflow (live while it's active) + its run history. */
+export default function WorkflowRunPanel({ workflow, refreshKey, onClose, onChanged, onStop }) {
   const [stopping, setStopping] = useState(null); // run id a Stop was sent for
   const [runs, setRuns] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -175,7 +175,7 @@ export default function PolicyRunPanel({ policy, refreshKey, onClose, onChanged,
   useEffect(() => {
     let alive = true;
     const load = () =>
-      apiClient.get(`/api/policies/${policy._key}/runs`).then((r) => {
+      apiClient.get(`/api/workflows/${workflow._key}/runs`).then((r) => {
         if (!alive) return;
         setRuns(r.data.runs);
         if (r.data.runs.some((x) => ACTIVE.includes(x.status))) timer.current = setTimeout(load, getSettings().automation.refresh_seconds * 1000);
@@ -187,7 +187,7 @@ export default function PolicyRunPanel({ policy, refreshKey, onClose, onChanged,
       clearTimeout(timer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [policy._key, refreshKey]);
+  }, [workflow._key, refreshKey]);
 
   const run = runs.find((r) => r._key === selectedId) || runs[0];
   const active = run && ACTIVE.includes(run.status);
@@ -200,7 +200,7 @@ export default function PolicyRunPanel({ policy, refreshKey, onClose, onChanged,
           <WorkflowIcon width={26} height={26} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <h3 className="run-panel-title">{policy.name}</h3>
+          <h3 className="run-panel-title">{workflow.name}</h3>
           {run && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
               <RunStatus run={run} />
@@ -228,7 +228,7 @@ export default function PolicyRunPanel({ policy, refreshKey, onClose, onChanged,
           <CloseIcon width={18} height={18} />
         </button>
       </div>
-      {!run && <p className="muted">This policy hasn't been run yet — use Run in its action menu.</p>}
+      {!run && <p className="muted">This workflow hasn't been run yet — use Run in its action menu.</p>}
       {run && (
         <>
           <div className="progress-bar" style={{ marginTop: 14 }}>

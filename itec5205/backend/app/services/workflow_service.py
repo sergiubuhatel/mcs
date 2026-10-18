@@ -1,7 +1,7 @@
-"""Policies: a named, re-runnable recipe that automates search -> forecast ->
+"""Workflows: a named, re-runnable recipe that automates search -> forecast ->
 RL portfolio.
 
-A policy references four reusable criteria documents (collection
+A workflow references four reusable criteria documents (collection
 `criteria`, field `kind`), run in this order:
 
   data        -- optional: the Yahoo Finance import to run first (which
@@ -14,7 +14,7 @@ A policy references four reusable criteria documents (collection
                  without it every screened company goes to the portfolio step
   portfolio   -- the RL training options (mode, limits, company counts, ...)
 
-Running a policy is `tasks.policy_tasks.run_policy`; this module holds the
+Running a workflow is `tasks.workflow_tasks.run_workflow`; this module holds the
 CRUD, payload normalization, and the pure helpers that task uses.
 """
 
@@ -252,7 +252,7 @@ def update_criteria(kind: str, criteria_id: str, body: dict) -> dict | None:
 
 
 def set_default_criteria(kind: str, criteria_id: str, is_default: bool = True) -> dict | None:
-    """At most one default per kind: new policies start with it selected."""
+    """At most one default per kind: new workflows start with it selected."""
     if get_criteria(kind, criteria_id) is None:
         return None
     db = get_db()
@@ -272,27 +272,27 @@ def duplicate_criteria(kind: str, criteria_id: str) -> dict | None:
     return create_criteria(kind, {**current, "name": f"{current['name']} (copy)"})  # create_criteria drops is_default
 
 
-def policies_using(kind: str, criteria_id: str) -> list[dict]:
+def workflows_using(kind: str, criteria_id: str) -> list[dict]:
     return list(get_db().aql.execute(
-        f"FOR p IN policies FILTER p.{kind}_criteria_id == @id RETURN {{_key: p._key, name: p.name}}",
+        f"FOR p IN workflows FILTER p.{kind}_criteria_id == @id RETURN {{_key: p._key, name: p.name}}",
         bind_vars={"id": criteria_id},
     ))
 
 
 def delete_criteria(kind: str, criteria_id: str) -> bool:
-    """Raises ValueError while a policy still references it."""
+    """Raises ValueError while a workflow still references it."""
     if get_criteria(kind, criteria_id) is None:
         return False
-    users = policies_using(kind, criteria_id)
+    users = workflows_using(kind, criteria_id)
     if users:
-        raise ValueError("Used by policy " + ", ".join(f"'{p['name']}'" for p in users) + " -- change or delete it first")
+        raise ValueError("Used by workflow " + ", ".join(f"'{p['name']}'" for p in users) + " -- change or delete it first")
     get_db().collection("criteria").delete(criteria_id)
     return True
 
 
-# ------------------------------------------------------------------- policies
+# ------------------------------------------------------------------- workflows
 
-def _normalize_policy(body: dict) -> dict:
+def _normalize_workflow(body: dict) -> dict:
     name = (body.get("name") or "").strip()
     if not name:
         raise ValueError("'name' is required")
@@ -308,72 +308,72 @@ def _normalize_policy(body: dict) -> dict:
     return {"name": name, "description": (body.get("description") or "").strip(), **refs}
 
 
-def _with_last_run(policies: list[dict]) -> list[dict]:
-    if not policies:
+def _with_last_run(workflows: list[dict]) -> list[dict]:
+    if not workflows:
         return []
     runs = {
-        r["policy_id"]: r
+        r["workflow_id"]: r
         for r in get_db().aql.execute(
             """
-            FOR r IN policy_runs
-                FILTER r.policy_id IN @ids
-                COLLECT pid = r.policy_id INTO g
+            FOR r IN workflow_runs
+                FILTER r.workflow_id IN @ids
+                COLLECT pid = r.workflow_id INTO g
                 LET last = FIRST(FOR x IN g[*].r SORT x.created_at DESC LIMIT 1 RETURN x)
                 RETURN last
             """,
-            bind_vars={"ids": [p["_key"] for p in policies]},
+            bind_vars={"ids": [p["_key"] for p in workflows]},
         )
     }
-    return [{**p, "last_run": runs.get(p["_key"])} for p in policies]
+    return [{**p, "last_run": runs.get(p["_key"])} for p in workflows]
 
 
-def list_policies() -> list[dict]:
-    return _with_last_run(list(get_db().aql.execute("FOR p IN policies SORT p.created_at DESC RETURN p")))
+def list_workflows() -> list[dict]:
+    return _with_last_run(list(get_db().aql.execute("FOR p IN workflows SORT p.created_at DESC RETURN p")))
 
 
-def get_policy(policy_id: str) -> dict | None:
-    col = get_db().collection("policies")
-    return col.get(policy_id) if policy_id and col.has(policy_id) else None
+def get_workflow(workflow_id: str) -> dict | None:
+    col = get_db().collection("workflows")
+    return col.get(workflow_id) if workflow_id and col.has(workflow_id) else None
 
 
-def create_policy(body: dict) -> dict:
+def create_workflow(body: dict) -> dict:
     now = _now()
-    doc = {"_key": str(uuid.uuid4()), **_normalize_policy(body), "created_at": now, "updated_at": now}
-    get_db().collection("policies").insert(doc)
+    doc = {"_key": str(uuid.uuid4()), **_normalize_workflow(body), "created_at": now, "updated_at": now}
+    get_db().collection("workflows").insert(doc)
     return _with_last_run([doc])[0]
 
 
-def update_policy(policy_id: str, body: dict) -> dict | None:
-    current = get_policy(policy_id)
+def update_workflow(workflow_id: str, body: dict) -> dict | None:
+    current = get_workflow(workflow_id)
     if current is None:
         return None
-    doc = {**current, **_normalize_policy({**current, **body}), "updated_at": _now()}
-    get_db().collection("policies").replace(doc)
-    return _with_last_run([get_policy(policy_id)])[0]
+    doc = {**current, **_normalize_workflow({**current, **body}), "updated_at": _now()}
+    get_db().collection("workflows").replace(doc)
+    return _with_last_run([get_workflow(workflow_id)])[0]
 
 
-def duplicate_policy(policy_id: str) -> dict | None:
-    current = get_policy(policy_id)
+def duplicate_workflow(workflow_id: str) -> dict | None:
+    current = get_workflow(workflow_id)
     if current is None:
         return None
-    return create_policy({**current, "name": f"{current['name']} (copy)"})
+    return create_workflow({**current, "name": f"{current['name']} (copy)"})
 
 
-def delete_policy(policy_id: str) -> bool:
-    """Deletes the policy and its run history; the pools and portfolios its
+def delete_workflow(workflow_id: str) -> bool:
+    """Deletes the workflow and its run history; the pools and portfolios its
     runs created are kept."""
     db = get_db()
-    if get_policy(policy_id) is None:
+    if get_workflow(workflow_id) is None:
         return False
-    db.aql.execute("FOR r IN policy_runs FILTER r.policy_id == @id REMOVE r IN policy_runs", bind_vars={"id": policy_id})
-    db.collection("policies").delete(policy_id)
+    db.aql.execute("FOR r IN workflow_runs FILTER r.workflow_id == @id REMOVE r IN workflow_runs", bind_vars={"id": workflow_id})
+    db.collection("workflows").delete(workflow_id)
     return True
 
 
-def list_runs(policy_id: str, limit: int = 20) -> list[dict]:
+def list_runs(workflow_id: str, limit: int = 20) -> list[dict]:
     return list(get_db().aql.execute(
-        "FOR r IN policy_runs FILTER r.policy_id == @id SORT r.created_at DESC LIMIT @n RETURN r",
-        bind_vars={"id": policy_id, "n": limit},
+        "FOR r IN workflow_runs FILTER r.workflow_id == @id SORT r.created_at DESC LIMIT @n RETURN r",
+        bind_vars={"id": workflow_id, "n": limit},
     ))
 
 

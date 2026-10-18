@@ -28,7 +28,7 @@ const STATUS = {
   stopped: { label: "Stopped", tone: "warn" },
   failed: { label: "Failed", tone: "bad" },
 };
-const SOURCE = { manual: "Manual", resume: "Resumed", policy: "Policy" };
+const SOURCE = { manual: "Manual", resume: "Resumed", workflow: "Workflow" };
 
 const fmtInt = (n) => (n == null ? "–" : Number(n).toLocaleString());
 const fmtWhen = (iso) =>
@@ -64,7 +64,7 @@ const TIPS = [
   { icon: ClockIcon, color: "#8b5cf6", title: "Time range", text: "Forecasts train on 10 years (~2,515 trading days) by default: import at least 10 years." },
   { icon: BarChartIcon, color: "#f59e0b", title: "Import options", text: "Statistics feed the screener; history and calculated statistics feed charts and forecasts." },
   { icon: TrendChartIcon, color: "#3b82f6", title: "Already imported", text: "\"Skip them\" imports only new companies; \"Catch up if out of date\" refreshes only those behind the last trading day. Set the default in Settings." },
-  { icon: WorkflowIcon, color: "#6366f1", title: "Automate it", text: <>Save these options as a <Link to="/criteria/data">Data Criteria</Link> and a policy imports before every run.</> },
+  { icon: WorkflowIcon, color: "#6366f1", title: "Automate it", text: <>Save these options as a <Link to="/criteria/data">Data Criteria</Link> and a workflow imports before every run.</> },
 ];
 
 function Tips() {
@@ -214,7 +214,7 @@ function RecentImports({ refreshKey }) {
         icon={ClockIcon}
         color="#3b82f6"
         title="Recent imports"
-        subtitle="Every import, from this page, a resume or a policy run"
+        subtitle="Every import, from this page, a resume or a workflow run"
         action={
           data.total > RECENT && (
             <button className="btn secondary" onClick={() => setShowAll((v) => !v)}>

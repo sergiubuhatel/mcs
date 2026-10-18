@@ -18,12 +18,12 @@ export const CRITERIA_PAGES = {
   data: {
     title: "Data Filters",
     color: "#10b981",
-    description: "Saved Yahoo Finance import settings. A policy with a data criteria imports first, so it screens and forecasts on fresh data.",
+    description: "Saved Yahoo Finance import settings. A workflow with a data criteria imports first, so it screens and forecasts on fresh data.",
     about: {
       icon: DatabaseIcon,
       color: "#10b981",
       title: "About data criteria",
-      text: "A data criteria is the Market Data import form, saved. It is optional on a policy: without one, the run uses the data already stored.",
+      text: "A data criteria is the Market Data import form, saved. It is optional on a workflow: without one, the run uses the data already stored.",
       features: [
         { icon: DatabaseIcon, color: "#10b981", title: "Which companies", text: "All S&P 500 (503) or Russell 3000 (~2,590) tickers, or a list you type; already-imported companies can be skipped." },
         { icon: ClockIcon, color: "#8b5cf6", title: "How far back", text: "1 to 20 years of daily prices. Forecasts train on 10 years by default." },
@@ -32,31 +32,31 @@ export const CRITERIA_PAGES = {
       ],
     },
     tips: [
-      { title: "Keep one everyday set", text: "All S&P 500, 10 years, catch up if out of date: cheap to run before every policy." },
-      { title: "Mark it as default", text: "Use ⋯ → Set as default; new policies then start with it selected." },
-      { title: "Leave it off when you're iterating", text: "A policy without data criteria skips the import entirely." },
+      { title: "Keep one everyday set", text: "All S&P 500, 10 years, catch up if out of date: cheap to run before every workflow." },
+      { title: "Mark it as default", text: "Use ⋯ → Set as default; new workflows then start with it selected." },
+      { title: "Leave it off when you're iterating", text: "A workflow without data criteria skips the import entirely." },
     ],
   },
   screen: {
     title: "Screening Criteria",
     color: "#3b82f6",
-    description: "Saved Stock Screener searches. A policy uses one to pick the companies it forecasts and builds a portfolio from.",
+    description: "Saved Stock Screener searches. A workflow uses one to pick the companies it forecasts and builds a portfolio from.",
     about: {
       icon: SearchIcon,
       color: "#3b82f6",
       title: "About screening criteria",
-      text: "A screening criteria is a Stock Screener search, saved: sector, industry, name and min/max ranges on any fundamental. It runs first in a policy, after the optional import.",
+      text: "A screening criteria is a Stock Screener search, saved: sector, industry, name and min/max ranges on any fundamental. It runs first in a workflow, after the optional import.",
       features: [
         { icon: SearchIcon, color: "#3b82f6", title: "Filter companies", text: "Valuation, profitability, debt, growth and price performance ranges." },
-        { icon: LayersIcon, color: "#8b5cf6", title: "Several strategies", text: "Save a value screen, a growth screen and so on, and compare their policies." },
+        { icon: LayersIcon, color: "#8b5cf6", title: "Several strategies", text: "Save a value screen, a growth screen and so on, and compare their workflows." },
         { icon: ListIcon, color: "#10b981", title: "Live match count", text: "The editor shows how many companies the screen matches today." },
         { icon: SlidersIcon, color: "#f59e0b", title: "From the screener", text: "\"Copy current Stock Screener search\" saves what you already filled in." },
       ],
     },
     tips: [
       { title: "Start on the Stock Screener", text: "Tune the search there, then copy it into a new screening criteria." },
-      { title: "Watch the match count", text: "Every match is forecast in a policy run, so a broad screen takes longer." },
-      { title: "Compare strategies", text: "Duplicate a criteria, change one range, and run both policies." },
+      { title: "Watch the match count", text: "Every match is forecast in a workflow run, so a broad screen takes longer." },
+      { title: "Compare strategies", text: "Duplicate a criteria, change one range, and run both workflows." },
     ],
   },
   prediction: {

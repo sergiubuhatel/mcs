@@ -8,7 +8,7 @@ import { setFilters } from "../companies/companiesSlice";
 export const DEFAULT_SETTINGS = {
   general: {
     chart_range: "1Y", // company + portfolio detail price charts
-    list_page_size: 10, // Policies, Pools, Portfolios, criteria grids
+    list_page_size: 10, // Workflows, Pools, Portfolios, criteria grids
     next_days: 5, // "next N days" forecast tables
   },
   data: {
@@ -42,7 +42,7 @@ export const DEFAULT_SETTINGS = {
     reuse_forecasts: true,
   },
   automation: {
-    refresh_seconds: 2, // Policies grid + run panel polling while a run is active
+    refresh_seconds: 2, // Workflows grid + run panel polling while a run is active
     open_run_panel: true, // show the run details after clicking Run
     remember_screener: false, // reopen the screener with the last applied search
     remember_columns: true, // keep grid column order / visibility in this browser

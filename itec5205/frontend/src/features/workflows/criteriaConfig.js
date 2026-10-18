@@ -2,23 +2,23 @@ import { describeFilters } from "../companies/filterFields";
 import { defaultImportOptions, existingMode, universeLabel } from "../dataImport/ImportControls";
 import { getSettings } from "../settings/settings";
 
-// In run order: a policy imports (data), screens, predicts, then builds the portfolio.
+// In run order: a workflow imports (data), screens, predicts, then builds the portfolio.
 export const KINDS = {
   data: {
     title: "Data Criteria",
     singular: "data criteria",
-    optional: true, // a policy without one skips the import and uses the stored data
+    optional: true, // a workflow without one skips the import and uses the stored data
     noneOption: "— none (don't import, use the stored data) —",
     noneHint: "Without one, the run screens and forecasts on the data already imported.",
     noneChip: "No data criteria: the run uses the data already stored",
     skipped: "No data criteria — used the data already stored",
-    blurb: "The Yahoo Finance import a policy can run first, so it screens and forecasts on fresh data.",
+    blurb: "The Yahoo Finance import a workflow can run first, so it screens and forecasts on fresh data.",
   },
-  screen: { title: "Screening Criteria", singular: "screening criteria", blurb: "The Stock Screener search: which companies a policy starts from." },
+  screen: { title: "Screening Criteria", singular: "screening criteria", blurb: "The Stock Screener search: which companies a workflow starts from." },
   prediction: {
     title: "Prediction Criteria",
     singular: "prediction criteria",
-    optional: true, // a policy without one skips forecasting: every screened company goes to the portfolio step
+    optional: true, // a workflow without one skips forecasting: every screened company goes to the portfolio step
     noneOption: "— none (no forecasts, every screened company goes on) —",
     noneHint: "Without one, the run skips forecasting and builds the portfolio from every screened company.",
     noneChip: "No prediction criteria: every screened company goes to the portfolio step",
@@ -64,7 +64,7 @@ export function criteriaDefaults() {
     portfolio: {
       name: "",
       description: "",
-      // Criteria support full / subset only (no "strong" -- a policy has no signal board).
+      // Criteria support full / subset only (no "strong" -- a workflow has no signal board).
       mode: p.mode === "subset" ? "subset" : "full",
       trend_window_days: p.trend_window_days,
       risk_aversion: p.risk_aversion,
@@ -160,9 +160,9 @@ export function autoCriteriaName(kind, c) {
   return parts.length ? parts.join(", ") : "Whole pool, no limits";
 }
 
-/** Policy name from its criteria's names (screen, prediction, portfolio --
- * the data criteria is left out: it's usually the same for every policy). */
-export function autoPolicyName(chosen) {
+/** Workflow name from its criteria's names (screen, prediction, portfolio --
+ * the data criteria is left out: it's usually the same for every workflow). */
+export function autoWorkflowName(chosen) {
   return ["screen", "prediction", "portfolio"].map((k) => chosen[k]).filter(Boolean).map((c) => c.name).join(" → ");
 }
 

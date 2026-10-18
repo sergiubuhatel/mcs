@@ -8,8 +8,8 @@ import { PieChartIcon } from "../../layout/icons";
 import TickerToggleChips from "../pools/TickerToggleChips";
 import Req from "../../components/Req";
 import { getSettings } from "../settings/settings";
-import WeightRangeField from "../policies/WeightRangeField";
-import { describeWeightRange } from "../policies/criteriaConfig";
+import WeightRangeField from "../workflows/WeightRangeField";
+import { describeWeightRange } from "../workflows/criteriaConfig";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;

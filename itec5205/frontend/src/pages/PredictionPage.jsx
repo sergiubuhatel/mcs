@@ -341,7 +341,7 @@ const TIPS = [
   { title: "Pick a ticker", text: "Type one and press Load, or click a recent one." },
   { title: "Forecast it", text: "Forecast now trains LSTM and ARIMA on the last 10 years (~2,515 days)." },
   { title: "Compare the models", text: "Agreement and the lower test error are the strongest evidence." },
-  { title: "Use it in a policy", text: "Prediction criteria apply the same rule to every screened company." },
+  { title: "Use it in a workflow", text: "Prediction criteria apply the same rule to every screened company." },
 ];
 
 export default function PredictionPage() {

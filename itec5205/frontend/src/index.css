@@ -299,7 +299,7 @@ tr.selected td { background: rgba(37, 99, 235, 0.10); }
 .tip-step { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--btn-accent); color: #ffffff; font-weight: 700; font-size: 0.85rem; flex-shrink: 0; }
 
 .btn.btn-sm { padding: 4px 10px; font-size: 0.78rem; }
-/* Page header with actions on the right (Policies). */
+/* Page header with actions on the right (Workflows). */
 .page-header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .page-header-row .page-header { margin-bottom: 12px; }
 .filter-card { display: grid; gap: 12px; }
@@ -400,7 +400,7 @@ tr.selected td { background: rgba(37, 99, 235, 0.10); }
 /* Two-line clamp for long summaries in grid cells. */
 .clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; line-height: 1.35; }
 
-/* Policies page (reference screenshot 2026-10-11): header card, boxed
+/* Workflows page (reference screenshot 2026-10-11): header card, boxed
    filters, run panel with icon step cards. */
 .header-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .header-card .page-header { margin: 0; }

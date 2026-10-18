@@ -11,8 +11,8 @@ import Req from "../components/Req";
 import { PageHeader, Pager, SearchBox, SortTh, useSort, usePager } from "../components/PageParts";
 import { useColumnConfig } from "../utils/useColumnConfig";
 import { EyeIcon, ListIcon, PlayIcon, PlusIcon, SaveIcon, StopIcon, WorkflowIcon } from "../layout/icons";
-import { KINDS, autoPolicyName, describeCriteria, uniqueName } from "../features/policies/criteriaConfig";
-import PolicyRunPanel, { ACTIVE, KIND_STYLE, RunProgress, RunStatus } from "../features/policies/PolicyRunPanel";
+import { KINDS, autoWorkflowName, describeCriteria, uniqueName } from "../features/workflows/criteriaConfig";
+import WorkflowRunPanel, { ACTIVE, KIND_STYLE, RunProgress, RunStatus } from "../features/workflows/WorkflowRunPanel";
 import { getSettings } from "../features/settings/settings";
 
 const apiError = (err) => err.response?.data?.error || err.message;
@@ -89,8 +89,8 @@ const COLUMNS = [
 
 const EMPTY = { name: "", description: "", data_criteria_id: "", screen_criteria_id: "", prediction_criteria_id: "", portfolio_criteria_id: "" };
 
-export default function PoliciesPage() {
-  const [policies, setPolicies] = useState([]);
+export default function WorkflowsPage() {
+  const [workflows, setWorkflows] = useState([]);
   const [criteria, setCriteria] = useState({ data: {}, screen: {}, prediction: {}, portfolio: {} });
   const [loading, setLoading] = useState(true);
   const [editor, setEditor] = useState(null); // { id | null, form, autoName }
@@ -102,16 +102,16 @@ export default function PoliciesPage() {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState({ data: "", screen: "", prediction: "", portfolio: "", status: "all" }); // "" = all, "none" = no data criteria
   const timer = useRef(null);
-  const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("policiesGrid", COLUMNS);
+  const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("workflowsGrid", COLUMNS);
 
-  const loadPolicies = useCallback(() => {
+  const loadWorkflows = useCallback(() => {
     clearTimeout(timer.current);
     return apiClient
-      .get("/api/policies")
+      .get("/api/workflows")
       .then((r) => {
-        setPolicies(r.data.policies);
-        // Keep the grid's progress live while any policy is running.
-        if (r.data.policies.some((p) => ACTIVE.includes(p.last_run?.status))) timer.current = setTimeout(loadPolicies, getSettings().automation.refresh_seconds * 1000);
+        setWorkflows(r.data.workflows);
+        // Keep the grid's progress live while any workflow is running.
+        if (r.data.workflows.some((p) => ACTIVE.includes(p.last_run?.status))) timer.current = setTimeout(loadWorkflows, getSettings().automation.refresh_seconds * 1000);
       })
       .catch((err) => toast.error(apiError(err)))
       .finally(() => setLoading(false));
@@ -126,15 +126,15 @@ export default function PoliciesPage() {
   );
 
   useEffect(() => {
-    loadPolicies();
+    loadWorkflows();
     loadCriteria();
     return () => clearTimeout(timer.current);
-  }, [loadPolicies, loadCriteria]);
+  }, [loadWorkflows, loadCriteria]);
 
   // "Screen → Prediction → Portfolio" from the picked criteria's names.
   const generatedName = (form, id) => {
-    const name = autoPolicyName(Object.fromEntries(Object.keys(KINDS).map((k) => [k, criteria[k][form[`${k}_criteria_id`]]])));
-    return uniqueName(name || "New policy", policies, id);
+    const name = autoWorkflowName(Object.fromEntries(Object.keys(KINDS).map((k) => [k, criteria[k][form[`${k}_criteria_id`]]])));
+    return uniqueName(name || "New workflow", workflows, id);
   };
 
   const open = (p) => {
@@ -144,7 +144,7 @@ export default function PoliciesPage() {
       setEditor({ id: p._key, form: { ...EMPTY, ...p }, autoName: false });
       return;
     }
-    // A new policy starts with each kind's default criteria, or with the
+    // A new workflow starts with each kind's default criteria, or with the
     // only one when there's just one. Optional kinds (data, prediction): only a
     // default pre-selects it.
     const form = { ...EMPTY };
@@ -163,12 +163,12 @@ export default function PoliciesPage() {
     setSaving(true);
     setError(null);
     try {
-      if (editor.id) await apiClient.put(`/api/policies/${editor.id}`, payload);
-      else await apiClient.post("/api/policies", payload);
+      if (editor.id) await apiClient.put(`/api/workflows/${editor.id}`, payload);
+      else await apiClient.post("/api/workflows", payload);
       toast.success(`Saved "${payload.name}"`);
       if (!editor.id) showFirst();
       setEditor(null);
-      loadPolicies();
+      loadWorkflows();
     } catch (err) {
       setError(apiError(err));
     } finally {
@@ -178,30 +178,30 @@ export default function PoliciesPage() {
 
   const run = (p) =>
     apiClient
-      .post(`/api/policies/${p._key}/run`)
+      .post(`/api/workflows/${p._key}/run`)
       .then(() => {
         toast.info(`Running "${p.name}"`);
         if (getSettings().automation.open_run_panel) setActiveId(p._key);
         setRunKey((k) => k + 1);
-        loadPolicies();
+        loadWorkflows();
       })
       .catch((err) => toast.error(apiError(err)));
 
   const cancel = (p) =>
     apiClient
-      .post(`/api/policies/runs/${p.last_run._key}/cancel`)
+      .post(`/api/workflows/runs/${p.last_run._key}/cancel`)
       .then(() => {
         setRunKey((k) => k + 1);
-        loadPolicies();
+        loadWorkflows();
       })
       .catch((err) => toast.error(apiError(err)));
 
   const duplicate = (p) =>
     apiClient
-      .post(`/api/policies/${p._key}/duplicate`)
+      .post(`/api/workflows/${p._key}/duplicate`)
       .then(() => {
         showFirst();
-        return loadPolicies();
+        return loadWorkflows();
       })
       .catch((err) => toast.error(apiError(err)));
 
@@ -209,10 +209,10 @@ export default function PoliciesPage() {
     const target = deleteTarget;
     setDeleteTarget(null);
     apiClient
-      .delete(`/api/policies/${target._key}`)
+      .delete(`/api/workflows/${target._key}`)
       .then(() => {
         if (activeId === target._key) setActiveId(null);
-        loadPolicies();
+        loadWorkflows();
       })
       .catch((err) => toast.error(apiError(err)));
   };
@@ -221,7 +221,7 @@ export default function PoliciesPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return policies.filter((p) => {
+    return workflows.filter((p) => {
       for (const k of Object.keys(KINDS)) {
         const want = filters[k];
         if (!want) continue;
@@ -233,8 +233,8 @@ export default function PoliciesPage() {
       const names = Object.keys(KINDS).map((k) => criteria[k][p[`${k}_criteria_id`]]?.name || "").join(" ");
       return `${p.name} ${p.description || ""} ${names}`.toLowerCase().includes(q);
     });
-  }, [policies, filters, query, criteria]);
-  // Newest policy first, so a new or duplicated one shows at the top.
+  }, [workflows, filters, query, criteria]);
+  // Newest workflow first, so a new or duplicated one shows at the top.
   const { sorted, sort, toggle, showNewest } = useSort(
     filtered,
     { name: (p) => p.name, status: (p) => runState(p), created_at: (p) => p.created_at, run_at: (p) => p.last_run?.created_at },
@@ -248,7 +248,7 @@ export default function PoliciesPage() {
   };
   const setFilter = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
   const filtersOn = query.trim() || filters.status !== "all" || Object.keys(KINDS).some((k) => filters[k]);
-  const activePolicy = policies.find((p) => p._key === activeId);
+  const activeWorkflow = workflows.find((p) => p._key === activeId);
   const setField = (k, v) =>
     setEditor((ed) => {
       const form = { ...ed.form, [k]: v };
@@ -269,13 +269,13 @@ export default function PoliciesPage() {
         <PageHeader
           icon={WorkflowIcon}
           color="#8b5cf6"
-          title="Policies"
-          description="Saved import → screening → prediction → portfolio recipes. Run a policy to build a portfolio automatically."
+          title="Workflows"
+          description="Saved import → screening → prediction → portfolio recipes. Run a workflow to build a portfolio automatically."
           actions={
             <div className="toolbar">
               <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
               <button className="btn" onClick={() => open(null)}>
-                <PlusIcon width={17} height={17} /> New policy
+                <PlusIcon width={17} height={17} /> New workflow
               </button>
             </div>
           }
@@ -283,7 +283,7 @@ export default function PoliciesPage() {
       </div>
 
       <div className="card filter-card">
-        <SearchBox id="search-policies" value={query} onChange={setQuery} placeholder="Search policies by name, criteria or description…" />
+        <SearchBox id="search-workflows" value={query} onChange={setQuery} placeholder="Search workflows by name, criteria or description…" />
         <div className="filter-row">
           {Object.entries(KINDS).map(([kind, meta]) => {
             const { icon: Icon, color } = KIND_STYLE[kind];
@@ -309,10 +309,10 @@ export default function PoliciesPage() {
 
       <div className="card">
         {loading && <LoadingSpinner />}
-        {!loading && policies.length === 0 && <p className="muted">No policies yet — click New policy to create one.</p>}
-        {!loading && policies.length > 0 && filtered.length === 0 && (
+        {!loading && workflows.length === 0 && <p className="muted">No workflows yet — click New workflow to create one.</p>}
+        {!loading && workflows.length > 0 && filtered.length === 0 && (
           <p className="muted">
-            No policy matches these filters.{" "}
+            No workflow matches these filters.{" "}
             <a style={{ cursor: "pointer" }} onClick={() => { setQuery(""); setFilters({ data: "", screen: "", prediction: "", portfolio: "", status: "all" }); }}>Clear filters</a>
           </p>
         )}
@@ -371,15 +371,15 @@ export default function PoliciesPage() {
             })}
           </tbody>
         </table>
-        {filtered.length > 0 && <Pager pager={pager} total={filtered.length} noun={filtersOn ? "matching policies" : "policies"} />}
+        {filtered.length > 0 && <Pager pager={pager} total={filtered.length} noun={filtersOn ? "matching workflows" : "workflows"} />}
       </div>
 
-      {activePolicy && (
-        <PolicyRunPanel
-          policy={activePolicy}
+      {activeWorkflow && (
+        <WorkflowRunPanel
+          workflow={activeWorkflow}
           refreshKey={runKey}
           onClose={() => setActiveId(null)}
-          onChanged={loadPolicies}
+          onChanged={loadWorkflows}
           onStop={(runId) => cancel({ last_run: { _key: runId } })}
         />
       )}
@@ -389,20 +389,20 @@ export default function PoliciesPage() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
         itemName={deleteTarget?.name}
-        title="Delete policy"
+        title="Delete workflow"
       />
 
       <Modal
         isOpen={!!editor}
         onClose={() => setEditor(null)}
-        title={editor?.id ? "Edit policy" : "New policy"}
+        title={editor?.id ? "Edit workflow" : "New workflow"}
         maxWidth={620}
         headerActions={
           <button
             className="close-btn"
             style={{ position: "static", opacity: saving ? 0.5 : 1, cursor: saving ? "not-allowed" : "pointer" }}
             type="submit"
-            form="policy-form"
+            form="workflow-form"
             disabled={saving}
             title="Save"
             aria-label="Save"
@@ -412,7 +412,7 @@ export default function PoliciesPage() {
         }
       >
         {editor && (
-          <form id="policy-form" onSubmit={save} className="filters-grid" style={{ gridTemplateColumns: "1fr" }}>
+          <form id="workflow-form" onSubmit={save} className="filters-grid" style={{ gridTemplateColumns: "1fr" }}>
             <div>
               <label>Name<Req /></label>
               <input value={editor.form.name} onChange={(e) => setName(e.target.value)} autoFocus />

@@ -110,9 +110,9 @@ const ABOUT = {
   icon: PieChartIcon,
   color: "#8b5cf6",
   title: "About my portfolios",
-  text: "A portfolio is a set of holdings with weights. Most come from the RL builder on a stock pool or from a policy run; you can also build one by hand.",
+  text: "A portfolio is a set of holdings with weights. Most come from the RL builder on a stock pool or from a workflow run; you can also build one by hand.",
   features: [
-    { icon: BookmarkPlusIcon, color: "#3b82f6", title: "From a pool or policy", text: "RL portfolios keep a link to the pool they were trained on." },
+    { icon: BookmarkPlusIcon, color: "#3b82f6", title: "From a pool or workflow", text: "RL portfolios keep a link to the pool they were trained on." },
     { icon: WorkflowIcon, color: "#10b981", title: "Optimized with RL", text: "PPO weights, blended toward the optimizer when a limit would be missed." },
     { icon: BarChartIcon, color: "#f59e0b", title: "Risk at a glance", text: "Risk is the past year's annualized volatility: low < 20%, high ≥ 35%." },
     { icon: TrendChartIcon, color: "#06b6d4", title: "Track performance", text: "Open a portfolio for its value chart, allocation and signal board." },
@@ -120,7 +120,7 @@ const ABOUT = {
 };
 
 const TIPS = [
-  { title: "Build from a pool", text: "Stock Pools → pick a pool → train the RL portfolio, or run a policy." },
+  { title: "Build from a pool", text: "Stock Pools → pick a pool → train the RL portfolio, or run a workflow." },
   { title: "Compare portfolios", text: "Sort by Return (1Y) or Risk; open one to see its chart over 1M–ALL." },
   { title: "Refine and iterate", text: "Refine the pool on its signal board and retrain to compare iterations." },
 ];
@@ -199,7 +199,7 @@ export default function PortfoliosPage() {
         icon={PieChartIcon}
         color="#3b82f6"
         title="My portfolios"
-        description="Saved portfolio allocations: RL-optimized ones from stock pools and policy runs, and portfolios you built by hand."
+        description="Saved portfolio allocations: RL-optimized ones from stock pools and workflow runs, and portfolios you built by hand."
       />
       <StatTiles tiles={tiles} />
 

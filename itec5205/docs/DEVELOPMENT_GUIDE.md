@@ -37,7 +37,7 @@ academic writeup see [`paper/ITEC5205_ResearchPaper.docx`](../paper/ITEC5205_Res
 Docker services (`docker-compose.yml`): `arangodb`, `redis`, `init-db`
 (one-shot: creates collections/indexes, then exits; everything else waits
 for it), `backend`, `worker-import`, `worker-rl`, `worker-lstm`,
-`worker-arima`, `worker-policy` (queue `policy`, see *Policies* below), `flower` (Celery monitoring UI), `frontend`. Only
+`worker-arima`, `worker-workflow` (queue `workflow`, see *Workflows* below), `flower` (Celery monitoring UI), `frontend`. Only
 `backend` builds the Python image (`itec5205-backend`); the workers,
 `init-db` and `flower` reuse it.
 **Both `frontend` and `backend` run nginx as their public-facing web
@@ -82,7 +82,7 @@ backend/
       arima_service.py            per-ticker ARIMA forecaster (AIC search over (p,q) and drift)
       horizons.py                 the 1/2/3/4-month horizons (21/42/63/84 trading days)
       signal_service.py           signal board: fundamentals + RL + LSTM + ARIMA -> compound signal
-      policy_service.py           policies + screen/prediction/portfolio criteria: CRUD, validation, run helpers
+      workflow_service.py           workflows + screen/prediction/portfolio criteria: CRUD, validation, run helpers
     rl/
       portfolio_env.py           the Gymnasium environment PPO trains against
     tasks/
@@ -91,11 +91,11 @@ backend/
       rl_tasks.py                   `train_rl_portfolio` Celery task
       predict_tasks.py              `train_lstm_prediction` Celery task (queue `lstm`)
       arima_tasks.py                `train_arima_prediction` Celery task (queue `arima`)
-      policy_tasks.py               `run_policy` orchestrator (queue `policy`)
+      workflow_tasks.py               `run_workflow` orchestrator (queue `workflow`)
     api/                        thin Flask blueprints; validate input, call services/tasks, return JSON
       companies.py, pools.py, portfolios.py, rl.py, data.py, predictions.py,
       arima.py, forecasts.py (batch LSTM+ARIMA over a pool/portfolio), signals.py,
-      policies.py (criteria + policies CRUD, run/cancel)
+      workflows.py (criteria + workflows CRUD, run/cancel)
   scripts/init_db.py         create collections + indexes (retries until ArangoDB is up; run by `init-db`)
   wsgi.py                    exposes `app`; `python wsgi.py` serves it with Waitress
   celery_worker.py            Celery worker entrypoint (`celery -A celery_worker.celery_app worker`)
@@ -126,8 +126,8 @@ adapters around them.
 | `arima_predictions`            | ticker                | latest ARIMA forecast (+ 95% interval per step, order, drift) |
 | `forecast_runs`                | uuid                  | batch forecast run: tickers, params, Celery task ids per model, `finished_at`, `wall_seconds`, `cancelled_at` |
 | `criteria`                     | uuid                  | `{kind: data\|screen\|prediction\|portfolio, name, description, ...}` -- data: `scope`, `tickers[]`, `years`, `only_missing`, `import_history/statistics/calculated_stats`; screen: `filters` (form state) + `screen` (API units); prediction: `horizons[{value,unit}]`, `training{value,unit}`, `models`, `min_change_pct`, `epochs`, `reuse_forecasts`; portfolio: the RL options |
-| `policies`                     | uuid                  | `{name, description, data_criteria_id (optional, null = no import), screen_criteria_id, prediction_criteria_id, portfolio_criteria_id}` |
-| `policy_runs`                  | uuid                  | one run: criteria snapshot, `status` (queued/running/succeeded/failed/cancelled), `step`, `percent`, `message`, `steps.{data,screen,forecast,portfolio}` (counts, per-ticker forecast rows), `pool_id`, `portfolio_id`, `wall_seconds` |
+| `workflows`                     | uuid                  | `{name, description, data_criteria_id (optional, null = no import), screen_criteria_id, prediction_criteria_id, portfolio_criteria_id}` |
+| `workflow_runs`                  | uuid                  | one run: criteria snapshot, `status` (queued/running/succeeded/failed/cancelled), `step`, `percent`, `message`, `steps.{data,screen,forecast,portfolio}` (counts, per-ticker forecast rows), `pool_id`, `portfolio_id`, `wall_seconds` |
 
 `sectors`/`industries` exist as their own collections (not just distinct
 values scanned off `companies`) specifically so the Screener's dropdowns
@@ -151,7 +151,7 @@ A Gymnasium `Env` where:
 - Trained with `stable-baselines3`'s PPO (`MlpPolicy`) in
   `services/rl_service.py::train_and_recommend`, which pulls the pool's
   returns matrix out of `stock_prices`, trains, then applies the learned
-  policy to the most recent window to produce today's recommended
+  workflow to the most recent window to produce today's recommended
   allocation.
 
 ### Forecasting: LSTM and ARIMA
@@ -203,11 +203,11 @@ aggregates the task states; the first read that sees every task done stores
 `wall_seconds`. `queued` is true while a model has jobs waiting and none
 running (i.e. behind another run on the same queue).
 
-### Policies (`policy_service.py`, `tasks/policy_tasks.py`)
+### Workflows (`workflow_service.py`, `tasks/workflow_tasks.py`)
 
-A policy names one screen, prediction and portfolio criteria and optionally
-a data criteria; `POST /api/policies/<id>/run` snapshots them into a
-`policy_runs` document and queues `run_policy` on the `policy` queue. The
+A workflow names one screen, prediction and portfolio criteria and optionally
+a data criteria; `POST /api/workflows/<id>/run` snapshots them into a
+`workflow_runs` document and queues `run_workflow` on the `workflow` queue. The
 task:
 
 0. **Data** (only with a data criteria) -- `import_sp500_data` on the
@@ -215,7 +215,7 @@ task:
    tickers `get_up_to_date_tickers()` reports current are skipped (nothing
    left = no import).
 1. **Screen** -- `search_companies` with the screen criteria, saved as a pool
-   (`<policy> · <date>`).
+   (`<workflow> · <date>`).
 2. **Predict** -- training window = N business days, or for months/years the
    exact closes stored per ticker since that calendar date. Queues LSTM
    and/or ARIMA per ticker on the `lstm`/`arima` queues (forecast length =
@@ -397,10 +397,10 @@ Socket.IO room/event.
 | `GET /api/forecasts/batch/<run_id>`, `GET /api/forecasts/batch?pool_id=\|portfolio_id=` | Run progress (per-model counts, errors, `queued`, `wall_seconds`) / latest run |
 | `POST /api/forecasts/batch/<run_id>/cancel` | Revoke the run's unfinished jobs |
 | `GET /api/signals?pool_id=\|portfolio_id=` | Signal board rows + summary |
-| `GET/POST /api/criteria/<kind>`, `GET/PUT/DELETE /api/criteria/<kind>/<id>`, `POST .../<id>/duplicate` | Screen / prediction / portfolio criteria CRUD (`kind` = `data`\|`screen`\|`prediction`\|`portfolio`); DELETE returns 409 while a policy uses it |
-| `GET/POST /api/policies`, `GET/PUT/DELETE /api/policies/<id>`, `POST .../<id>/duplicate` | Policy CRUD (the list includes each policy's last run) |
-| `POST /api/policies/<id>/run`, `GET /api/policies/<id>/runs` | Start a run (409 if one is active) / run history |
-| `GET /api/policies/runs/<run_id>`, `POST /api/policies/runs/<run_id>/cancel` | Run progress / cancel |
+| `GET/POST /api/criteria/<kind>`, `GET/PUT/DELETE /api/criteria/<kind>/<id>`, `POST .../<id>/duplicate` | Screen / prediction / portfolio criteria CRUD (`kind` = `data`\|`screen`\|`prediction`\|`portfolio`); DELETE returns 409 while a workflow uses it |
+| `GET/POST /api/workflows`, `GET/PUT/DELETE /api/workflows/<id>`, `POST .../<id>/duplicate` | Workflow CRUD (the list includes each workflow's last run) |
+| `POST /api/workflows/<id>/run`, `GET /api/workflows/<id>/runs` | Start a run (409 if one is active) / run history |
+| `GET /api/workflows/runs/<run_id>`, `POST /api/workflows/runs/<run_id>/cancel` | Run progress / cancel |
 | `GET /api/health` | Liveness check |
 
 ## 6. Troubleshooting / operational gotchas

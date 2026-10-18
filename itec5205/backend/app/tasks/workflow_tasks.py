@@ -1,12 +1,12 @@
-"""Background job: run a policy end to end -- import -> screen -> forecast ->
+"""Background job: run a workflow end to end -- import -> screen -> forecast ->
 RL portfolio.
 
-The orchestrator runs on its own `policy` queue and fans the heavy work out
+The orchestrator runs on its own `workflow` queue and fans the heavy work out
 to the existing workers: the import on the `import` queue, one LSTM/ARIMA
 task per ticker on the `lstm` / `arima` queues (in parallel), then one RL
 task on the `rl` queue. It waits
 on them by polling their states (never `.get()` inside a task), and records
-step-by-step progress in the run's `policy_runs` document, which the UI
+step-by-step progress in the run's `workflow_runs` document, which the UI
 polls. Stop uses the same Redis stop-flag as the import job.
 """
 
@@ -18,7 +18,7 @@ from celery.result import AsyncResult
 from ..db.arango_client import get_db
 from ..services.horizons import MAX_HORIZON_DAYS
 from ..services.lstm_service import MIN_HISTORY_DAYS
-from ..services.policy_service import (
+from ..services.workflow_service import (
     evaluate_forecasts,
     forecast_reusable,
     history_stats,
@@ -48,7 +48,7 @@ class Cancelled(Exception):
     pass
 
 
-class PolicyRunError(Exception):
+class WorkflowRunError(Exception):
     pass
 
 
@@ -70,9 +70,9 @@ def _pct(step: str, fraction: float) -> int:
     return int(round(lo + (hi - lo) * max(0.0, min(1.0, fraction))))
 
 
-@celery_app.task(bind=True, name="run_policy")
-def run_policy(self, run_id: str):
-    col = get_db().collection("policy_runs")
+@celery_app.task(bind=True, name="run_workflow")
+def run_workflow(self, run_id: str):
+    col = get_db().collection("workflow_runs")
     run = col.get(run_id)
     started = datetime.now(timezone.utc)
     children: list[str] = []  # child task ids, revoked on cancel
@@ -92,7 +92,7 @@ def run_policy(self, run_id: str):
     try:
         save(status="running", started_at=started.isoformat())
         today = date.today().isoformat()
-        name = run["policy_name"]
+        name = run["workflow_name"]
         data_c = run["criteria"]["data"]
         screen_c = run["criteria"]["screen"]
         pred_c = run["criteria"]["prediction"]
@@ -113,7 +113,7 @@ def run_policy(self, run_id: str):
                 imp = import_sp500_data.delay(
                     tickers=to_import, years=data_c["years"], import_history=data_c["import_history"],
                     import_statistics=data_c["import_statistics"], import_calculated_stats=data_c["import_calculated_stats"],
-                    scope=data_c["scope"], source="policy", universe=universe, skipped=len(wanted) - len(to_import),
+                    scope=data_c["scope"], source="workflow", universe=universe, skipped=len(wanted) - len(to_import),
                     existing=existing,
                 )
                 children.append(imp.id)
@@ -122,7 +122,7 @@ def run_policy(self, run_id: str):
                     if state == "SUCCESS":
                         break
                     if state in ("FAILURE", "REVOKED"):
-                        raise PolicyRunError(f"Import failed: {payload}")
+                        raise WorkflowRunError(f"Import failed: {payload}")
                     info = payload if state == "PROGRESS" and isinstance(payload, dict) else {}
                     if info.get("total") and "completed" in info:
                         step("data", info["completed"] / info["total"],
@@ -135,7 +135,7 @@ def run_policy(self, run_id: str):
                     time.sleep(POLL_SECONDS)
                 r = payload
                 if r.get("stopped"):
-                    raise PolicyRunError("The import was stopped")
+                    raise WorkflowRunError("The import was stopped")
                 step(
                     "data", 1, f"Imported {r['succeeded_count']} companies" + (f", {r['failed_count']} failed" if r["failed_count"] else ""),
                     status="done", requested=len(wanted), up_to_date=skipped, imported=r["succeeded_count"],
@@ -156,7 +156,7 @@ def run_policy(self, run_id: str):
         )["results"]
         tickers = [h["ticker"] for h in hits]
         if len(tickers) < 2:
-            raise PolicyRunError(f"The screen criteria matched {len(tickers)} companies -- need at least 2")
+            raise WorkflowRunError(f"The screen criteria matched {len(tickers)} companies -- need at least 2")
         pool = create_pool(name=f"{name} · {today}", tickers=tickers, filters=s)
         step("screen", 1, f"{len(tickers)} companies match the screen", status="done", tickers=len(tickers), pool_id=pool["_key"])
         check_stop()
@@ -230,11 +230,11 @@ def run_policy(self, run_id: str):
                 status="done", passed=len(passed), rows=rows,
             )
             if len(passed) < 2:
-                raise PolicyRunError(f"Only {len(passed)} companies pass the prediction criteria -- need at least 2")
+                raise WorkflowRunError(f"Only {len(passed)} companies pass the prediction criteria -- need at least 2")
             dropped = [t for t in tickers if t not in set(passed)]
             if dropped:
                 reason = {r["ticker"]: {"reason": r["reason"], "models": r["models"]} for r in rows if not r["passed"]}
-                reason["_rule"] = f"policy prediction criteria '{run['criteria']['prediction']['name']}'"
+                reason["_rule"] = f"workflow prediction criteria '{run['criteria']['prediction']['name']}'"
                 pool = refine_pool(pool["_key"], drop=dropped, reason=reason)
         save(pool_id=pool["_key"])
         check_stop()
@@ -265,7 +265,7 @@ def run_policy(self, run_id: str):
             if state == "SUCCESS":
                 break
             if state in ("FAILURE", "REVOKED"):
-                raise PolicyRunError(f"RL training failed: {payload}")
+                raise WorkflowRunError(f"RL training failed: {payload}")
             info = payload if state == "PROGRESS" and isinstance(payload, dict) else {}
             if info.get("stage") == "selecting":
                 step("portfolio", 0.02, "Selecting companies with the portfolio criteria...")

@@ -102,11 +102,11 @@ services:
     <<: *backend
     command: celery -A celery_worker.celery_app worker --loglevel=info -Q arima -n arima@%h --concurrency=${ARIMA_CONCURRENCY:-4}
 
-  # Runs policies (screen -> forecast -> RL): mostly waits on the jobs it
+  # Runs workflows (screen -> forecast -> RL): mostly waits on the jobs it
   # queues on the lstm/arima/rl workers, so a few at once are cheap.
-  worker-policy:
+  worker-workflow:
     <<: *backend
-    command: celery -A celery_worker.celery_app worker --loglevel=info -Q policy -n policy@%h --concurrency=${POLICY_CONCURRENCY:-2}
+    command: celery -A celery_worker.celery_app worker --loglevel=info -Q workflow -n workflow@%h --concurrency=${WORKFLOW_CONCURRENCY:-2}
 
   flower:
     image: itec5205-backend
@@ -140,7 +140,7 @@ services:
         condition: service_started
       worker-arima:
         condition: service_started
-      worker-policy:
+      worker-workflow:
         condition: service_started
     ports:
       - "8080:80"

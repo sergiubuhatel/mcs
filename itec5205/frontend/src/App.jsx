@@ -14,7 +14,7 @@ import PortfoliosPage from "./pages/PortfoliosPage";
 import PredictionPage from "./pages/PredictionPage";
 import CompanyDetailPage from "./pages/CompanyDetailPage";
 import PortfolioDetailPage from "./pages/PortfolioDetailPage";
-import PoliciesPage from "./pages/PoliciesPage";
+import WorkflowsPage from "./pages/WorkflowsPage";
 import CriteriaPage from "./pages/CriteriaPage";
 import DataPage from "./pages/DataPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -52,7 +52,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<ScreenerPage />} />
             <Route path="/data" element={<DataPage />} />
-            <Route path="/policies" element={<PoliciesPage />} />
+            <Route path="/workflows" element={<WorkflowsPage />} />
             <Route path="/criteria/:kind" element={<CriteriaPage />} />
             <Route path="/pools" element={<PoolsPage />} />
             <Route path="/portfolio" element={<PortfoliosPage />} />

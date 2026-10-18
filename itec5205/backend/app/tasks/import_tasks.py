@@ -141,7 +141,7 @@ def _record_start(task_id: str, tickers: list[str], scope: str, source: str, opt
         "_key": task_id,
         "created_at": started.isoformat(),
         "status": "running",
-        "source": source,  # "manual" | "resume" | "policy"
+        "source": source,  # "manual" | "resume" | "workflow"
         "scope": scope,  # "all" | "specific"
         "universe": universe,  # "sp500" | "russell3000" when scope is "all"
         "skipped": skipped,  # requested tickers left out (already imported / up to date)

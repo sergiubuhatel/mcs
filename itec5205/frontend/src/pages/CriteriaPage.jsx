@@ -11,12 +11,12 @@ import Req from "../components/Req";
 import { InfoPanels, PageHeader, SearchBox, SortTh, StatTiles, useSort } from "../components/PageParts";
 import { useColumnConfig } from "../utils/useColumnConfig";
 import { ClockIcon, LayersIcon, PlusIcon, SaveIcon, SlidersIcon, StarIcon, WorkflowIcon } from "../layout/icons";
-import { CRITERIA_PAGES } from "../features/policies/criteriaPageInfo";
+import { CRITERIA_PAGES } from "../features/workflows/criteriaPageInfo";
 import { screenCriteria } from "../features/companies/companiesSaga";
-import { KINDS, criteriaDefaults, autoCriteriaName, blankToNull, describeCriteria, nullToBlank, uniqueName } from "../features/policies/criteriaConfig";
-import ScreenCriteriaForm from "../features/policies/ScreenCriteriaForm";
-import PredictionCriteriaForm from "../features/policies/PredictionCriteriaForm";
-import PortfolioCriteriaForm from "../features/policies/PortfolioCriteriaForm";
+import { KINDS, criteriaDefaults, autoCriteriaName, blankToNull, describeCriteria, nullToBlank, uniqueName } from "../features/workflows/criteriaConfig";
+import ScreenCriteriaForm from "../features/workflows/ScreenCriteriaForm";
+import PredictionCriteriaForm from "../features/workflows/PredictionCriteriaForm";
+import PortfolioCriteriaForm from "../features/workflows/PortfolioCriteriaForm";
 import { ImportOptionsFields, existingMode, importOptionsInvalid, parseTickers, universeKey } from "../features/dataImport/ImportControls";
 
 const apiError = (err) => err.response?.data?.error || err.message;
@@ -82,7 +82,7 @@ function DataCriteriaForm({ value, onChange }) {
     <div>
       <ImportOptionsFields value={value} onChange={onChange} name="data-criteria-scope" />
       <p className="muted" style={{ margin: 0 }}>
-        Runs as step 1 of every policy that uses it; when every company is already imported (or up to date), the run skips the import.
+        Runs as step 1 of every workflow that uses it; when every company is already imported (or up to date), the run skips the import.
       </p>
     </div>
   );
@@ -104,7 +104,7 @@ const COLUMNS = [
       <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
         <span className="row-icon"><LayersIcon width={15} height={15} /></span>
         <a onClick={() => ctx.edit(c)} title={c.name} style={{ ...ellipsis, cursor: "pointer", minWidth: 0 }}>{c.name}</a>
-        {c.is_default && <span className="default-badge" title="New policies start with this one selected"><StarIcon width={11} height={11} /> Default</span>}
+        {c.is_default && <span className="default-badge" title="New workflows start with this one selected"><StarIcon width={11} height={11} /> Default</span>}
       </div>
     ),
   },
@@ -139,7 +139,7 @@ const COLUMNS = [
     sortable: true,
     render: (c, ctx) => {
       const n = ctx.usage[c._key] || 0;
-      return <span className={`count-badge ${n ? "" : "grey"}`} title={n ? `Used by ${n} polic${n === 1 ? "y" : "ies"}` : "Not used by any policy"}>{n} {n === 1 ? "policy" : "policies"}</span>;
+      return <span className={`count-badge ${n ? "" : "grey"}`} title={n ? `Used by ${n} workflow${n === 1 ? "" : "s"}` : "Not used by any workflow"}>{n} {n === 1 ? "workflow" : "workflows"}</span>;
     },
   },
   {
@@ -162,7 +162,7 @@ function CriteriaGrid({ kind }) {
   const [error, setError] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [query, setQuery] = useState("");
-  const [usage, setUsage] = useState({}); // criteria id -> number of policies using it
+  const [usage, setUsage] = useState({}); // criteria id -> number of workflows using it
   const page = CRITERIA_PAGES[kind];
   const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig(
     `criteriaGrid.${kind}`,
@@ -176,10 +176,10 @@ function CriteriaGrid({ kind }) {
       .catch((err) => toast.error(apiError(err)))
       .finally(() => setLoading(false));
     apiClient
-      .get("/api/policies")
+      .get("/api/workflows")
       .then((r) => {
         const counts = {};
-        for (const p of r.data.policies) {
+        for (const p of r.data.workflows) {
           const id = p[`${kind}_criteria_id`];
           if (id) counts[id] = (counts[id] || 0) + 1;
         }
@@ -281,13 +281,13 @@ function CriteriaGrid({ kind }) {
   const tiles = [
     { icon: LayersIcon, color: "#8b5cf6", label: "Saved criteria", value: items.length, sub: `${meta.title.toLowerCase()} you can reuse` },
     { icon: ClockIcon, color: "#10b981", label: "Last updated", value: latest ? fmtDate(latest.updated_at) : "–", sub: latest ? latest.name : "nothing saved yet", title: latest?.name },
-    { icon: WorkflowIcon, color: "#3b82f6", label: "In use", value: `${usedCount} / ${items.length}`, sub: "used by at least one policy" },
+    { icon: WorkflowIcon, color: "#3b82f6", label: "In use", value: `${usedCount} / ${items.length}`, sub: "used by at least one workflow" },
     {
       icon: StarIcon,
       color: "#f59e0b",
       label: "Default",
       value: defaultItem ? defaultItem.name : "None set",
-      sub: defaultItem ? "selected for new policies" : "⋯ → Set as default",
+      sub: defaultItem ? "selected for new workflows" : "⋯ → Set as default",
       title: defaultItem?.name,
     },
   ];

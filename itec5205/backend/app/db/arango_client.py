@@ -64,18 +64,18 @@ COLLECTIONS = {
         {"type": "persistent", "fields": ["pool_id", "created_at"], "unique": False},
         {"type": "persistent", "fields": ["portfolio_id", "created_at"], "unique": False},
     ],
-    # Policies (search -> forecast -> RL, automated): reusable screen /
-    # prediction / portfolio criteria (`kind`), the policies that reference
-    # one of each, and each policy run's step-by-step progress + outcome.
+    # Workflows (search -> forecast -> RL, automated): reusable screen /
+    # prediction / portfolio criteria (`kind`), the workflows that reference
+    # one of each, and each workflow run's step-by-step progress + outcome.
     "criteria": [
         {"type": "persistent", "fields": ["kind", "name"], "unique": False},
     ],
-    "policies": [],
-    "policy_runs": [
-        {"type": "persistent", "fields": ["policy_id", "created_at"], "unique": False},
+    "workflows": [],
+    "workflow_runs": [
+        {"type": "persistent", "fields": ["workflow_id", "created_at"], "unique": False},
     ],
     # One document per import job (`_key` = Celery task id), written by the
-    # task itself so Market Data page, resumed and policy imports all appear.
+    # task itself so Market Data page, resumed and workflow imports all appear.
     "import_runs": [
         {"type": "persistent", "fields": ["created_at"], "unique": False},
     ],
@@ -104,9 +104,30 @@ def get_db():
     return client.db(config.ARANGO_DB, username=config.ARANGO_USER, password=config.ARANGO_PASSWORD)
 
 
+def _migrate_policy_names(db):
+    """Workflows used to be called "policies" (renamed 2026-10-18): move the
+    old collections and stored field names over once, keeping every document."""
+    for old, new in (("policies", "workflows"), ("policy_runs", "workflow_runs")):
+        if db.has_collection(old) and not db.has_collection(new):
+            db.collection(old).rename(new)
+    if db.has_collection("workflow_runs"):
+        runs = db.collection("workflow_runs")
+        for index in runs.indexes():
+            if "policy_id" in index.get("fields", []):
+                runs.delete_index(index["id"].split("/")[-1])
+        db.aql.execute(
+            "FOR r IN workflow_runs FILTER HAS(r, 'policy_id') OR HAS(r, 'policy_name') "
+            "UPDATE r WITH {workflow_id: r.policy_id, workflow_name: r.policy_name, "
+            "policy_id: null, policy_name: null} IN workflow_runs OPTIONS {keepNull: false}"
+        )
+    if db.has_collection("import_runs"):
+        db.aql.execute("FOR r IN import_runs FILTER r.source == 'policy' UPDATE r WITH {source: 'workflow'} IN import_runs")
+
+
 def ensure_collections():
     """Create every collection + index this app needs. Safe to call repeatedly."""
     db = get_db()
+    _migrate_policy_names(db)
     for name, indexes in COLLECTIONS.items():
         if not db.has_collection(name):
             db.create_collection(name)

@@ -22,7 +22,7 @@ The workflow from the project proposal, as one loop:
 6. **Refine**: create a new pool without the companies whose evidence doesn't
    line up, retrain RL on it, and compare iterations.
 
-**Policies** automate the data import and steps 1-4: save the import, the
+**Workflows** automate the data import and steps 1-4: save the import, the
 screen, the forecast rules and the RL options once, then run them in one
 click to get a portfolio.
 
@@ -40,7 +40,7 @@ docker compose up -d --build
 | backend | http://localhost:5000/api | REST API + Socket.IO |
 | arangodb | http://localhost:8529 | ArangoDB web UI (user `root`, password = `ARANGO_PASSWORD` in `.env`, default `root`) |
 | flower | http://localhost:5555 | Celery job monitor |
-| redis, init-db, worker-import / -rl / -lstm / -arima / -policy | (internal) | broker, one-shot DB setup, background workers |
+| redis, init-db, worker-import / -rl / -lstm / -arima / -workflow | (internal) | broker, one-shot DB setup, background workers |
 
 **Open http://localhost:8080** (on Windows: `start http://localhost:8080`).
 The database setup runs automatically (`init-db`).
@@ -52,34 +52,34 @@ and click **Start Import** to load the S&P 500 (~500
 companies, price history + fundamentals from Yahoo Finance; it takes several
 minutes — progress shows on the Market Data page and in the bottom bar on every
 other page, and Stop/Resume work). Re-running the import refreshes the data. The page also lists
-**Recent imports** (from this page, a resume or a policy run: companies,
+**Recent imports** (from this page, a resume or a workflow run: companies,
 options, status, new price rows, duration) and **What's stored** (S&P 500
 tickers imported, daily prices, history range, how many tickers are up to
 date with the last trading day).
 
-## Policies (`/policies`) and Criteria (`/criteria/...`)
+## Workflows (`/workflows`) and Criteria (`/criteria/...`)
 
-The sidebar follows the order a policy runs: **Data** (Market Data, Data
+The sidebar follows the order a workflow runs: **Data** (Market Data, Data
 Criteria), **Screening** (Stock Screener, Screening Criteria, Stock Pools),
 **Prediction** (Price Forecasts, Prediction Criteria), **Portfolio** (My
-Portfolios, Portfolio Criteria), then **Policies**, which runs them all (its
-badge shows how many policies are running). Pages with the sliders icon hold
+Portfolios, Portfolio Criteria), then **Workflows**, which runs them all (its
+badge shows how many workflows are running). Pages with the sliders icon hold
 saved criteria.
 
-A **policy** = an optional *Data Criteria* + one *Screening Criteria* + one
+A **workflow** = an optional *Data Criteria* + one *Screening Criteria* + one
 *Prediction Criteria* + one *Portfolio Criteria* (required fields are marked
 with a red star). Each criteria is saved on its own page, in its
-step of the sidebar, so several policies can share them. Every grid has a **+**
-button (new) and a **⋮** menu per row (Edit, Duplicate, Delete; policies also
-**Run** / **Cancel run**). A criteria used by a policy can't be deleted. **⋯ → Set as default** marks one criteria per kind as the
-default: new policies start with it selected. Each criteria page shows how
-many saved sets there are, which policies use them, and the default; its
+step of the sidebar, so several workflows can share them. Every grid has a **+**
+button (new) and a **⋮** menu per row (Edit, Duplicate, Delete; workflows also
+**Run** / **Cancel run**). A criteria used by a workflow can't be deleted. **⋯ → Set as default** marks one criteria per kind as the
+default: new workflows start with it selected. Each criteria page shows how
+many saved sets there are, which workflows use them, and the default; its
 grid can be searched and sorted (Name, Used by, Updated).
 
 - **Data Criteria** (optional) — the same options as the **Market Data** page's
   import: all S&P 500 or specific tickers, how many years of history, what to
-  import, and "only what's missing". A policy with one imports first; a
-  policy without one uses the data already stored.
+  import, and "only what's missing". A workflow with one imports first; a
+  workflow without one uses the data already stored.
 - **Screening Criteria** — the same fields as the Stock Screener. The editor
   shows how many companies match today; *Copy current Stock Screener
   search* takes over whatever is filled in on the screener.
@@ -94,18 +94,18 @@ grid can be searched and sorted (Name, Used by, Updated).
   portfolio with RL*: whole pool or steady-trend only, max volatility, min
   annual return, max weight range, min/max companies, risk aversion, timesteps.
 
-On the Policies page, search by name or criteria and filter by each
+On the Workflows page, search by name or criteria and filter by each
 criteria (Data also has *None*) and by last-run status; **View** opens a
-policy's last run and history.
+workflow's last run and history.
 
-**Running** a policy (⋮ -> Run): (1) import with the data criteria (skipped
+**Running** a workflow (⋮ -> Run): (1) import with the data criteria (skipped
 without one, or when everything is already up to date), (2) search with the
 screen criteria, (3) forecast every match and keep the companies whose
 forecasts rise at *every* point, (4) train RL on them with the portfolio
 criteria. The result
 is a new portfolio (plus the pools from steps 1 and 2 under Pools). The
 progress bar and *Step x of 4* line show what it is waiting for; click the
-policy name for the step cards, each company's forecast at each point and
+workflow name for the step cards, each company's forecast at each point and
 why it passed or not, and the run history.
 
 ## 2. Screener (`/`)

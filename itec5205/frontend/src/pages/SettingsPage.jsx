@@ -13,7 +13,7 @@ import {
   SaveIcon,
   SearchIcon,
 } from "../layout/icons";
-import { MODEL_RULES, TRAINING_UNITS } from "../features/policies/criteriaConfig";
+import { MODEL_RULES, TRAINING_UNITS } from "../features/workflows/criteriaConfig";
 import { EXISTING_MODES, UNIVERSES } from "../features/dataImport/ImportControls";
 import { DEFAULT_SETTINGS, getSavedSettings, getSettings, saveSettings } from "../features/settings/settings";
 import { INTERVALS } from "../utils/dateRanges";
@@ -55,7 +55,7 @@ const SECTIONS = [
     text: "Charts and lists shared by several pages.",
     fields: [
       { key: "chart_range", label: "Price chart range", type: "select", options: opts(INTERVALS.map((i) => i.key)), help: "Initial interval of the company and portfolio detail charts." },
-      { key: "list_page_size", label: "Rows per list page", type: "select", options: opts([5, 10, 20, 50]), number: true, help: "Page size of the Policies, Stock Pools and My Portfolios grids." },
+      { key: "list_page_size", label: "Rows per list page", type: "select", options: opts([5, 10, 20, 50]), number: true, help: "Page size of the Workflows, Stock Pools and My Portfolios grids." },
       { key: "next_days", label: "Next-days forecast rows", type: "number", min: 1, max: 60, help: "How many daily steps the 'next days' forecast tables show at first." },
     ],
   },
@@ -105,7 +105,7 @@ const SECTIONS = [
       { key: "models", label: "Pass rule", type: "select", options: opts(Object.entries(MODEL_RULES).map(([value, label]) => ({ value, label }))), help: "Which forecasts a company must pass in a new Forecast Settings." },
       { key: "training_value", label: "Training window", type: "number", min: 1, unitKey: "training_unit", unitOptions: opts(TRAINING_UNITS), help: "History a new Forecast Settings trains on." },
       { key: "min_change_pct", label: "Minimum rise", type: "number", blank: "no minimum", suffix: "%", help: "Smallest forecast rise that counts as passing (blank = any rise)." },
-      { key: "reuse_forecasts", label: "Reuse recent forecasts", type: "toggle", help: "Policy runs reuse forecasts already trained on the same data instead of retraining." },
+      { key: "reuse_forecasts", label: "Reuse recent forecasts", type: "toggle", help: "Workflow runs reuse forecasts already trained on the same data instead of retraining." },
     ],
   },
   {
@@ -145,10 +145,10 @@ const SECTIONS = [
     title: "Automation Defaults",
     icon: WorkflowIcon,
     color: "#14b8a6",
-    text: "Policies and how pages behave between visits.",
+    text: "Workflows and how pages behave between visits.",
     fields: [
-      { key: "refresh_seconds", label: "Live progress refresh", type: "number", min: 1, max: 60, suffix: "s", help: "How often the Policies grid and run details refresh while a policy is running." },
-      { key: "open_run_panel", label: "Open run details after Run", type: "toggle", help: "Show the step-by-step run panel as soon as a policy starts." },
+      { key: "refresh_seconds", label: "Live progress refresh", type: "number", min: 1, max: 60, suffix: "s", help: "How often the Workflows grid and run details refresh while a workflow is running." },
+      { key: "open_run_panel", label: "Open run details after Run", type: "toggle", help: "Show the step-by-step run panel as soon as a workflow starts." },
       { key: "remember_screener", label: "Remember screener search", type: "toggle", help: "Reopen the Stock Screener with the last applied search (instead of the screening defaults) in this browser." },
       { key: "remember_columns", label: "Remember grid columns", type: "toggle", help: "Keep each grid's column order and hidden columns in this browser; off = always the default columns." },
       { key: "show_tips", label: "Show help panels", type: "toggle", help: "The About and Quick tips panels at the bottom of the list pages." },
@@ -304,7 +304,7 @@ export default function SettingsPage() {
         <span className="info-banner-icon">i</span>
         <span>
           The initial values of the Data, Screening, Forecasting, Portfolio and Automation pages and of new criteria —
-          saved criteria and policies are not changed.
+          saved criteria and workflows are not changed.
           {customized > 0 ? ` ${customized} value${customized === 1 ? "" : "s"} customized` : " All built-in defaults"}; a dot marks a changed value.
         </span>
       </div>

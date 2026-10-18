@@ -76,7 +76,7 @@ so it survives container rebuilds.
 | `worker-rl` | Celery queue `rl` — PPO portfolio allocation training |
 | `worker-predict` | Celery queue `predict` — LSTM price forecast training |
 | `worker-arima` | Celery queue `arima` — ARIMA price forecast fitting |
-| `worker-policy` | Celery queue `policy` — runs policies (screen → forecast → RL portfolio) |
+| `worker-workflow` | Celery queue `workflow` — runs workflows (screen → forecast → RL portfolio) |
 | `flower` | Celery monitoring UI |
 | `frontend` | React app served by nginx, proxies `/api` and `/socket.io` to `backend` |
 
