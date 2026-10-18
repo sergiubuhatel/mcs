@@ -104,9 +104,42 @@ def get_db():
     return client.db(config.ARANGO_DB, username=config.ARANGO_USER, password=config.ARANGO_PASSWORD)
 
 
+_OLD_WORDS = (("Policies", "Workflows"), ("policies", "workflows"), ("Policy", "Workflow"), ("policy", "workflow"))
+
+
+def _reword(value):
+    """Replace the old "policy" wording in every string of a stored document."""
+    if isinstance(value, str):
+        for old, new in _OLD_WORDS:
+            value = value.replace(old, new)
+        return value
+    if isinstance(value, list):
+        return [_reword(v) for v in value]
+    if isinstance(value, dict):
+        return {k: v if k in ("_key", "_id", "_rev") else _reword(v) for k, v in value.items()}
+    return value
+
+
+def reword_policy_text(db):
+    """Rewrite generated names / messages that still say "policy" (run names,
+    the pools and portfolios a run created, pool refine reasons)."""
+    for name in ("workflows", "workflow_runs", "pools", "portfolios", "criteria", "import_runs"):
+        if not db.has_collection(name):
+            continue
+        col = db.collection(name)
+        for doc in db.aql.execute(
+            "FOR d IN @@c FILTER CONTAINS(LOWER(TO_STRING(d)), 'polic') RETURN d", bind_vars={"@c": name}
+        ):
+            new = _reword(doc)
+            if new != doc:
+                col.replace(new, check_rev=False)
+
+
 def _migrate_policy_names(db):
     """Workflows used to be called "policies" (renamed 2026-10-18): move the
     old collections and stored field names over once, keeping every document."""
+    if not db.has_collection("policies"):
+        return
     for old, new in (("policies", "workflows"), ("policy_runs", "workflow_runs")):
         if db.has_collection(old) and not db.has_collection(new):
             db.collection(old).rename(new)
@@ -122,6 +155,7 @@ def _migrate_policy_names(db):
         )
     if db.has_collection("import_runs"):
         db.aql.execute("FOR r IN import_runs FILTER r.source == 'policy' UPDATE r WITH {source: 'workflow'} IN import_runs")
+    reword_policy_text(db)
 
 
 def ensure_collections():
