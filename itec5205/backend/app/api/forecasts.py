@@ -86,6 +86,13 @@ def start_batch():
 
 
 def _status(run: dict) -> dict:
+    # Celery drops task results after a day (result_expires), after which every
+    # job of an old run reads as PENDING -- a finished run must answer from what
+    # was stored when it finished, or it looks queued forever and blocks new runs.
+    if run.get("finished_at"):
+        return _summary(run, run.get("final_counts") or _empty_counts(run), run.get("final_errors") or [],
+                        True, run.get("mean_train_seconds") or {m: None for m in MODELS})
+
     counts = {}
     errors = []
     train_seconds = {m: [] for m in MODELS}
@@ -108,16 +115,28 @@ def _status(run: dict) -> dict:
                 c["pending"] += 1
         counts[model] = c
 
+    mean_train = {m: round(sum(v) / len(v), 3) if v else None for m, v in train_seconds.items()}
     cancelled = bool(run.get("cancelled_at"))
     finished = cancelled or all(counts[m]["done"] + counts[m]["failed"] == counts[m]["total"] for m in MODELS)
-    if finished and not run.get("finished_at"):
+    if finished:
         finished_at = datetime.now(timezone.utc)
         run["finished_at"] = finished_at.isoformat()
         run["wall_seconds"] = round((finished_at - datetime.fromisoformat(run["created_at"])).total_seconds(), 2)
-        get_db().collection("forecast_runs").update(
-            {"_key": run["_key"], "finished_at": run["finished_at"], "wall_seconds": run["wall_seconds"]}
-        )
+        get_db().collection("forecast_runs").update({
+            "_key": run["_key"], "finished_at": run["finished_at"], "wall_seconds": run["wall_seconds"],
+            "final_counts": counts, "final_errors": errors, "mean_train_seconds": mean_train,
+        })
+    return _summary(run, counts, errors, finished, mean_train)
 
+
+def _empty_counts(run: dict) -> dict:
+    """Old finished runs stored no counts: report every job as done."""
+    return {m: {"total": len(run["tasks"][m]), "done": len(run["tasks"][m]), "failed": 0, "running": 0, "pending": 0}
+            for m in MODELS}
+
+
+def _summary(run: dict, counts: dict, errors: list, finished: bool, mean_train: dict) -> dict:
+    cancelled = bool(run.get("cancelled_at"))
     return {
         "run_id": run["_key"],
         "created_at": run["created_at"],
@@ -134,9 +153,7 @@ def _status(run: dict) -> dict:
         "queued": not finished and any(counts[m]["pending"] > 0 and counts[m]["running"] == 0 for m in MODELS),
         "finished_at": run.get("finished_at"),
         "wall_seconds": run.get("wall_seconds"),
-        "mean_train_seconds": {
-            m: round(sum(v) / len(v), 3) if v else None for m, v in train_seconds.items()
-        },
+        "mean_train_seconds": mean_train,
     }
 
 
