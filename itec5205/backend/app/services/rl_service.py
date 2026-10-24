@@ -26,6 +26,10 @@ MIN_SELECTED_WEIGHT = 0.005
 # interpolation steps added between each neighbouring pair of them.
 FRONTIER_POINTS = 40
 INTERPOLATION_STEPS = 10
+# Cost charged in the RL reward per unit of turnover (0.1% of the traded
+# value), the common choice in the RL portfolio literature.
+TRANSACTION_COST = 0.001
+
 # Blend steps tried by `_enforce_constraints` (0 = pure RL weights).
 BLEND_STEPS = [i / 20 for i in range(21)]
 
@@ -532,6 +536,7 @@ def train_and_recommend(
     anchor: dict[str, float] | None = None,
     max_weight_range: float | None = None,
     weight_range_basis: str = "smallest",
+    transaction_cost: float = TRANSACTION_COST,
 ) -> dict:
     """`max_weight_range` (optional, fraction): cap on max(w) - min(w) across
     the holdings, measured against `weight_range_basis` (see `weight_range`;
@@ -556,7 +561,8 @@ def train_and_recommend(
     returns = returns_df.values
 
     env = PortfolioEnv(
-        returns, window=window, risk_aversion=risk_aversion, max_volatility=max_volatility, min_return=min_return
+        returns, window=window, risk_aversion=risk_aversion, max_volatility=max_volatility, min_return=min_return,
+        transaction_cost=transaction_cost,
     )
     model = PPO("MlpPolicy", env, verbose=0)
 
@@ -613,6 +619,7 @@ def train_and_recommend(
             "timesteps": timesteps,
             "risk_aversion": risk_aversion,
             "window": window,
+            "transaction_cost": transaction_cost,
             "max_volatility": max_volatility,
             "min_return": min_return,
             "max_weight_range": max_weight_range,

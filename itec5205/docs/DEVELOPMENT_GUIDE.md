@@ -147,7 +147,9 @@ A Gymnasium `Env` where:
 - **Action** = a real vector of length N, softmax-normalized into
   long-only weights summing to 1.
 - **Reward** = portfolio daily return − `risk_aversion` × trailing
-  volatility (a Sharpe-like signal).
+  volatility (a Sharpe-like signal) − `transaction_cost` × turnover
+  Σ|w_new − w_old| (`rl_service.TRANSACTION_COST` = 0.1% of the traded
+  value), so the agent pays for every reallocation.
 - Trained with `stable-baselines3`'s PPO (`MlpPolicy`) in
   `services/rl_service.py::train_and_recommend`, which pulls the pool's
   returns matrix out of `stock_prices`, trains, then applies the learned

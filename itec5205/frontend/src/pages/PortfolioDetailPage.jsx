@@ -13,7 +13,7 @@ import Req from "../components/Req";
 import { StatTiles } from "../components/PageParts";
 import SignalBoard, { SignalBadge } from "../features/signals/SignalBoard";
 import BackButton from "../layout/BackButton";
-import { ClockIcon, CopyIcon, DatabaseIcon, EditIcon, GrowthIcon, LayersIcon, ListIcon, PieChartIcon, SaveIcon, StarIcon, TrendChartIcon } from "../layout/icons";
+import { ClockIcon, CopyIcon, DatabaseIcon, EditIcon, GrowthIcon, LayersIcon, ListIcon, PieChartIcon, SaveIcon, StarIcon, TrendChartIcon, TrendDownIcon, TrendUpIcon } from "../layout/icons";
 import { getSettings } from "../features/settings/settings";
 
 function fmtPct(v) {
@@ -266,6 +266,9 @@ export default function PortfolioDetailPage() {
   const yearSeries = filterByInterval(series, "1Y");
   const yearChangePct = windowChangePct(yearSeries);
   const yearVolatility = computeVolatilityFromSeries(yearSeries);
+  // Latest close vs the previous one (the same index as the chart).
+  const prevPoint = series.length > 1 ? series[series.length - 2] : null;
+  const dayChangePct = prevPoint && prevPoint.value ? (series[series.length - 1].value / prevPoint.value - 1) * 100 : null;
   const allocation = portfolio.holdings
     .map((h) => ({ ticker: h.ticker, name: h.name, weightPct: h.weight * 100 }))
     .sort((a, b) => b.weightPct - a.weightPct);
@@ -280,6 +283,14 @@ export default function PortfolioDetailPage() {
   const asOf = series.length ? series[series.length - 1].date : null; // latest stored close
 
   const tiles = [
+    {
+      icon: dayChangePct != null && dayChangePct < 0 ? TrendDownIcon : TrendUpIcon,
+      color: dayChangePct != null && dayChangePct < 0 ? "#dc2626" : "#16a34a",
+      label: "Change (1D)",
+      value: <span style={{ color: changeColor(dayChangePct) }}>{signed(dayChangePct)}</span>,
+      sub: prevPoint ? `${asOf} vs ${prevPoint.date}` : "no previous close",
+      title: "Change of the portfolio index from the previous close to the latest close.",
+    },
     {
       icon: GrowthIcon,
       color: "#16a34a",

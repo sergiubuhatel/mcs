@@ -9,7 +9,9 @@ historical daily returns.
 - **Reward**: portfolio daily return minus `risk_aversion` times the
   portfolio's trailing volatility over the same window -- a Sharpe-like
   signal that pushes the agent toward high return *and* low risk rather
-  than either alone.
+  than either alone -- net of `transaction_cost` times the turnover
+  sum(|w_new - w_old|), so the agent pays for every reallocation (the
+  literature charges 0.1-0.25% per unit traded).
 - **Constraints** (optional): an annualized `max_volatility` ceiling and/or
   `min_return` floor (compounded annual return). Each is checked against the
   trailing window in daily units -- vol / sqrt(252), and the daily log return
@@ -37,9 +39,11 @@ class PortfolioEnv(gym.Env):
         max_volatility: float | None = None,
         min_return: float | None = None,
         constraint_penalty: float = 10.0,
+        transaction_cost: float = 0.0,
     ):
         """``returns``: 2D array of shape (T days, N assets) of fractional daily returns.
-        ``max_volatility`` / ``min_return``: annualized fractions (0.25 = 25%), or None."""
+        ``max_volatility`` / ``min_return``: annualized fractions (0.25 = 25%), or None.
+        ``transaction_cost``: fraction of the traded value (0.001 = 0.1%)."""
         super().__init__()
         if returns.ndim != 2 or returns.shape[0] <= window:
             raise ValueError("returns must be a (T, N) array with T > window")
@@ -53,6 +57,7 @@ class PortfolioEnv(gym.Env):
             np.log1p(min_return) / TRADING_DAYS_PER_YEAR if min_return is not None and min_return > -1 else None
         )
         self.constraint_penalty = constraint_penalty
+        self.transaction_cost = transaction_cost
 
         obs_dim = self.window * self.n_assets + self.n_assets
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32)
@@ -86,7 +91,8 @@ class PortfolioEnv(gym.Env):
         portfolio_history = recent_window @ weights
         volatility = float(np.std(portfolio_history)) if len(portfolio_history) > 1 else 0.0
 
-        reward = portfolio_return - self.risk_aversion * volatility
+        turnover = float(np.abs(weights - self._weights).sum())
+        reward = portfolio_return - self.risk_aversion * volatility - self.transaction_cost * turnover
 
         violation = 0.0
         if self.max_daily_vol is not None:
@@ -100,5 +106,6 @@ class PortfolioEnv(gym.Env):
         terminated = self._t >= len(self.returns)
         truncated = False
         obs = self._get_obs() if not terminated else np.zeros(self.observation_space.shape, dtype=np.float32)
-        info = {"portfolio_return": portfolio_return, "volatility": volatility, "weights": weights.tolist()}
+        info = {"portfolio_return": portfolio_return, "volatility": volatility, "turnover": turnover,
+                "weights": weights.tolist()}
         return obs, reward, terminated, truncated, info
