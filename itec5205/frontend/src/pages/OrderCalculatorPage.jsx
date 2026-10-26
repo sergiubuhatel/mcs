@@ -39,6 +39,9 @@ function Change({ pct }) {
   );
 }
 
+// Typed or read from a statement: kept until the user asks for the live value.
+const fixedSource = (src) => src === "manual" || src === "statement";
+
 function defaultPlan() {
   const p = getSettings().portfolio;
   return {
@@ -121,7 +124,7 @@ export default function OrderCalculatorPage() {
         if (!p.accounts?.length) p.accounts = base.accounts;
         setPlan(p);
         loaded.current = true;
-        if (p.fx.source !== "manual") fetchRate(true);
+        if (!fixedSource(p.fx.source)) fetchRate(true);
         refreshPrices(p, false);
       })
       .catch((err) => setMessage(err.response?.data?.error || err.message));
@@ -149,7 +152,7 @@ export default function OrderCalculatorPage() {
       .get("/api/orders/fx")
       .then(({ data }) =>
         update((p) =>
-          p.fx.source === "manual" && quiet
+          fixedSource(p.fx.source) && quiet
             ? {} // typed while the request was out
             : { fx: { ...p.fx, rate: p.fx.direction === "cad_usd" ? +(1 / data.usd_cad).toFixed(4) : data.usd_cad, source: "yahoo", date: data.as_of } }
         )
@@ -169,7 +172,7 @@ export default function OrderCalculatorPage() {
           const prices = { ...cur.prices };
           for (const [t, row] of Object.entries(data.prices)) {
             if (row.price == null) continue;
-            if (!force && prices[t]?.source === "manual") continue;
+            if (!force && fixedSource(prices[t]?.source)) continue;
             prices[t] = { price: row.price, change_pct: row.change_pct, source: row.source, date: row.date || null, as_of: row.as_of || null };
           }
           return { prices };
@@ -188,7 +191,7 @@ export default function OrderCalculatorPage() {
       const p = planRef.current;
       if (!p || document.hidden) return;
       refreshPrices(p, false);
-      if (p.fx.source !== "manual") fetchRate(true);
+      if (!fixedSource(p.fx.source)) fetchRate(true);
     }, LIVE_REFRESH_MS);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -284,12 +287,24 @@ export default function OrderCalculatorPage() {
         if (p.read_as) fixed.push(`${p.read_as} → ${p.ticker}`);
         holdings[p.ticker] = String((Number(holdings[p.ticker]) || 0) + p.quantity);
       }
-      setAccount({ holdings, ...(data.cash != null ? { cash: String(data.cash) } : {}) });
-      ensurePrices(Object.keys(holdings));
+      // Value the account as the statement does: its market prices and its
+      // USD/CAD rate (live ones differ a little, so the total would too).
+      const statementPrices = Object.fromEntries(
+        data.positions.filter((p) => p.usd && p.price > 0).map((p) => [p.ticker, { price: p.price, date: null, source: "statement" }])
+      );
+      update((cur) => ({
+        accounts: cur.accounts.map((a) => (a.id === account.id ? { ...a, holdings, ...(data.cash != null ? { cash: String(data.cash) } : {}) } : a)),
+        prices: { ...cur.prices, ...statementPrices },
+        ...(data.usd_cad
+          ? { fx: { ...cur.fx, rate: cur.fx.direction === "cad_usd" ? +(1 / data.usd_cad).toFixed(6) : data.usd_cad, source: "statement", date: null } }
+          : {}),
+      }));
+      ensurePrices(Object.keys(holdings).filter((tk) => !statementPrices[tk]));
       const read = data.positions.length - skipped.length;
       setStatementNote(
         [
           `Read ${read} positions from ${file.name || "the screenshot"}${data.cash != null ? ` and ${cad(data.cash)} of cash` : " (no cash found — type the funds)"}.`,
+          data.usd_cad ? `Prices and rate (1 USD = ${data.usd_cad.toFixed(4)} CAD) are the statement's, so the account value matches it; Refresh prices / Use live rate switch to live ones.` : "",
           fixed.length ? `Corrected tickers: ${fixed.join(", ")}.` : "",
           skipped.length ? `Not priced in USD, left out: ${skipped.join("; ")}.` : "",
         ].filter(Boolean).join(" ")
@@ -456,9 +471,9 @@ export default function OrderCalculatorPage() {
             <span className="muted field-hint">
               {fxOther}
               {plan.fx.source === "yahoo" && plan.fx.date ? ` · live, ${fmtTime(plan.fx.date)}` : ""}
-              {plan.fx.source === "manual" && (
+              {fixedSource(plan.fx.source) && (
                 <>
-                  {" · typed by you · "}
+                  {plan.fx.source === "statement" ? " · from the statement · " : " · typed by you · "}
                   <a onClick={() => fetchRate(false)} style={{ cursor: "pointer" }}>Use live rate</a>
                 </>
               )}
@@ -482,7 +497,7 @@ export default function OrderCalculatorPage() {
               className="btn secondary"
               onClick={() => {
                 refreshPrices(plan, true);
-                if (plan.fx.source !== "manual") fetchRate(false);
+                if (!fixedSource(plan.fx.source)) fetchRate(false);
               }}
               disabled={!plan.targets.length || refreshing}
               title="Fetch the live prices now, replacing typed ones too"
@@ -521,8 +536,8 @@ export default function OrderCalculatorPage() {
                         <input type="number" min="0" step="0.01" value={pr?.price ?? ""} placeholder="price" onChange={(e) => setPrice(tg.ticker, e.target.value)} className="num-input" />
                       </td>
                       <td className="nowrap">
-                        {pr?.source === "manual" ? (
-                          <span className="muted">typed · <a onClick={() => backToLive(tg.ticker)} style={{ cursor: "pointer" }}>use live</a></span>
+                        {fixedSource(pr?.source) ? (
+                          <span className="muted">{pr.source === "statement" ? "statement" : "typed"} · <a onClick={() => backToLive(tg.ticker)} style={{ cursor: "pointer" }}>use live</a></span>
                         ) : pr?.source === "live" ? (
                           <Change pct={pr.change_pct} />
                         ) : pr?.source === "stored" ? (

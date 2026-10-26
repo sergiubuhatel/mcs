@@ -173,7 +173,7 @@ export default function Sidebar({ collapsed }) {
         </NavLink>
       </div>
 
-      <nav className="flex flex-col px-3 py-3" style={{ overflowY: "auto" }}>
+      <nav className="flex min-h-0 flex-col px-3 py-3" style={{ overflowY: "auto" }}>
         {[...GROUPS, SETTINGS_GROUP].map((group) => {
           const GroupIcon = group.icon;
           return (

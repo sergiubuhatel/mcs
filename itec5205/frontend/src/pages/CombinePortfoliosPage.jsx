@@ -220,7 +220,7 @@ export default function CombinePortfoliosPage() {
               <th style={{ width: 14 }} />
               <th style={{ textAlign: "left" }}>Portfolio <Req /></th>
               <th style={{ width: 130 }}>Share of total <Req /></th>
-              <th style={{ textAlign: "left" }}>Note</th>
+              <th style={{ textAlign: "left", width: "32%" }}>Note</th>
               <th style={{ width: 40 }} />
             </tr>
           </thead>
@@ -304,19 +304,19 @@ export default function CombinePortfoliosPage() {
                         {p.note && <div className="muted" style={{ fontSize: "0.8rem" }}>{p.note}</div>}
                       </div>
                     </div>
-                    <table className="order-table">
+                    <table className="order-table sleeve-card-table">
                       <thead>
                         <tr>
-                          <th style={{ textAlign: "left" }}>Ticker</th>
+                          <th style={{ textAlign: "left", width: 72 }}>Ticker</th>
                           <th style={{ textAlign: "left" }}>Company</th>
-                          <th>Weight</th>
+                          <th style={{ width: 118 }}>Weight</th>
                         </tr>
                       </thead>
                       <tbody>
                         {[...p.holdings].sort((a, b) => b.weight - a.weight).map((h) => (
                           <tr key={h.ticker}>
                             <td style={{ textAlign: "left", fontWeight: 700 }}>{h.ticker}</td>
-                            <td style={{ textAlign: "left", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis" }}>{companies[h.ticker] || "–"}</td>
+                            <td style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis" }} title={companies[h.ticker] || ""}>{companies[h.ticker] || "–"}</td>
                             <td>
                               <strong>{pct((p.alloc / (allocSum || 1)) * h.weight * 100)}</strong>
                               <span className="muted" style={{ fontSize: "0.75rem", marginLeft: 6 }}>{pct(h.weight * 100, 1)}</span>

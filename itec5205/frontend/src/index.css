@@ -623,3 +623,4 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 .statement-bar .btn { cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
 .statement-bar .btn.disabled { opacity: 0.6; pointer-events: none; }
 .statement-bar .muted { flex: 1 1 300px; min-width: 0; }
+.sleeve-card-table { table-layout: fixed; }

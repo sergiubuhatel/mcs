@@ -141,6 +141,8 @@ def parse_lines(lines: list[list[dict]]) -> dict:
             "ticker": ticker,
             "security": " ".join(texts[1:name_end]).replace("…", "").strip(" .") or None,
             "quantity": found[quantity_at][1] if quantity_at is not None else None,
+            # Market price (USD), just before the market value.
+            "price": nums[-3] if quantity_at is not None and checked else None,
             "market_value": round(value, 2),
             "checked": checked,
             # Positions priced in USD are the NYSE/NASDAQ listings; a row with
@@ -148,9 +150,14 @@ def parse_lines(lines: list[list[dict]]) -> dict:
             "usd": "USD" in texts,
             "raw": joined,
         })
+    # The statement's own USD/CAD rate: CAD market value / (units x USD
+    # price), so the Order Calculator can value the account exactly as here.
+    priced = [p for p in positions if p["usd"] and p["quantity"] and p["price"]]
+    usd_value = sum(p["quantity"] * p["price"] for p in priced)
+    usd_cad = round(sum(p["market_value"] for p in priced) / usd_value, 6) if usd_value else None
     if cash is None and account_total and total and account_total >= total:
         cash = round(account_total - total, 2)
-    return {"positions": positions, "statement_total": total, "currency": currency, "cash": cash}
+    return {"positions": positions, "statement_total": total, "currency": currency, "cash": cash, "usd_cad": usd_cad, "account_total": account_total}
 
 
 def _company_names(tickers: list[str]) -> dict:
