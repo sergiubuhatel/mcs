@@ -278,10 +278,18 @@ export default function OrderCalculatorPage() {
       const { data } = await apiClient.post("/api/portfolios/import-image", body, { headers: { "Content-Type": "multipart/form-data" } });
       const holdings = Object.fromEntries(targetTickers.map((tk) => [tk, ""]));
       const skipped = [];
+      const unread = [];
       const fixed = [];
       for (const p of data.positions) {
-        if (!p.usd || p.quantity == null) {
-          skipped.push(`${p.ticker} ${p.security || ""} (${p.quantity ?? "?"})`.replace(/\s+/g, " "));
+        if (!p.usd) {
+          skipped.push(`${p.ticker} ${p.security || ""} (${cad(p.market_value)})`.replace(/\s+/g, " "));
+          continue;
+        }
+        // Units × price × the statement's rate must give the row's market
+        // value; otherwise the units were misread -- never guess them.
+        if (!p.verified) {
+          unread.push(p.ticker);
+          if (!(p.ticker in holdings)) holdings[p.ticker] = "";
           continue;
         }
         if (p.read_as) fixed.push(`${p.read_as} → ${p.ticker}`);
@@ -290,7 +298,7 @@ export default function OrderCalculatorPage() {
       // Value the account as the statement does: its market prices and its
       // USD/CAD rate (live ones differ a little, so the total would too).
       const statementPrices = Object.fromEntries(
-        data.positions.filter((p) => p.usd && p.price > 0).map((p) => [p.ticker, { price: p.price, date: null, source: "statement" }])
+        data.positions.filter((p) => p.usd && p.verified && p.price > 0).map((p) => [p.ticker, { price: p.price, date: null, source: "statement" }])
       );
       update((cur) => ({
         accounts: cur.accounts.map((a) => (a.id === account.id ? { ...a, holdings, ...(data.cash != null ? { cash: String(data.cash) } : {}) } : a)),
@@ -300,14 +308,20 @@ export default function OrderCalculatorPage() {
           : {}),
       }));
       ensurePrices(Object.keys(holdings).filter((tk) => !statementPrices[tk]));
-      const read = data.positions.length - skipped.length;
+      const read = data.positions.length - skipped.length - unread.length;
+      const left = data.positions.filter((p) => !p.usd).reduce((sum, p) => sum + p.market_value, 0);
+      const statementValue = data.account_total ?? (data.statement_total != null ? data.statement_total + (data.cash || 0) : null);
+      if (unread.length) setMessage(`Could not read the units of ${unread.join(", ")} for sure — type them in the Units you hold column (step 2).`);
       setStatementNote(
         [
           `Read ${read} positions from ${file.name || "the screenshot"}${data.cash != null ? ` and ${cad(data.cash)} of cash` : " (no cash found — type the funds)"}.`,
-          data.usd_cad ? `Prices and rate (1 USD = ${data.usd_cad.toFixed(4)} CAD) are the statement's, so the account value matches it; Refresh prices / Use live rate switch to live ones.` : "",
-          fixed.length ? `Corrected tickers: ${fixed.join(", ")}.` : "",
-          skipped.length ? `Not priced in USD, left out: ${skipped.join("; ")}.` : "",
-        ].filter(Boolean).join(" ")
+          data.usd_cad ? `Prices and rate (1 USD = ${data.usd_cad.toFixed(4)} CAD) are the statement's` : "",
+          data.usd_cad && statementValue != null
+            ? `, so the account value is the statement's ${cad(statementValue)}${left > 0 ? ` minus the ${cad(left)} left out` : ""}${unread.length ? " (once the missing units are typed)" : ""}; Refresh prices / Use live rate switch to live ones.`
+            : data.usd_cad ? "." : "",
+          fixed.length ? ` Corrected tickers: ${fixed.join(", ")}.` : "",
+          skipped.length ? ` Not priced in USD, left out: ${skipped.join("; ")}.` : "",
+        ].filter(Boolean).join("")
       );
     } catch (err) {
       setMessage(err.response?.data?.error || err.message);

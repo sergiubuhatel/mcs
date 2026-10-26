@@ -33,6 +33,27 @@ CURRENCY_RE = re.compile(r"\((CAD|USD)\)")
 NOT_TICKERS = {"CAD", "USD", "TOTAL", "SYMBOL", "CASH"}
 
 
+# "4.444.254": a thousands comma read as a dot (and an arrow icon as a 4).
+MISREAD_THOUSANDS_RE = re.compile(r"\d{1,3}(?:\.\d{3})+\.\d+")
+RATE_TOLERANCE = 0.005  # units x price x rate vs market value
+
+
+def _joined_amount(texts: list[str]) -> float | None:
+    """A big amount OCR split into pieces ("$21 0,669.46 CAD") -> 210669.46:
+    the number-like words in a row, joined."""
+    parts = []
+    for t in texts:
+        if re.fullmatch(r"\$?[\d,.]+", t):
+            parts.append(t)
+        elif parts:
+            break
+    return _to_float("".join(parts)) if parts else None
+
+
+def _fix_separators(token: str) -> str:
+    return MISREAD_THOUSANDS_RE.sub(lambda m: m.group(0).replace(".", "", m.group(0).count(".") - 1), token)
+
+
 def _to_float(text: str) -> float | None:
     try:
         return float(text.replace("$", "").replace(",", ""))
@@ -100,7 +121,7 @@ def parse_lines(lines: list[list[dict]]) -> dict:
             (i, n)
             for i, t in enumerate(texts)
             if not PERCENT_RE.search(t)
-            for n in (_to_float(m) for m in NUMBER_RE.findall(t))
+            for n in (_to_float(m) for m in NUMBER_RE.findall(_fix_separators(t)))
             if n is not None
         ]
         nums = [n for _, n in found]
@@ -115,11 +136,12 @@ def parse_lines(lines: list[list[dict]]) -> dict:
         # "Total market value  $210,669.46 CAD" under the table = stocks +
         # cash; the amount can be on the line below the label.
         if after_total_label and nums and account_total is None:
-            account_total = nums[0]
+            account_total = _joined_amount(texts)
         after_total_label = "TOTAL MARKET VALUE" in joined.upper()
         if after_total_label:
             if nums:
-                account_total = nums[-1]
+                label_end = next(i for i, t in enumerate(texts) if t.upper() == "VALUE") + 1
+                account_total = _joined_amount([t for t in texts[label_end:] if t not in ("(i)", "i", "©")])
             continue
 
         if "TOTAL" in joined.upper() and len(nums) >= 2:
@@ -149,15 +171,43 @@ def parse_lines(lines: list[list[dict]]) -> dict:
             # no USD at all (e.g. a TSX-V namesake) is likely something else.
             "usd": "USD" in texts,
             "raw": joined,
+            "nums": nums,
         })
     # The statement's own USD/CAD rate: CAD market value / (units x USD
     # price), so the Order Calculator can value the account exactly as here.
-    priced = [p for p in positions if p["usd"] and p["quantity"] and p["price"]]
+    priced = [p for p in positions if p["usd"] and p["checked"] and p["quantity"] and p["price"]]
     usd_value = sum(p["quantity"] * p["price"] for p in priced)
     usd_cad = round(sum(p["market_value"] for p in priced) / usd_value, 6) if usd_value else None
+    for p in positions:
+        _verify(p, usd_cad)
     if cash is None and account_total and total and account_total >= total:
         cash = round(account_total - total, 2)
     return {"positions": positions, "statement_total": total, "currency": currency, "cash": cash, "usd_cad": usd_cad, "account_total": account_total}
+
+
+def _fits(quantity, price, value, rate) -> bool:
+    return quantity > 0 and price > 0 and abs(quantity * price * rate - value) <= value * RATE_TOLERANCE
+
+
+def _verify(position: dict, rate: float | None) -> None:
+    """`verified` = units x USD price x the statement's rate gives the market
+    value. A row that fails is searched for numbers that do fit (a misread
+    column shifts them); if none do, units/price are cleared so a wrong
+    quantity is never used."""
+    nums = position.pop("nums")
+    if not position["usd"] or not rate:
+        position["verified"] = False
+        return
+    if position["quantity"] and position["price"] and _fits(position["quantity"], position["price"], position["market_value"], rate):
+        position["verified"] = True
+        return
+    for vi in sorted(range(len(nums)), key=lambda i: -nums[i]):
+        for qi, q in enumerate(nums):
+            for pi, pr in enumerate(nums):
+                if len({vi, qi, pi}) == 3 and float(q).is_integer() and _fits(q, pr, nums[vi], rate):
+                    position.update(quantity=q, price=pr, market_value=round(nums[vi], 2), verified=True)
+                    return
+    position.update(quantity=None, price=None, verified=False)
 
 
 def _company_names(tickers: list[str]) -> dict:
