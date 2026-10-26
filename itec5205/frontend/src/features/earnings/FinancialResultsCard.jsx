@@ -42,7 +42,7 @@ const surpriseColor = (v) => (v == null || v === 0 ? "var(--color-text-primary)"
 const SHOWN = 8;
 
 /** Company page: last / next financial results and every stored release. */
-export default function FinancialResultsCard({ earnings }) {
+export default function FinancialResultsCard({ earnings, stats }) {
   const [all, setAll] = useState(false);
   const summary = earnings?.summary;
   const reports = earnings?.reports || [];
@@ -97,7 +97,7 @@ export default function FinancialResultsCard({ earnings }) {
             <div><strong>Next EPS estimate</strong><div>{fmtEps(summary.next_eps_estimate)}</div></div>
           </div>
 
-          <SalesEarningsCharts statements={earnings?.statements} reports={reports} />
+          <SalesEarningsCharts statements={earnings?.statements} reports={reports} stats={stats} />
 
           {reports.length > 0 && (
             <table style={{ width: "100%" }}>

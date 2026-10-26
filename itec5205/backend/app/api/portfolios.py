@@ -11,6 +11,7 @@ from ..services.portfolio_service import (
     delete_portfolio,
     get_portfolio,
     list_portfolios,
+    set_display,
     update_portfolio,
 )
 from ..services.statement_import import MAX_IMAGE_BYTES, read_statement
@@ -92,6 +93,18 @@ def import_image():
         return jsonify(read_statement(data))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+
+
+@bp.put("/<portfolio_id>/display")
+def display(portfolio_id: str):
+    """Body `{"display": "sleeves" | "combined"}` -- remembered per portfolio."""
+    try:
+        found = set_display(portfolio_id, (request.get_json(silent=True) or {}).get("display"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if not found:
+        return jsonify({"error": "Portfolio not found"}), 404
+    return jsonify({"display": request.get_json()["display"]})
 
 
 @bp.get("/<portfolio_id>/performance")

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
+import { useSelector } from "react-redux";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { apiClient } from "../api/client";
@@ -6,6 +7,7 @@ import { filterByInterval } from "../utils/dateRanges";
 import { useColumnConfig } from "../utils/useColumnConfig";
 import ActionMenu from "../components/ActionMenu";
 import ColumnPicker from "../components/ColumnPicker";
+import AllocationDonut, { SLOT_COLORS } from "../components/AllocationDonut";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import ForecastChart, { BandLevelSelect, FORECAST_COLORS } from "../components/ForecastChart";
 import Modal from "../components/Modal";
@@ -13,7 +15,7 @@ import Req from "../components/Req";
 import { StatTiles } from "../components/PageParts";
 import SignalBoard, { SignalBadge } from "../features/signals/SignalBoard";
 import BackButton from "../layout/BackButton";
-import { ClockIcon, CopyIcon, DatabaseIcon, EditIcon, GrowthIcon, LayersIcon, ListIcon, PieChartIcon, SaveIcon, StarIcon, TrendChartIcon, TrendDownIcon, TrendUpIcon } from "../layout/icons";
+import { ChevronDownIcon, ChevronRightIcon, ClockIcon, CopyIcon, DatabaseIcon, EditIcon, GrowthIcon, LayersIcon, ListIcon, PieChartIcon, SaveIcon, StarIcon, TrendChartIcon, TrendDownIcon, TrendUpIcon } from "../layout/icons";
 import { chartIntervals, getSettings } from "../features/settings/settings";
 import { fmtDay, nextReportLabel, relativeDays } from "../features/earnings/FinancialResultsCard";
 
@@ -151,6 +153,102 @@ const HOLDINGS_COLUMNS = [
 
 const apiError = (err) => err.response?.data?.error || err.message;
 
+/** One part of a portfolio of portfolios: its share, note and holdings
+ * (weight of the whole portfolio), in the part's donut color. */
+function PartCard({ part, color }) {
+  return (
+    <div className="part-card" style={{ borderColor: `${color}88`, background: `${color}14` }}>
+      <div className="part-card-head">
+        <span className="part-card-share" style={{ color }}>{+part.allocation.toFixed(2)}%</span>
+        {part.exists ? (
+          <Link to={`/portfolios/${part.portfolio_id}`} className="part-card-name" title="Open this portfolio">{part.name}</Link>
+        ) : (
+          <span className="part-card-name" title="That portfolio was deleted; its holdings are kept here as built">{part.name}</span>
+        )}
+      </div>
+      {part.note && <div className="part-card-note">{part.note}</div>}
+      <table className="part-card-table">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Company</th>
+            <th title="Share of the whole portfolio">Portfolio weight</th>
+          </tr>
+        </thead>
+        <tbody>
+          {part.holdings
+            .slice()
+            .sort((a, b) => b.weight - a.weight)
+            .map((h) => (
+              <tr key={h.ticker}>
+                <td>
+                  <Link to={`/companies/${h.ticker}`} style={{ color, fontWeight: 700 }}>{h.ticker}</Link>
+                </td>
+                <td>{h.name || ""}</td>
+                <td title={`${(h.weight_in_part * 100).toFixed(2)}% of ${part.name}`}>{(h.weight * 100).toFixed(2)}%</td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+      {part.exists && (
+        <Link to={`/portfolios/${part.portfolio_id}`} className="part-card-open">Open {part.name} →</Link>
+      )}
+    </div>
+  );
+}
+
+/** Portfolio of portfolios: donut of the parts in the middle, the largest
+ * part on the left, the others stacked on the right. */
+function PartsAllocation({ sleeves }) {
+  const dark = useSelector((st) => st.theme.darkMode);
+  const slots = SLOT_COLORS[dark ? "dark" : "light"];
+  // Colors follow the part's position in the portfolio (never its rank).
+  const parts = sleeves.map((sl, i) => ({ ...sl, color: slots[i % slots.length] })).sort((a, b) => b.allocation - a.allocation);
+  const split = Math.ceil(parts.length / 2);
+  const left = parts.length <= 3 ? parts.slice(0, 1) : parts.slice(0, split);
+  const right = parts.length <= 3 ? parts.slice(1) : parts.slice(split);
+  const sublabel = (p) => (p.holdings.length <= 3 ? p.holdings.map((h) => h.ticker).join(" / ") : `${p.holdings.length} holdings`);
+  return (
+    <div className="parts-allocation">
+      <div className="parts-col">{left.map((p) => <PartCard key={p.portfolio_id} part={p} color={p.color} />)}</div>
+      <div className="parts-donut">
+        <AllocationDonut
+          size={360}
+          centerLabel="TOTAL PORTFOLIO"
+          parts={parts.map((p) => ({ key: p.portfolio_id, label: p.name, value: p.allocation, sublabel: sublabel(p) }))}
+          colors={parts.map((p) => p.color)}
+        />
+      </div>
+      <div className="parts-col">{right.map((p) => <PartCard key={p.portfolio_id} part={p} color={p.color} />)}</div>
+    </div>
+  );
+}
+
+// A part of a portfolio of portfolios as one grid row: its share of the whole
+// and the changes of its holdings, weighted by their weight inside the part.
+const PART_TOTALS = ["day_change", "stock_growth_1y"];
+function partRow(sleeve) {
+  const row = { weight: sleeve.allocation / 100 };
+  for (const key of PART_TOTALS) {
+    const known = sleeve.holdings.filter((h) => h[key] != null);
+    const w = known.reduce((n, h) => n + h.weight_in_part, 0);
+    row[key] = w ? known.reduce((n, h) => n + h[key] * h.weight_in_part, 0) / w : null;
+  }
+  return row;
+}
+
+function sortRows(rows, sortBy, sortDir) {
+  return rows.slice().sort((a, b) => {
+    const va = a[sortBy];
+    const vb = b[sortBy];
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    const cmp = typeof va === "string" ? va.localeCompare(vb) : va - vb;
+    return sortDir === "desc" ? -cmp : cmp;
+  });
+}
+
 export default function PortfolioDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -166,6 +264,9 @@ export default function PortfolioDetailPage() {
   const [bandLevel, setBandLevel] = useState(() => Number(getSettings().forecast.band_level) || 95);
   const [renaming, setRenaming] = useState(null); // name being edited, or null
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Portfolio of portfolios: shown by part (default) or as one combined list.
+  const [display, setDisplay] = useState("sleeves");
+  const [openParts, setOpenParts] = useState({}); // portfolio_id -> expanded
   const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("portfolioHoldings", HOLDINGS_COLUMNS);
 
   const onSortClick = (key) => {
@@ -187,6 +288,8 @@ export default function PortfolioDetailPage() {
     ])
       .then(([detailRes, perfRes]) => {
         setPortfolio(detailRes.data);
+        setDisplay(detailRes.data.display || "sleeves");
+        setOpenParts({});
         setSeries(perfRes.data.series);
       })
       .catch((err) => setError(apiError(err)));
@@ -213,6 +316,11 @@ export default function PortfolioDetailPage() {
         toast.success("Portfolio renamed");
       })
       .catch((err) => toast.error(apiError(err)));
+  };
+
+  const changeDisplay = (value) => {
+    setDisplay(value);
+    apiClient.put(`/api/portfolios/${id}/display`, { display: value }).catch((err) => toast.error(apiError(err)));
   };
 
   const duplicate = () =>
@@ -297,6 +405,7 @@ export default function PortfolioDetailPage() {
   const created = fmtDay(portfolio.created_at);
   const lastUpdated = fmtDay(portfolio.updated_at || portfolio.created_at);
   const asOf = series.length ? series[series.length - 1].date : null; // latest stored close
+  const byPart = portfolio.sleeves?.length > 0 && display === "sleeves";
 
   const tiles = [
     {
@@ -400,9 +509,18 @@ export default function PortfolioDetailPage() {
             <div className="icon-badge" style={{ background: "#3b82f622", color: "#3b82f6" }}>
               <ListIcon width={18} height={18} />
             </div>
-            <h3 style={{ margin: 0 }}>Selected holdings performance</h3>
+            <h3 style={{ margin: 0 }}>{byPart ? "Portfolios in this portfolio" : "Selected holdings performance"}</h3>
           </div>
           <div className="toolbar">
+            {portfolio.sleeves?.length > 0 && (
+              <div style={{ display: "flex", gap: 4 }}>
+                {[["sleeves", "Portfolio of portfolios"], ["combined", "One combined portfolio"]].map(([key, label]) => (
+                  <button key={key} className={display === key ? "btn" : "btn secondary"} style={{ padding: "4px 10px", fontSize: "0.78rem" }} onClick={() => changeDisplay(key)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
             {asOf && <span className="muted">as of {asOf}</span>}
             <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
           </div>
@@ -422,18 +540,56 @@ export default function PortfolioDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {portfolio.holdings
-                .slice()
-                .sort((a, b) => {
-                  const va = a[sortBy];
-                  const vb = b[sortBy];
-                  if (va == null && vb == null) return 0;
-                  if (va == null) return 1;
-                  if (vb == null) return -1;
-                  const cmp = typeof va === "string" ? va.localeCompare(vb) : va - vb;
-                  return sortDir === "desc" ? -cmp : cmp;
-                })
-                .map((h) => (
+              {byPart
+                ? sortRows(portfolio.sleeves.map((sl) => ({ ...sl, ...partRow(sl) })), PART_TOTALS.includes(sortBy) || sortBy === "weight" ? sortBy : "weight", PART_TOTALS.includes(sortBy) || sortBy === "weight" ? sortDir : "desc").map((part) => {
+                    const open = !!openParts[part.portfolio_id];
+                    const toggle = () => setOpenParts((o) => ({ ...o, [part.portfolio_id]: !open }));
+                    return (
+                      <Fragment key={part.portfolio_id}>
+                        <tr className="part-row" onClick={toggle} style={{ cursor: "pointer" }} title={open ? "Hide its holdings" : "Show its holdings"}>
+                          {visibleColumns.map((c) => (
+                            <td key={c.key} className={c.className} style={c.key === "ticker" || c.key === "name" ? { textAlign: "left" } : undefined}>
+                              {c.key === "ticker" ? (
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                  {open ? <ChevronDownIcon width={14} height={14} /> : <ChevronRightIcon width={14} height={14} />}
+                                  {part.holdings.length}
+                                </span>
+                              ) : c.key === "name" ? (
+                                <span>
+                                  {part.exists ? (
+                                    <Link to={`/portfolios/${part.portfolio_id}`} onClick={(e) => e.stopPropagation()} title="Open this portfolio">
+                                      {part.name}
+                                    </Link>
+                                  ) : (
+                                    <span title="That portfolio was deleted; its holdings are kept here as built">{part.name}</span>
+                                  )}
+                                  {part.note && <span className="muted"> · {part.note}</span>}
+                                </span>
+                              ) : PART_TOTALS.includes(c.key) || c.key === "weight" ? (
+                                c.render(part)
+                              ) : null}
+                            </td>
+                          ))}
+                        </tr>
+                        {open &&
+                          sortRows(part.holdings, sortBy, sortDir).map((h) => (
+                            <tr key={h.ticker} onClick={() => navigate(`/companies/${h.ticker}`)} style={{ cursor: "pointer" }}>
+                              {visibleColumns.map((c) => (
+                                <td
+                                  key={c.key}
+                                  className={c.className}
+                                  title={c.key === "weight" ? `${(h.weight_in_part * 100).toFixed(2)}% of ${part.name}` : undefined}
+                                  style={c.key === "ticker" ? { textAlign: "left", paddingLeft: 26 } : c.key === "name" ? { textAlign: "left" } : c.key === "weight" ? { color: colorOf[h.ticker] } : undefined}
+                                >
+                                  {c.render(h)}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                      </Fragment>
+                    );
+                  })
+                : sortRows(portfolio.holdings, sortBy, sortDir).map((h) => (
                   <tr key={h.ticker} onClick={() => navigate(`/companies/${h.ticker}`)} style={{ cursor: "pointer" }}>
                     {visibleColumns.map((c) => (
                       <td
@@ -548,11 +704,17 @@ export default function PortfolioDetailPage() {
           <div style={{ minWidth: 0, flex: 1 }}>
             <h3 style={{ margin: 0 }}>Portfolio allocation</h3>
             <p className="muted" style={{ margin: 0 }}>
-              Share of the portfolio invested in each holding{portfolio.method === "rl" ? ", as allocated by the reinforcement learning model" : ""}.
+              {byPart
+                ? "Share of the portfolio in each of its portfolios, and of each holding in the whole portfolio."
+                : `Share of the portfolio invested in each holding${portfolio.method === "rl" ? ", as allocated by the reinforcement learning model" : ""}.`}
             </p>
           </div>
-          <span className="muted">{allocation.length} holding{allocation.length === 1 ? "" : "s"}</span>
+          <span className="muted">
+            {byPart ? `${portfolio.sleeves.length} portfolios · ` : ""}
+            {allocation.length} holding{allocation.length === 1 ? "" : "s"}
+          </span>
         </div>
+        {byPart ? <PartsAllocation sleeves={portfolio.sleeves} /> : (
         <div className="alloc-rows">
           <div className="alloc-row alloc-head">
             <span>Ticker</span>
@@ -571,6 +733,7 @@ export default function PortfolioDetailPage() {
             </Link>
           ))}
         </div>
+        )}
       </div>
 
       <SignalBoard portfolioId={id} onBoard={setBoard} />

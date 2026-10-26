@@ -273,7 +273,33 @@ def get_portfolio(portfolio_id: str) -> dict | None:
         return None
     doc = col.get(portfolio_id)
     doc["holdings"] = _with_company_details(doc["holdings"])
+    if doc.get("sleeves"):
+        # Each part's holdings with the same company details; `weight` = share
+        # of the whole portfolio, `weight_in_part` = share inside the part.
+        details = {h["ticker"]: h for h in doc["holdings"]}
+        for sleeve in doc["sleeves"]:
+            share = sleeve["allocation"] / 100
+            sleeve["exists"] = col.has(sleeve["portfolio_id"])  # can still be opened
+            sleeve["holdings"] = [
+                {**details.get(h["ticker"], {"ticker": h["ticker"]}), "weight": h["weight"] * share, "weight_in_part": h["weight"]}
+                for h in sleeve["holdings"]
+            ]
     return doc
+
+
+DISPLAYS = ("sleeves", "combined")
+
+
+def set_display(portfolio_id: str, display: str) -> bool:
+    """How a portfolio of portfolios is shown: by part ("sleeves", the
+    default) or as one combined list of holdings ("combined")."""
+    if display not in DISPLAYS:
+        raise ValueError(f"'display' must be one of {', '.join(DISPLAYS)}")
+    col = get_db().collection("portfolios")
+    if not col.has(portfolio_id):
+        return False
+    col.update({"_key": portfolio_id, "display": display})
+    return True
 
 
 def update_portfolio(portfolio_id: str, name: str, **changes) -> dict | None:

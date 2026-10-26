@@ -186,7 +186,7 @@ export default function CompanyDetailPage() {
         );
       })()}
 
-      <FinancialResultsCard earnings={earnings} />
+      <FinancialResultsCard earnings={earnings} stats={stats} />
 
       <ForecastPanels ticker={ticker} />
     </div>

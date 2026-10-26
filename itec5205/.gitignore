@@ -19,3 +19,7 @@ rl_portfolio_papers
 ideas
 stage4
 stage5
+
+# Export All database dumps (Market Data bottom bar) -- never commit
+export/
+*.tar

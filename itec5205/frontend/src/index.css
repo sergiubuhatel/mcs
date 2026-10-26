@@ -629,3 +629,24 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 .statement-bar .muted { flex: 1 1 300px; min-width: 0; }
 .sleeve-card-table { table-layout: fixed; }
 .sales-earnings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.holdings-table tr.part-row td { font-weight: 600; background: var(--color-bg-secondary); }
+/* Portfolio of portfolios allocation: part cards around the donut. */
+.parts-allocation { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 18px; align-items: center; }
+.parts-col { display: grid; gap: 14px; align-content: center; min-width: 0; }
+.parts-donut { display: flex; justify-content: center; }
+.part-card { border: 1px solid; border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.part-card-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.part-card-share { font-size: 1.9rem; font-weight: 800; line-height: 1.1; }
+.part-card-name { font-size: 1.15rem; font-weight: 700; color: var(--color-text-primary); }
+.part-card-name:hover { text-decoration: underline; }
+.part-card-note { margin-top: 4px; font-size: 0.85rem; color: var(--color-text-secondary); }
+.part-card-table { width: 100%; margin-top: 10px; border-collapse: collapse; font-size: 0.85rem; }
+.part-card-table th { text-align: left; font-weight: 600; font-size: 0.75rem; color: var(--color-text-secondary); padding: 5px 6px; border-bottom: 1px solid var(--color-divider); }
+.part-card-table td { text-align: left; padding: 6px; border-bottom: 1px solid var(--color-divider); color: var(--color-text-primary); }
+.part-card-table th:last-child, .part-card-table td:last-child { text-align: right; font-weight: 700; white-space: nowrap; }
+.part-card-table tr:last-child td { border-bottom: 0; }
+.part-card-open { display: inline-block; margin-top: 8px; font-size: 0.8rem; }
+@media (max-width: 1100px) {
+  .parts-allocation { grid-template-columns: minmax(0, 1fr); }
+  .parts-donut { order: -1; }
+}

@@ -6,65 +6,15 @@ import { apiClient } from "../api/client";
 import { InfoPanels, PageHeader } from "../components/PageParts";
 import Req from "../components/Req";
 import { loadCompanies } from "../components/TickerPicker";
+import AllocationDonut, { SLOT_COLORS } from "../components/AllocationDonut";
 import { CloseIcon, LayersIcon, PieChartIcon, PlusIcon, SaveIcon, TrendChartIcon, WorkflowIcon } from "../layout/icons";
 
-// Categorical slots in fixed order (validated palette), light / dark steps.
-const SLOT_COLORS = {
-  light: ["#2a78d6", "#1baf7a", "#eb6834", "#6250d6", "#eda100", "#e87ba4", "#008300", "#e34948"],
-  dark: ["#3987e5", "#199e70", "#d95926", "#9085e9", "#c98500", "#d55181", "#008300", "#e66767"],
-};
 const TOLERANCE = 0.05; // same as the backend: 33.33 × 3 is fine
 const newId = () => Math.random().toString(36).slice(2, 10);
 const pct = (v, digits = 2) => (Number.isFinite(v) ? `${(+v.toFixed(digits)).toFixed(digits)}%` : "–");
 const fmtAlloc = (v) => (Number.isFinite(v) ? `${+v.toFixed(2)}%` : "–");
 const newestFirst = (list) => [...list].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
 const emptySleeve = (allocation = "") => ({ id: newId(), portfolioId: "", allocation, note: "" });
-
-/** Donut of the allocations; 2px surface gaps, direct % labels, hover title. */
-function AllocationDonut({ parts, colors }) {
-  const size = 240;
-  const r = 100;
-  const inner = 58;
-  const c = size / 2;
-  const total = parts.reduce((s, p) => s + p.value, 0);
-  if (!(total > 0)) return null;
-  let angle = -Math.PI / 2;
-  const point = (a, radius) => [c + radius * Math.cos(a), c + radius * Math.sin(a)];
-  return (
-    <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} role="img" aria-label="Allocation of the total portfolio" style={{ maxWidth: "100%" }}>
-      {parts.map((p, i) => {
-        const sweep = (p.value / total) * Math.PI * 2;
-        const start = angle;
-        const end = angle + sweep;
-        angle = end;
-        const large = sweep > Math.PI ? 1 : 0;
-        const [x1, y1] = point(start, r);
-        const [x2, y2] = point(end, r);
-        const [x3, y3] = point(end, inner);
-        const [x4, y4] = point(start, inner);
-        const d =
-          parts.length === 1
-            ? `M ${c} ${c - r} A ${r} ${r} 0 1 1 ${c - 0.01} ${c - r} L ${c - 0.01} ${c - inner} A ${inner} ${inner} 0 1 0 ${c} ${c - inner} Z`
-            : `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${x3} ${y3} A ${inner} ${inner} 0 ${large} 0 ${x4} ${y4} Z`;
-        const [lx, ly] = point(start + sweep / 2, (r + inner) / 2);
-        return (
-          <g key={p.key}>
-            <path d={d} fill={colors[i % colors.length]} stroke="var(--color-bg-secondary)" strokeWidth="2">
-              <title>{`${p.label}: ${fmtAlloc(p.value)}`}</title>
-            </path>
-            {p.value / total >= 0.07 && (
-              <text x={lx} y={ly} textAnchor="middle" dominantBaseline="central" fill="#fff" fontSize="13" fontWeight="700" pointerEvents="none">
-                {fmtAlloc(p.value)}
-              </text>
-            )}
-          </g>
-        );
-      })}
-      <text x={c} y={c - 9} textAnchor="middle" fill="var(--color-text-secondary)" fontSize="11">TOTAL</text>
-      <text x={c} y={c + 11} textAnchor="middle" fill="var(--color-text-primary)" fontSize="18" fontWeight="700">{fmtAlloc(total)}</text>
-    </svg>
-  );
-}
 
 export default function CombinePortfoliosPage() {
   const navigate = useNavigate();
