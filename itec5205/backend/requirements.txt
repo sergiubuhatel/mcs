@@ -16,3 +16,5 @@ stable-baselines3
 torch
 statsmodels
 waitress
+pytesseract
+pillow

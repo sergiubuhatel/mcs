@@ -3,9 +3,9 @@ import { useParams } from "react-router-dom";
 import { apiClient } from "../api/client";
 import ForecastChart, { BandLevelSelect, forecastFromDocs } from "../components/ForecastChart";
 import ForecastPanels from "../features/predictions/ForecastPanels";
-import { INTERVALS, filterByInterval } from "../utils/dateRanges";
+import { filterByInterval } from "../utils/dateRanges";
 import BackButton from "../layout/BackButton";
-import { getSettings } from "../features/settings/settings";
+import { chartIntervals, getSettings } from "../features/settings/settings";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -150,7 +150,7 @@ export default function CompanyDetailPage() {
                 {forecast && showForecast && (
                   <BandLevelSelect value={bandLevel} onChange={setBandLevel} />
                 )}
-                {INTERVALS.map((iv) => (
+                {chartIntervals("general").map((iv) => (
                   <button
                     key={iv.key}
                     className={range === iv.key ? "btn" : "btn secondary"}

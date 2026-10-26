@@ -12,6 +12,7 @@ from ..services.portfolio_service import (
     list_portfolios,
     update_portfolio,
 )
+from ..services.statement_import import MAX_IMAGE_BYTES, read_statement
 
 bp = Blueprint("portfolios", __name__, url_prefix="/api/portfolios")
 
@@ -41,6 +42,22 @@ def create():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify(portfolio), 201
+
+
+@bp.post("/import-image")
+def import_image():
+    """OCR a brokerage positions screenshot -> positions with market values,
+    for the user to review before saving it as a portfolio (nothing stored)."""
+    file = request.files.get("file")
+    if file is None:
+        return jsonify({"error": "Choose an image of the positions table"}), 400
+    data = file.read(MAX_IMAGE_BYTES + 1)
+    if len(data) > MAX_IMAGE_BYTES:
+        return jsonify({"error": f"The image is larger than {MAX_IMAGE_BYTES // (1024 * 1024)} MB"}), 400
+    try:
+        return jsonify(read_statement(data))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 @bp.get("/<portfolio_id>/performance")

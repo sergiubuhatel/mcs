@@ -14,6 +14,7 @@ import {
   BarChartIcon,
   BookmarkPlusIcon,
   ClockIcon,
+  ImageIcon,
   LayersIcon,
   PieChartIcon,
   PlusIcon,
@@ -36,7 +37,7 @@ export function riskBand(vol) {
   return { label: "High", tone: "bad" };
 }
 
-const METHOD = { rl: { label: "RL optimized", icon: WorkflowIcon }, manual: { label: "Manual", icon: BookmarkPlusIcon } };
+const METHOD = { rl: { label: "RL optimized", icon: WorkflowIcon }, manual: { label: "Manual", icon: BookmarkPlusIcon }, imported: { label: "Imported", icon: ImageIcon } };
 
 const PORTFOLIO_COLUMNS = [
   {

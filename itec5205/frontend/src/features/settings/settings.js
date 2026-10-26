@@ -4,9 +4,11 @@
 // getSettings() in their useState initializers.
 import { apiClient } from "../../api/client";
 import { setFilters } from "../companies/companiesSlice";
+import { intervalsFrom } from "../../utils/dateRanges";
 
 export const DEFAULT_SETTINGS = {
   general: {
+    chart_ranges: "1M, 3M, 4M, 6M, 1Y, 5Y, 10Y, ALL", // range buttons of those charts
     chart_range: "1Y", // company + portfolio detail price charts
     list_page_size: 10, // Workflows, Pools, Portfolios, criteria grids
     next_days: 5, // "next N days" forecast tables
@@ -32,6 +34,7 @@ export const DEFAULT_SETTINGS = {
     training_days: 2515,
     lstm_epochs: 100,
     horizon: "3M", // Price Forecasts signal horizon
+    chart_ranges: "1M, 3M, 6M, 1Y, ALL", // range buttons of the Price Forecasts chart
     chart_range: "6M", // Price Forecasts chart
     band_level: 95, // confidence level (%) of the forecast bands on every chart
     quick_tickers: "AAPL, MSFT, NVDA, GOOGL, AMZN",
@@ -148,6 +151,9 @@ export async function saveSettings(dispatch, values) {
   await applyScreening(dispatch, current.screening);
   return current;
 }
+
+/** Range buttons of a chart: "general" (company + portfolio detail) or "forecast". */
+export const chartIntervals = (section) => intervalsFrom(current[section].chart_ranges, DEFAULT_SETTINGS[section].chart_ranges);
 
 // Comma-separated ticker text -> ["AAPL", ...].
 export const tickerList = (text) =>

@@ -12,6 +12,7 @@ import {
   DatabaseIcon,
   DownloadIcon,
   GearIcon,
+  ImageIcon,
   ListIcon,
   PieChartIcon,
   SearchIcon,
@@ -86,6 +87,12 @@ const GROUPS = [
         label: "Order Calculator",
         icon: CalculatorIcon,
         hint: "Shares to buy or sell in each account (RRSP, TFSA…) for a target allocation, in CAD",
+      },
+      {
+        to: "/import-portfolio",
+        label: "Import Portfolio",
+        icon: ImageIcon,
+        hint: "Create a portfolio from a screenshot of your brokerage positions (weights = shares of the market value)",
       },
     ],
   },
@@ -180,8 +187,7 @@ export default function Sidebar({ collapsed }) {
       </nav>
       {!collapsed && (
         <div className="sidebar-version mt-auto">
-          <div>Version {APP_VERSION}</div>
-          <div>{APP_VERSION_DATE}</div>
+          <div>Version {APP_VERSION} · {APP_VERSION_DATE}</div>
         </div>
       )}
     </aside>

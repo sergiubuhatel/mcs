@@ -14,7 +14,7 @@ import {
 } from "../layout/icons";
 import { ALL_RESULTS } from "../features/companies/companiesSaga";
 import { filterByInterval } from "../utils/dateRanges";
-import { getSettings, tickerList } from "../features/settings/settings";
+import { chartIntervals, getSettings, tickerList } from "../features/settings/settings";
 
 // Trading days per horizon -- matches backend services/horizons.py (1-4M)
 // plus the short 1-day / 1-week points shown in the predicted-prices table.
@@ -25,7 +25,6 @@ const SIGNAL_HORIZONS = [
   { key: "4M", name: "4 months", days: 84 },
 ];
 const TABLE_HORIZONS = [{ key: "1D", name: "1 day", days: 1 }, { key: "1W", name: "1 week", days: 5 }, ...SIGNAL_HORIZONS];
-const CHART_RANGES = ["1M", "3M", "6M", "1Y", "ALL"];
 // Same dead band as the signal board (signal_service.DIRECTION_DEADBAND_PCT).
 const DEADBAND_PCT = 0.05;
 const COLORS = { history: "#2563eb", lstm: "#16a34a", arima: "#a855f7" };
@@ -136,7 +135,7 @@ function PriceForecastCard({ ticker, company, lstm, arima, range, setRange, band
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             {forecast && <BandLevelSelect value={bandLevel} onChange={setBandLevel} />}
             <div className="seg">
-              {CHART_RANGES.map((r) => (
+              {chartIntervals("forecast").map(({ key: r }) => (
                 <button key={r} className={r === range ? "active" : ""} onClick={() => setRange(r)}>{r}</button>
               ))}
             </div>

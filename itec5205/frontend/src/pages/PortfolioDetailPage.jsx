@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { apiClient } from "../api/client";
-import { INTERVALS, filterByInterval } from "../utils/dateRanges";
+import { filterByInterval } from "../utils/dateRanges";
 import { useColumnConfig } from "../utils/useColumnConfig";
 import ActionMenu from "../components/ActionMenu";
 import ColumnPicker from "../components/ColumnPicker";
@@ -14,7 +14,7 @@ import { StatTiles } from "../components/PageParts";
 import SignalBoard, { SignalBadge } from "../features/signals/SignalBoard";
 import BackButton from "../layout/BackButton";
 import { ClockIcon, CopyIcon, DatabaseIcon, EditIcon, GrowthIcon, LayersIcon, ListIcon, PieChartIcon, SaveIcon, StarIcon, TrendChartIcon, TrendDownIcon, TrendUpIcon } from "../layout/icons";
-import { getSettings } from "../features/settings/settings";
+import { chartIntervals, getSettings } from "../features/settings/settings";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -276,7 +276,7 @@ export default function PortfolioDetailPage() {
   // Same color per holding in the holdings grid and the allocation bars.
   const colorOf = Object.fromEntries(allocation.map((a, i) => [a.ticker, ALLOCATION_COLORS[i % ALLOCATION_COLORS.length]]));
   const signal = overallSignal(board);
-  const built = portfolio.method === "rl" ? "RL-optimized portfolio" : "Hand-built portfolio";
+  const built = portfolio.method === "rl" ? "RL-optimized portfolio" : portfolio.method === "imported" ? "Imported from a statement" : "Hand-built portfolio";
   const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : null);
   const created = fmtDay(portfolio.created_at);
   const lastUpdated = fmtDay(portfolio.updated_at || portfolio.created_at);
@@ -467,7 +467,7 @@ export default function PortfolioDetailPage() {
               </label>
             )}
             {forecastIndex && showForecast && <BandLevelSelect value={bandLevel} onChange={setBandLevel} />}
-            {INTERVALS.map((iv) => (
+            {chartIntervals("general").map((iv) => (
               <button
                 key={iv.key}
                 className={range === iv.key ? "btn" : "btn secondary"}
