@@ -37,7 +37,7 @@ export function riskBand(vol) {
   return { label: "High", tone: "bad" };
 }
 
-const METHOD = { rl: { label: "RL optimized", icon: WorkflowIcon }, manual: { label: "Manual", icon: BookmarkPlusIcon }, imported: { label: "Imported", icon: ImageIcon } };
+const METHOD = { rl: { label: "RL optimized", icon: WorkflowIcon }, manual: { label: "Manual", icon: BookmarkPlusIcon }, imported: { label: "Imported", icon: ImageIcon }, combined: { label: "Combined", icon: PieChartIcon } };
 
 const PORTFOLIO_COLUMNS = [
   {

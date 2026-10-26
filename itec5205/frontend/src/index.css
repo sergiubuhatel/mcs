@@ -603,3 +603,23 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 .weight-bar { display: inline-block; height: 6px; border-radius: 3px; background: #0ea5e9; max-width: 60px; }
 .warn-text { color: #b45309; }
 .dark .warn-text { color: #fbbf24; }
+
+/* Portfolio of Portfolios (2026-10-25). */
+.sleeve-table td { vertical-align: middle; }
+.sleeve-table select, .sleeve-table input:not([type=number]) { width: 100%; }
+.sleeve-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: middle; }
+.sleeve-overview { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.sleeve-donut { flex: 0 0 240px; display: flex; justify-content: center; margin: 0 auto; }
+.sleeve-cards { flex: 1 1 520px; min-width: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.sleeve-card { border: 1px solid; border-radius: 10px; overflow: hidden; min-width: 0; }
+.sleeve-card-head { display: flex; gap: 12px; align-items: center; padding: 10px 14px; }
+.sleeve-alloc { font-size: 1.6rem; font-weight: 800; line-height: 1; }
+.sleeve-name { font-weight: 700; font-size: 1rem; }
+.sleeve-card .order-table { margin: 0; }
+.sleeve-card .order-table th, .sleeve-card .order-table td { padding-left: 14px; padding-right: 14px; }
+.sleeve-combined { margin-top: 14px; }
+.sleeve-combined summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
+.statement-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--color-divider); border-radius: 8px; }
+.statement-bar .btn { cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.statement-bar .btn.disabled { opacity: 0.6; pointer-events: none; }
+.statement-bar .muted { flex: 1 1 300px; min-width: 0; }

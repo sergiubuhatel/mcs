@@ -130,7 +130,12 @@ def _normalize_holdings(holdings: list[dict]) -> list[dict]:
 
 
 def create_portfolio(
-    name: str, holdings: list[dict], method: str = "manual", notes: str | None = None, source_pool_id: str | None = None
+    name: str,
+    holdings: list[dict],
+    method: str = "manual",
+    notes: str | None = None,
+    source_pool_id: str | None = None,
+    sleeves: list[dict] | None = None,
 ) -> dict:
     db = get_db()
     holdings = _normalize_holdings(holdings)
@@ -147,8 +152,55 @@ def create_portfolio(
         "created_at": datetime.now(timezone.utc).isoformat(),
         **metrics,
     }
+    if sleeves:
+        doc["sleeves"] = sleeves  # a portfolio of portfolios: see combine_sleeves
     db.collection("portfolios").insert(doc)
     return doc
+
+
+ALLOCATION_TOLERANCE = 0.05  # percentage points; typed shares like 33.33 x 3
+
+
+def combine_sleeves(sleeves: list[dict]) -> tuple[list[dict], list[dict]]:
+    """A portfolio of portfolios. `sleeves` = [{portfolio_id, allocation (% of
+    the total), note}]; each saved portfolio's weights are scaled by its
+    allocation and a stock held by several is added up. Returns (holdings,
+    sleeve snapshots) -- the snapshot keeps each part's name and holdings as
+    they were, so the combined portfolio does not change when a part is later
+    edited or deleted."""
+    if not sleeves:
+        raise ValueError("Choose at least one portfolio")
+    ids = [s.get("portfolio_id") for s in sleeves]
+    if len(set(ids)) != len(ids):
+        raise ValueError("A portfolio can only be added once")
+    try:
+        allocations = [float(s.get("allocation")) for s in sleeves]
+    except (TypeError, ValueError):
+        raise ValueError("Every portfolio needs an allocation (%)") from None
+    if any(a <= 0 for a in allocations):
+        raise ValueError("Allocations must be above 0%")
+    if abs(sum(allocations) - 100) > ALLOCATION_TOLERANCE:
+        raise ValueError(f"Allocations must add up to 100% (they add up to {sum(allocations):g}%)")
+
+    col = get_db().collection("portfolios")
+    totals: dict[str, float] = {}
+    snapshots = []
+    for sleeve, allocation in zip(sleeves, allocations):
+        part = col.get(sleeve["portfolio_id"]) if sleeve["portfolio_id"] else None
+        if part is None:
+            raise ValueError(f"Portfolio {sleeve['portfolio_id']} not found")
+        share = allocation / sum(allocations)
+        for h in part["holdings"]:
+            totals[h["ticker"]] = totals.get(h["ticker"], 0.0) + share * h["weight"]
+        snapshots.append({
+            "portfolio_id": part["_key"],
+            "name": part["name"],
+            "allocation": round(allocation, 4),
+            "note": (sleeve.get("note") or "").strip() or None,
+            "holdings": [{"ticker": h["ticker"], "weight": h["weight"]} for h in part["holdings"]],
+        })
+    holdings = sorted(({"ticker": t, "weight": w} for t, w in totals.items()), key=lambda h: -h["weight"])
+    return holdings, snapshots
 
 
 def list_portfolios() -> list[dict]:
@@ -220,12 +272,19 @@ def get_portfolio(portfolio_id: str) -> dict | None:
     return doc
 
 
-def update_portfolio(portfolio_id: str, name: str) -> dict | None:
+def update_portfolio(portfolio_id: str, name: str, **changes) -> dict | None:
+    """Rename; a combined portfolio can also get new `holdings`, `sleeves`
+    and `notes` (its metrics are then recomputed)."""
     db = get_db()
     col = db.collection("portfolios")
     if not col.has(portfolio_id):
         return None
-    col.update({"_key": portfolio_id, "name": name, "updated_at": datetime.now(timezone.utc).isoformat()})
+    doc = {"_key": portfolio_id, "name": name, "updated_at": datetime.now(timezone.utc).isoformat()}
+    if "holdings" in changes:
+        doc["holdings"] = _normalize_holdings(changes["holdings"])
+        doc.update(compute_metrics(doc["holdings"]))
+    doc.update({k: changes[k] for k in ("sleeves", "notes") if k in changes})
+    col.update(doc)
     return col.get(portfolio_id)
 
 

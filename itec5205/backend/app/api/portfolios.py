@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request
 from ..services.horizons import BAND_LEVELS, DEFAULT_BAND_LEVEL
 from ..services.portfolio_forecast import portfolio_forecast
 from ..services.portfolio_service import (
+    combine_sleeves,
     compute_performance_series,
     create_portfolio,
     delete_portfolio,
@@ -42,6 +43,39 @@ def create():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify(portfolio), 201
+
+
+@bp.post("/combined")
+def create_combined():
+    """A portfolio of portfolios: {name, notes, sleeves: [{portfolio_id, allocation, note}]}."""
+    body = request.get_json(force=True) or {}
+    name = (body.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "'name' is required"}), 400
+    try:
+        holdings, sleeves = combine_sleeves(body.get("sleeves") or [])
+        portfolio = create_portfolio(name=name, holdings=holdings, method="combined", notes=body.get("notes"), sleeves=sleeves)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(portfolio), 201
+
+
+@bp.put("/combined/<portfolio_id>")
+def update_combined(portfolio_id: str):
+    body = request.get_json(force=True) or {}
+    name = (body.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "'name' is required"}), 400
+    if any(s.get("portfolio_id") == portfolio_id for s in body.get("sleeves") or []):
+        return jsonify({"error": "A portfolio cannot contain itself"}), 400
+    try:
+        holdings, sleeves = combine_sleeves(body.get("sleeves") or [])
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    portfolio = update_portfolio(portfolio_id, name=name, holdings=holdings, sleeves=sleeves, notes=body.get("notes"))
+    if portfolio is None:
+        return jsonify({"error": "Portfolio not found"}), 404
+    return jsonify(portfolio)
 
 
 @bp.post("/import-image")

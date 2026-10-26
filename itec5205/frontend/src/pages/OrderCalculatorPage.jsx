@@ -9,9 +9,11 @@ import {
   CalculatorIcon,
   CloseIcon,
   DownloadIcon,
+  ImageIcon,
   LayersIcon,
   PieChartIcon,
   PlusIcon,
+  SpinnerIcon,
   TrendChartIcon,
   WorkflowIcon,
 } from "../layout/icons";
@@ -107,7 +109,9 @@ export default function OrderCalculatorPage() {
   // ---- load: saved plan, company names, portfolios; then refresh rate + prices
   useEffect(() => {
     loadCompanies().then((list) => setCompanies(Object.fromEntries(list.map((c) => [c.ticker, c])))).catch(() => {});
-    apiClient.get("/api/portfolios").then((r) => setPortfolios(r.data.portfolios || [])).catch(() => {});
+    apiClient
+      .get("/api/portfolios")
+      .then((r) => setPortfolios([...(r.data.portfolios || [])].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || "")))) // newest first.catch(() => {});
     apiClient
       .get("/api/orders/plan")
       .then((r) => {
@@ -254,6 +258,49 @@ export default function OrderCalculatorPage() {
     if (!window.confirm(`Remove the account "${a.name}" and its holdings from the calculator?`)) return;
     update((p) => ({ accounts: p.accounts.filter((x) => x.id !== id), activeAccount: null }));
   };
+  // Fill the account from a positions screenshot (same reader as Import
+  // Portfolio): units held per US ticker, and the statement's cash as the funds.
+  const [reading, setReading] = useState(false);
+  const [statementNote, setStatementNote] = useState(null);
+  const readStatement = async (file) => {
+    if (!file) return;
+    const hasUnits = Object.values(account.holdings).some((v) => Number(v) > 0);
+    if (hasUnits && !window.confirm(`Replace the units held in "${account.name}" with the ones in ${file.name || "the screenshot"}?`)) return;
+    setReading(true);
+    setMessage(null);
+    setStatementNote(null);
+    try {
+      const body = new FormData();
+      body.append("file", file, file.name || "screenshot.png");
+      const { data } = await apiClient.post("/api/portfolios/import-image", body, { headers: { "Content-Type": "multipart/form-data" } });
+      const holdings = Object.fromEntries(targetTickers.map((tk) => [tk, ""]));
+      const skipped = [];
+      const fixed = [];
+      for (const p of data.positions) {
+        if (!p.usd || p.quantity == null) {
+          skipped.push(`${p.ticker} ${p.security || ""} (${p.quantity ?? "?"})`.replace(/\s+/g, " "));
+          continue;
+        }
+        if (p.read_as) fixed.push(`${p.read_as} → ${p.ticker}`);
+        holdings[p.ticker] = String((Number(holdings[p.ticker]) || 0) + p.quantity);
+      }
+      setAccount({ holdings, ...(data.cash != null ? { cash: String(data.cash) } : {}) });
+      ensurePrices(Object.keys(holdings));
+      const read = data.positions.length - skipped.length;
+      setStatementNote(
+        [
+          `Read ${read} positions from ${file.name || "the screenshot"}${data.cash != null ? ` and ${cad(data.cash)} of cash` : " (no cash found — type the funds)"}.`,
+          fixed.length ? `Corrected tickers: ${fixed.join(", ")}.` : "",
+          skipped.length ? `Not priced in USD, left out: ${skipped.join("; ")}.` : "",
+        ].filter(Boolean).join(" ")
+      );
+    } catch (err) {
+      setMessage(err.response?.data?.error || err.message);
+    } finally {
+      setReading(false);
+    }
+  };
+
   // Stocks held but not in the targets: target 0% -> sold (rebalance mode).
   const otherHeld = account ? Object.keys(account.holdings).filter((t) => !targetTickers.includes(t)) : [];
 
@@ -534,6 +581,17 @@ export default function OrderCalculatorPage() {
             </div>
           ))}
           <button type="button" className="account-tab add" onClick={addAccount} title="Add an account"><PlusIcon width={13} height={13} /> Account</button>
+        </div>
+
+        <div className="statement-bar">
+          <label className={`btn secondary${reading ? " disabled" : ""}`} title="A screenshot of this account's positions (symbol, quantity, market value…): fills the units you hold and the funds">
+            <input type="file" accept="image/*" hidden disabled={reading} onChange={(e) => { readStatement(e.target.files?.[0]); e.target.value = ""; }} />
+            {reading ? <SpinnerIcon width={14} height={14} className="spin" /> : <ImageIcon width={14} height={14} />}
+            {reading ? " Reading…" : " Read from a screenshot"}
+          </label>
+          <span className="muted" style={{ fontSize: "0.8rem" }}>
+            {statementNote || "Fill this account's units and funds from a screenshot of its positions, then see what to sell and buy in step 3."}
+          </span>
         </div>
 
         <div className="order-inputs" style={{ marginTop: 12 }}>

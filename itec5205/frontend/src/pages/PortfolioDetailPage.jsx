@@ -276,7 +276,11 @@ export default function PortfolioDetailPage() {
   // Same color per holding in the holdings grid and the allocation bars.
   const colorOf = Object.fromEntries(allocation.map((a, i) => [a.ticker, ALLOCATION_COLORS[i % ALLOCATION_COLORS.length]]));
   const signal = overallSignal(board);
-  const built = portfolio.method === "rl" ? "RL-optimized portfolio" : portfolio.method === "imported" ? "Imported from a statement" : "Hand-built portfolio";
+  const built = portfolio.method === "rl" ? "RL-optimized portfolio" : portfolio.method === "imported"
+        ? "Imported from a statement"
+        : portfolio.method === "combined"
+        ? `Portfolio of portfolios: ${(portfolio.sleeves || []).map((s) => `${+s.allocation.toFixed(2)}% ${s.name}`).join(" + ")}`
+        : "Hand-built portfolio";
   const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : null);
   const created = fmtDay(portfolio.created_at);
   const lastUpdated = fmtDay(portfolio.updated_at || portfolio.created_at);
@@ -360,7 +364,11 @@ export default function PortfolioDetailPage() {
                 </span>
               </span>
             )}
-            <button className="btn" onClick={() => setRenaming(portfolio.name)} title="Edit this portfolio's name">
+            <button
+              className="btn"
+              onClick={() => (portfolio.sleeves ? navigate(`/combine-portfolios?id=${portfolio._key}`) : setRenaming(portfolio.name))}
+              title={portfolio.sleeves ? "Change its portfolios, their shares and the name" : "Edit this portfolio's name"}
+            >
               <EditIcon width={15} height={15} /> Edit Portfolio
             </button>
             <button className="btn secondary" onClick={duplicate} title="Save a copy of this portfolio and open it">

@@ -85,7 +85,8 @@ def _market_value(nums: list[float]) -> tuple[float | None, bool]:
 
 
 def parse_lines(lines: list[list[dict]]) -> dict:
-    positions, total, currency = [], None, None
+    positions, total, currency, cash, account_total = [], None, None, None, None
+    after_total_label = False
     for line in lines:
         texts = [w["text"] for w in line]
         joined = " ".join(texts)
@@ -103,6 +104,23 @@ def parse_lines(lines: list[list[dict]]) -> dict:
             if n is not None
         ]
         nums = [n for _, n in found]
+
+        # Account summary "CAD  total value  market value ...": the cash is
+        # the difference (the funds not invested in stocks).
+        if cash is None and texts[0] in ("CAD", "USD") and len(nums) >= 2 and not percent:
+            if 0 <= nums[0] - nums[1] < nums[0]:
+                cash, currency = round(nums[0] - nums[1], 2), currency or texts[0]
+            continue
+
+        # "Total market value  $210,669.46 CAD" under the table = stocks +
+        # cash; the amount can be on the line below the label.
+        if after_total_label and nums and account_total is None:
+            account_total = nums[0]
+        after_total_label = "TOTAL MARKET VALUE" in joined.upper()
+        if after_total_label:
+            if nums:
+                account_total = nums[-1]
+            continue
 
         if "TOTAL" in joined.upper() and len(nums) >= 2:
             total, _ = _market_value(nums)
@@ -130,7 +148,9 @@ def parse_lines(lines: list[list[dict]]) -> dict:
             "usd": "USD" in texts,
             "raw": joined,
         })
-    return {"positions": positions, "statement_total": total, "currency": currency}
+    if cash is None and account_total and total and account_total >= total:
+        cash = round(account_total - total, 2)
+    return {"positions": positions, "statement_total": total, "currency": currency, "cash": cash}
 
 
 def _company_names(tickers: list[str]) -> dict:

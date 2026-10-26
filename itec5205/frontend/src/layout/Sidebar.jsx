@@ -83,16 +83,22 @@ const GROUPS = [
     color: "#0ea5e9",
     items: [
       {
-        to: "/orders",
-        label: "Order Calculator",
-        icon: CalculatorIcon,
-        hint: "Shares to buy or sell in each account (RRSP, TFSA…) for a target allocation, in CAD",
+        to: "/combine-portfolios",
+        label: "Portfolio of Portfolios",
+        icon: PieChartIcon,
+        hint: "Combine saved portfolios into one, each with its share of the total (e.g. 50% / 25% / 25%)",
       },
       {
         to: "/import-portfolio",
         label: "Import Portfolio",
         icon: ImageIcon,
         hint: "Create a portfolio from a screenshot of your brokerage positions (weights = shares of the market value)",
+      },
+      {
+        to: "/orders",
+        label: "Order Calculator",
+        icon: CalculatorIcon,
+        hint: "Shares to sell and buy in each account (RRSP, TFSA…) to reach a portfolio, in CAD; can read what you hold from a screenshot",
       },
     ],
   },
