@@ -1,4 +1,4 @@
-import { BarChartIcon, DatabaseIcon, GridIcon, GrowthIcon, TrendChartIcon } from "../../layout/icons";
+import { BarChartIcon, ClockIcon, DatabaseIcon, GridIcon, GrowthIcon, TrendChartIcon } from "../../layout/icons";
 
 // How many stored units (market_cap is stored in $M, free_cash_flow in raw
 // $) one typed unit is worth -- lets the user type "500" and pick Billion
@@ -88,6 +88,16 @@ export const FILTER_GROUPS = [
       { key: "trend_return", label: "Trend-Adjusted Return (1Y) %", short: "Trend Return", percent: true, hint: "Change (1Y) × Trend R²", tip: "Best as a sort column. As a filter, min 15 keeps meaningful climbs." },
     ],
   },
+  {
+    // Earnings release dates, imported with "Import financial results".
+    title: "Financial Results",
+    icon: ClockIcon,
+    color: "#7c3aed",
+    fields: [
+      { key: "days_to_report", label: "Days Until Next Results", short: "Days to Results", hint: "Calendar days until the next quarterly earnings release (0 = today)", tip: "Min 10 avoids buying right before a release, when the price can jump either way. Max 7 lists the companies reporting this week." },
+      { key: "days_since_report", label: "Days Since Last Results", short: "Days Since Results", hint: "Calendar days since the last quarterly earnings release", tip: "Max 30 keeps companies whose fundamentals were just updated; about 90 days pass between releases." },
+    ],
+  },
 ];
 
 // The screener / screening-criteria filter tabs (FilterTabs.jsx), each
@@ -98,6 +108,7 @@ export const FILTER_TABS = [
   { id: "health", title: "Financial Health", icon: DatabaseIcon, color: "#7c3aed", heading: "Financial Health", subtitle: "Filter by debt, liquidity, and cash generation", groups: ["Financial Health"] },
   { id: "performance", title: "Performance", icon: TrendChartIcon, color: "#0ea5e9", heading: "Price Performance", subtitle: "Filter by recent price moves and volatility, calculated from stored prices", groups: ["Price Performance"] },
   { id: "trend", title: "Trend Quality", icon: GrowthIcon, color: "#14b8a6", heading: "Trend Quality", subtitle: "Filter by how straight and steady the past year's climb was", groups: ["Trend Quality"] },
+  { id: "results", title: "Financial Results", icon: ClockIcon, color: "#7c3aed", heading: "Financial Results", subtitle: "Filter by when companies last reported earnings and when they report next", groups: ["Financial Results"] },
 ];
 export const tabGroups = (tab) => FILTER_GROUPS.filter((g) => tab.groups.includes(g.title));
 export const tabFields = (tab) => tabGroups(tab).flatMap((g) => g.fields);

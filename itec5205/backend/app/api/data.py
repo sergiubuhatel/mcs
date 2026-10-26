@@ -11,6 +11,7 @@ from celery.result import AsyncResult
 from flask import Blueprint, jsonify, request
 
 from ..db.arango_client import get_db
+from ..services.delisting import clear_delisted, list_delisted, purge_ticker
 from ..services.universes import INDEXES, existing_mode, normalize_universe, imported_tickers, tickers_to_import, universe_tickers
 from ..services.yahoo_import import _last_closed_session_date
 from ..tasks.celery_app import celery_app
@@ -41,6 +42,7 @@ def trigger_import():
     import_history = bool(body.get("import_history", True))
     import_statistics = bool(body.get("import_statistics", True))
     import_calculated_stats = bool(body.get("import_calculated_stats", True))
+    import_earnings = bool(body.get("import_earnings", False))
 
     requested = len(tickers)
     tickers, existing = tickers_to_import(tickers, existing, import_history)
@@ -57,6 +59,7 @@ def trigger_import():
         import_history=import_history,
         import_statistics=import_statistics,
         import_calculated_stats=import_calculated_stats,
+        import_earnings=import_earnings,
         scope=scope,
         source="manual",
         universe=universe if scope == "all" else None,
@@ -109,6 +112,38 @@ def delete_import_run(key):
         return jsonify({"error": "Stop the import before deleting it"}), 409
     col.delete(key)
     return jsonify({"deleted": key})
+
+
+@bp.get("/delisted")
+def delisted():
+    """Companies on the delisted list: removed from the database and left
+    out of every whole-list import."""
+    return jsonify({"delisted": list_delisted()})
+
+
+@bp.post("/delisted")
+def add_delisted():
+    """Body: `tickers` (list or comma-separated text), optional `reason`.
+    Removes each company's data and adds it to the delisted list."""
+    body = request.get_json(silent=True) or {}
+    tickers = body.get("tickers") or []
+    if isinstance(tickers, str):
+        tickers = tickers.split(",")
+    tickers = list(dict.fromkeys(t.strip().upper() for t in tickers if t and t.strip()))
+    if not tickers:
+        return jsonify({"error": "List the tickers to mark as delisted"}), 400
+    reason = (body.get("reason") or "").strip() or "Marked delisted by the user"
+    for ticker in tickers:
+        purge_ticker(ticker, reason, source="manual")
+    return jsonify({"delisted": list_delisted()}), 201
+
+
+@bp.delete("/delisted/<ticker>")
+def remove_delisted(ticker: str):
+    """Take a company off the delisted list; the next import that covers it
+    imports it again."""
+    clear_delisted(ticker.upper())
+    return jsonify({"delisted": list_delisted()})
 
 
 @bp.get("/summary")
@@ -192,5 +227,6 @@ def resume_import(task_id: str):
         import_history=prior.get("import_history", True),
         import_statistics=prior.get("import_statistics", True),
         import_calculated_stats=prior.get("import_calculated_stats", True),
+        import_earnings=prior.get("import_earnings", False),
     )
     return jsonify({"task_id": task.id, "ticker_count": len(remaining)}), 202

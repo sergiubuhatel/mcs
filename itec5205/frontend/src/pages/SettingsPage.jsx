@@ -77,6 +77,7 @@ const SECTIONS = [
       { key: "import_history", label: "Import price history", type: "toggle", help: "Daily prices from Yahoo Finance." },
       { key: "import_statistics", label: "Import statistics", type: "toggle", help: "Fundamentals: valuation, profitability, debt, growth." },
       { key: "import_calculated_stats", label: "Calculated statistics", type: "toggle", help: "1-year change and volatility computed from the stored prices." },
+      { key: "import_earnings", label: "Financial results", type: "toggle", help: "Earnings release dates and EPS: the whole history the first time, then the latest releases." },
     ],
   },
   {

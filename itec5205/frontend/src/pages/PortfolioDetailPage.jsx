@@ -15,6 +15,7 @@ import SignalBoard, { SignalBadge } from "../features/signals/SignalBoard";
 import BackButton from "../layout/BackButton";
 import { ClockIcon, CopyIcon, DatabaseIcon, EditIcon, GrowthIcon, LayersIcon, ListIcon, PieChartIcon, SaveIcon, StarIcon, TrendChartIcon, TrendDownIcon, TrendUpIcon } from "../layout/icons";
 import { chartIntervals, getSettings } from "../features/settings/settings";
+import { fmtDay, nextReportLabel, relativeDays } from "../features/earnings/FinancialResultsCard";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -98,6 +99,17 @@ const HOLDINGS_COLUMNS = [
     render: (h) => <Link to={`/companies/${h.ticker}`} onClick={(e) => e.stopPropagation()}>{h.ticker}</Link>,
   },
   { key: "name", label: "Company", render: (h) => h.name || "-" },
+  // Earnings release dates; the hover says how far away.
+  { key: "last_report_date", label: "Last Results", render: (h) => <span title={relativeDays(h.last_report_date)}>{fmtDay(h.last_report_date)}</span> },
+  {
+    key: "next_report_date",
+    label: "Next Results",
+    render: (h) => (
+      <span title={h.next_report_confirmed === false ? `${relativeDays(h.next_report_date)}, estimated by Yahoo` : relativeDays(h.next_report_date)}>
+        {nextReportLabel(h.next_report_date, h.next_report_confirmed)}
+      </span>
+    ),
+  },
   {
     key: "day_change",
     label: "Change (1D)",

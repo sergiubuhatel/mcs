@@ -29,6 +29,7 @@ from yfinance.exceptions import YFRateLimitError
 
 from ..db.arango_client import get_db
 from ..extensions import socketio
+from ..services.earnings import EarningsPageThrottled
 from ..services.delisting import clear_delisted, confirm_delisted, delisted_tickers, is_delisted_error, purge_ticker
 from ..services.yahoo_import import import_ticker
 from .celery_app import celery_app
@@ -58,7 +59,7 @@ class _ImportStopped(Exception):
 
 
 def _is_rate_limited(exc: Exception) -> bool:
-    if isinstance(exc, YFRateLimitError):
+    if isinstance(exc, (YFRateLimitError, EarningsPageThrottled)):
         return True
     text = str(exc)
     return "Too Many Requests" in text or "Invalid Crumb" in text or "429" in text
@@ -169,6 +170,7 @@ def import_sp500_data(
     import_history: bool = True,
     import_statistics: bool = True,
     import_calculated_stats: bool = True,
+    import_earnings: bool = False,
     scope: str = "specific",
     source: str = "manual",
     universe: str | None = "sp500",
@@ -176,11 +178,12 @@ def import_sp500_data(
     existing: str | None = None,
 ):
     options = {"years": years, "import_history": import_history, "import_statistics": import_statistics,
-               "import_calculated_stats": import_calculated_stats}
+               "import_calculated_stats": import_calculated_stats, "import_earnings": import_earnings}
     started = _record_start(self.request.id, tickers, scope, source, {**options, "existing": existing},
                             universe if scope == "all" else None, skipped)
     try:
-        result = _run_import(self, tickers, years, interval, import_history, import_statistics, import_calculated_stats)
+        result = _run_import(self, tickers, years, interval, import_history, import_statistics, import_calculated_stats,
+                             import_earnings)
     except Exception as exc:
         _record_end(self.request.id, started, status="failed", error=str(exc))
         raise
@@ -191,7 +194,7 @@ def import_sp500_data(
         self.request.id, started, status=status, succeeded=result["succeeded_count"], failed=len(failed),
         failed_tickers=[f["ticker"] for f in failed][:MAX_LISTED_TICKERS],
         failed_errors=failed, delisted=result["delisted"], remaining=len(result["remaining_tickers"]),
-        records=result.pop("records"),
+        records=result.pop("records"), earnings_records=result.pop("earnings_records"),
     )
     return result
 
@@ -204,7 +207,8 @@ def _report(self, room, ticker, completed, total, succeeded, failed, pause, deli
     socketio.emit("import_progress", progress, room=room)
 
 
-def _run_import(self, tickers, years, interval, import_history, import_statistics, import_calculated_stats):
+def _run_import(self, tickers, years, interval, import_history, import_statistics, import_calculated_stats,
+                import_earnings=False):
     total = len(tickers)
     succeeded = []
     failed = []
@@ -222,7 +226,7 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
             pool.submit(
                 _import_with_retry, throttle, t, years=years, interval=interval,
                 import_history=import_history, import_statistics=import_statistics,
-                import_calculated_stats=import_calculated_stats,
+                import_calculated_stats=import_calculated_stats, import_earnings=import_earnings,
             ): t
             for t in tickers
         }
@@ -273,9 +277,11 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
                     other_future.cancel()  # not yet started -- surfaces as .cancelled() above, added to `remaining`
 
     records = sum((s.get("history_rows") or 0) for s in succeeded)  # price rows written
+    earnings_records = sum((s.get("earnings_rows") or 0) for s in succeeded)  # earnings releases written
     if stopping:
         result = {
             "records": records,
+            "earnings_records": earnings_records,
             "stopped": True,
             "total": total,
             "succeeded_count": len(succeeded),
@@ -288,12 +294,14 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
             "import_history": import_history,
             "import_statistics": import_statistics,
             "import_calculated_stats": import_calculated_stats,
+            "import_earnings": import_earnings,
         }
-        socketio.emit("import_progress", {"stage": "stopped", **{k: v for k, v in result.items() if k != "records"}}, room=room)
+        socketio.emit("import_progress", {"stage": "stopped", **{k: v for k, v in result.items() if k not in ("records", "earnings_records")}}, room=room)
         return result
 
     result = {
         "records": records,
+        "earnings_records": earnings_records,
         "stopped": False,
         "total": total,
         "succeeded_count": len(succeeded),
@@ -306,6 +314,7 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
         "import_history": import_history,
         "import_statistics": import_statistics,
         "import_calculated_stats": import_calculated_stats,
+        "import_earnings": import_earnings,
     }
-    socketio.emit("import_progress", {"stage": "done", **{k: v for k, v in result.items() if k != "records"}}, room=room)
+    socketio.emit("import_progress", {"stage": "done", **{k: v for k, v in result.items() if k not in ("records", "earnings_records")}}, room=room)
     return result

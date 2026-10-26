@@ -6,6 +6,7 @@ import ForecastPanels from "../features/predictions/ForecastPanels";
 import { filterByInterval } from "../utils/dateRanges";
 import BackButton from "../layout/BackButton";
 import { chartIntervals, getSettings } from "../features/settings/settings";
+import FinancialResultsCard, { fmtDay, nextReportLabel, relativeDays } from "../features/earnings/FinancialResultsCard";
 
 function fmtPct(v) {
   return v === null || v === undefined ? "-" : `${(Number(v) * 100).toFixed(2)}%`;
@@ -88,7 +89,8 @@ export default function CompanyDetailPage() {
       </div>
     );
 
-  const { company, stats, history } = detail;
+  const { company, stats, history, earnings } = detail;
+  const summary = earnings?.summary;
   const dayChangePct =
     stats.current_price != null && stats.previous_close
       ? ((stats.current_price - stats.previous_close) / stats.previous_close) * 100
@@ -117,6 +119,12 @@ export default function CompanyDetailPage() {
           <div><strong>Current Ratio</strong><div>{fmtNum(stats.current_ratio_mrq)}</div></div>
           <div><strong>Quarterly Revenue Growth</strong><div>{fmtPct(stats.revenue_growth_yoy_q)}</div></div>
           <div><strong>Quarterly Earnings Growth</strong><div>{fmtPct(stats.earnings_growth_yoy_q)}</div></div>
+          <div title={summary?.last_report_date ? relativeDays(summary.last_report_date) : undefined}>
+            <strong>Last Results</strong><div>{fmtDay(summary?.last_report_date)}</div>
+          </div>
+          <div title={summary?.next_report_date ? relativeDays(summary.next_report_date) : undefined}>
+            <strong>Next Results</strong><div>{nextReportLabel(summary?.next_report_date, summary?.next_confirmed)}</div>
+          </div>
         </div>
       </div>
 
@@ -177,6 +185,8 @@ export default function CompanyDetailPage() {
           </div>
         );
       })()}
+
+      <FinancialResultsCard earnings={earnings} />
 
       <ForecastPanels ticker={ticker} />
     </div>

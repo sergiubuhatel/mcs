@@ -2,12 +2,15 @@ import { CloseIcon } from "../layout/icons";
 
 // The dialog grows to fit its content (no inner scrollbar, so dropdowns aren't
 // clipped); a dialog taller than the window scrolls with the overlay.
+const OVERLAY = { position: "fixed", top: 0, left: 0, right: 0, bottom: "var(--bottom-bar-height)" };
+
 export default function Modal({ isOpen, onClose, title, headerActions, children, maxWidth = 480 }) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0" style={{ zIndex: 1000, overflowY: "auto" }}>
-      <div className="fixed inset-0" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose} />
+    // Ends above the bottom bar, which nothing may cover.
+    <div style={{ ...OVERLAY, zIndex: 1000, overflowY: "auto" }}>
+      <div style={{ ...OVERLAY, background: "rgba(0,0,0,0.5)" }} onClick={onClose} />
       <div
         className="relative flex items-center justify-center"
         style={{

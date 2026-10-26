@@ -113,6 +113,7 @@ def run_workflow(self, run_id: str):
                 imp = import_sp500_data.delay(
                     tickers=to_import, years=data_c["years"], import_history=data_c["import_history"],
                     import_statistics=data_c["import_statistics"], import_calculated_stats=data_c["import_calculated_stats"],
+                    import_earnings=data_c.get("import_earnings", False),
                     scope=data_c["scope"], source="workflow", universe=universe, skipped=len(wanted) - len(to_import),
                     existing=existing,
                 )

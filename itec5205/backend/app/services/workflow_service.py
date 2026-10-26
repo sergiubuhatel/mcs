@@ -74,8 +74,9 @@ def _normalize_data(body: dict) -> dict:
     if years not in IMPORT_YEARS:
         raise ValueError(f"'years' must be one of {', '.join(map(str, IMPORT_YEARS))}")
     flags = {k: bool(body.get(k, True)) for k in ("import_history", "import_statistics", "import_calculated_stats")}
+    flags["import_earnings"] = bool(body.get("import_earnings", False))  # added later: off for older criteria
     if not any(flags.values()):
-        raise ValueError("Pick at least one of history, statistics, calculated statistics")
+        raise ValueError("Pick at least one of history, statistics, calculated statistics, financial results")
     existing = existing_mode(body)
     return {
         "scope": scope,

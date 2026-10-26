@@ -126,7 +126,7 @@ const RULE_SHORT = { both: "LSTM + ARIMA up", either: "LSTM or ARIMA up", lstm: 
 export function autoCriteriaName(kind, c) {
   if (kind === "data") {
     const d = describeData(c);
-    const full = c.import_history && c.import_statistics && c.import_calculated_stats;
+    const full = c.import_history && c.import_statistics && c.import_calculated_stats && c.import_earnings;
     return `${d.scope} · ${d.years} history${full ? "" : ` · ${d.what}`} · ${EXISTING_SHORT[d.existing]}`;
   }
   if (kind === "screen") return describeFilters(c.filters || {}) || "All companies";
@@ -176,7 +176,7 @@ export function uniqueName(name, items, ownId = null) {
 }
 
 function describeData(c) {
-  const what = [c.import_history && "history", c.import_statistics && "statistics", c.import_calculated_stats && "calculated stats"].filter(Boolean);
+  const what = [c.import_history && "history", c.import_statistics && "statistics", c.import_calculated_stats && "calculated stats", c.import_earnings && "financial results"].filter(Boolean);
   const tickers = Array.isArray(c.tickers) ? c.tickers.join(", ") : c.tickers;
   const label = universeLabel(c);
   const scope = c.scope === "specific" ? tickers || "no tickers" : label.startsWith("All") ? label : `All ${label}`;

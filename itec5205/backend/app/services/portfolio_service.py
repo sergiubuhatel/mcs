@@ -220,9 +220,13 @@ def _with_company_details(holdings: list[dict]) -> list[dict]:
             FILTER c._key IN @tickers
             LET stats = DOCUMENT('stock_stats', c._key)
             LET calc = DOCUMENT('calculated_stats', c._key)
+            LET earn = DOCUMENT('earnings_dates', c._key)
             RETURN {
                 ticker: c._key,
                 name: c.name,
+                last_report_date: earn.last_report_date,
+                next_report_date: earn.next_report_date,
+                next_report_confirmed: earn.next_confirmed,
                 market_cap: stats.market_cap,
                 trailing_pe: stats.trailing_pe,
                 forward_pe: stats.forward_pe,

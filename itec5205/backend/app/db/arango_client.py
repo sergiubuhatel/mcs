@@ -48,6 +48,15 @@ COLLECTIONS = {
         {"type": "persistent", "fields": ["worst_month_1y"], "unique": False},
         {"type": "persistent", "fields": ["trend_return_1y"], "unique": False},
     ],
+    # Financial results (services/earnings.py): every earnings release
+    # (`_key` = ticker_date) and a per-company last/next summary (`_key` = ticker).
+    "earnings_reports": [
+        {"type": "persistent", "fields": ["ticker", "date"], "unique": False},
+    ],
+    "earnings_dates": [
+        {"type": "persistent", "fields": ["next_report_date"], "unique": False},
+        {"type": "persistent", "fields": ["last_report_date"], "unique": False},
+    ],
     # A named subset of tickers a user saved off a screener search, to use
     # as the candidate universe fed into RL training (search -> pool -> RL).
     "pools": [

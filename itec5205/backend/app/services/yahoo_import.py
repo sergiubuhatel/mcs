@@ -17,6 +17,7 @@ import yfinance as yf
 from yfinance.exceptions import YFPricesMissingError, YFTickerMissingError
 
 from ..db.arango_client import get_db
+from .earnings import import_earnings as store_earnings
 from .price_metrics import price_history_metrics
 
 _KEY_SAFE = re.compile(r"[^A-Za-z0-9_\-:.@()+,=;$!*'%]")
@@ -270,11 +271,12 @@ def import_ticker(
     import_history: bool = True,
     import_statistics: bool = True,
     import_calculated_stats: bool = True,
+    import_earnings: bool = False,
 ) -> dict:
     """Fetch history and/or stats (incl. fundamental ratios, all sourced
     from `info` -- see `STAT_FIELDS`) for one ticker and upsert them into
     ArangoDB, per the `import_history`/`import_statistics`/
-    `import_calculated_stats` flags. Returns a small summary dict for
+    `import_calculated_stats`/`import_earnings` flags. Returns a small summary dict for
     progress reporting.
 
     Company metadata (name/sector/industry) always gets upserted regardless
@@ -333,4 +335,11 @@ def import_ticker(
         stats_row["_key"] = ticker
         db.collection("stock_stats").insert(stats_row, overwrite=True)
 
-    return {"ticker": ticker, "company": company_name, "history_rows": len(history_rows)}
+    earnings_rows = 0
+    if import_earnings:
+        # Release dates + EPS history (services/earnings.py): the whole
+        # history the first time, only the newest releases afterwards.
+        earnings_rows = store_earnings(yf_ticker, ticker, info)
+
+    return {"ticker": ticker, "company": company_name, "history_rows": len(history_rows),
+            "earnings_rows": earnings_rows}

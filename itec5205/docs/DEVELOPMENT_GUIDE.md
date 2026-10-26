@@ -119,13 +119,15 @@ adapters around them.
 | `stock_prices`          | `TICKER_YYYY-MM-DD`   | `{ticker, date, close, previous, value_change, percentage_change}` |
 | `stock_stats`            | ticker                | latest snapshot: price, market cap, P/E, beta, dividend yield, ... |
 | `financial_ratios`        | ticker                | ROE, ROA, debt/equity, current ratio, margins, revenue growth (from Yahoo's income statement/balance sheet) |
+| `earnings_reports`        | `TICKER_YYYY-MM-DD`   | one quarterly earnings release: `{ticker, date, time, eps_estimate, eps_reported, surprise_pct}` (upcoming = no reported EPS); the whole history on a company's first "Import financial results", then the newest 25 rows |
+| `earnings_dates`          | ticker                | summary for the screener / company page: `last_report_date`, `next_report_date`, `next_confirmed` (false = Yahoo's estimate), last EPS + surprise, `next_eps_estimate`, `last_quarter_end`, `report_count` (services/earnings.py) |
 | `pools`                    | uuid                  | `{name, tickers[], filters (the screen: sector/industry/q/ranges), created_at, root_pool_id, parent_pool_id, iteration, dropped[], refine_reason}` |
 | `portfolios`                | uuid                  | `{name, method, holdings:[{ticker,weight}], source_pool_id, annual_return, expected_return, expected_volatility, sharpe_ratio}` |
 | `rl_runs`                    | uuid (= Celery task id) | PPO run metadata: hyperparams, universe, resulting portfolio id, model path |
 | `price_predictions`            | ticker                | latest LSTM forecast (84 daily steps + `horizons`) + test RMSE/MAE |
 | `arima_predictions`            | ticker                | latest ARIMA forecast (+ 95% interval per step, order, drift) |
 | `forecast_runs`                | uuid                  | batch forecast run: tickers, params, Celery task ids per model, `finished_at`, `wall_seconds`, `cancelled_at` |
-| `criteria`                     | uuid                  | `{kind: data\|screen\|prediction\|portfolio, name, description, ...}` -- data: `scope`, `tickers[]`, `years`, `only_missing`, `import_history/statistics/calculated_stats`; screen: `filters` (form state) + `screen` (API units); prediction: `horizons[{value,unit}]`, `training{value,unit}`, `models`, `min_change_pct`, `epochs`, `reuse_forecasts`; portfolio: the RL options |
+| `criteria`                     | uuid                  | `{kind: data\|screen\|prediction\|portfolio, name, description, ...}` -- data: `scope`, `tickers[]`, `years`, `only_missing`, `import_history/statistics/calculated_stats/earnings`; screen: `filters` (form state) + `screen` (API units); prediction: `horizons[{value,unit}]`, `training{value,unit}`, `models`, `min_change_pct`, `epochs`, `reuse_forecasts`; portfolio: the RL options |
 | `workflows`                     | uuid                  | `{name, description, data_criteria_id (optional, null = no import), screen_criteria_id, prediction_criteria_id, portfolio_criteria_id}` |
 | `workflow_runs`                  | uuid                  | one run: criteria snapshot, `status` (queued/running/succeeded/failed/cancelled), `step`, `percent`, `message`, `steps.{data,screen,forecast,portfolio}` (counts, per-ticker forecast rows), `pool_id`, `portfolio_id`, `wall_seconds` |
 

@@ -11,6 +11,7 @@ import { sectorColor } from "../../utils/sectorColors";
 import { useColumnConfig } from "../../utils/useColumnConfig";
 import ColumnPicker from "../../components/ColumnPicker";
 import { SignalBadge } from "../signals/SignalBoard";
+import { fmtDay, nextReportLabel, relativeDays } from "../earnings/FinancialResultsCard";
 
 function fmtNum(v) {
   return v === null || v === undefined ? "-" : Number(v).toFixed(2);
@@ -207,6 +208,9 @@ export default function CompanyTable() {
     { key: "ev_to_ebitda", csv: (row) => row.ev_to_ebitda, label: "EV/EBITDA", sortable: true, width: 90, hiddenByDefault: true, render: (row) => fmtNum(row.ev_to_ebitda) },
     { key: "dividend_yield", csv: (row) => row.dividend_yield, label: "Dividend Yield", sortable: true, width: 100, hiddenByDefault: true, render: (row) => fmtRawPct(row.dividend_yield) },
     { key: "free_cash_flow", csv: (row) => row.free_cash_flow, label: "Free Cash Flow", sortable: true, width: 100, render: (row) => fmtLarge(row.free_cash_flow) },
+    // Earnings release dates (services/earnings.py); the hover says how far away.
+    { key: "last_report_date", csv: (row) => row.last_report_date, label: "Last Results", sortable: true, width: 105, render: (row) => <span title={relativeDays(row.last_report_date)}>{fmtDay(row.last_report_date)}</span> },
+    { key: "next_report_date", csv: (row) => row.next_report_date, label: "Next Results", sortable: true, width: 125, render: (row) => <span title={row.next_report_confirmed === false ? `${relativeDays(row.next_report_date)}, estimated by Yahoo` : relativeDays(row.next_report_date)}>{nextReportLabel(row.next_report_date, row.next_report_confirmed)}</span> },
   ];
 
   const { columns, visibleColumns, hidden, toggleVisible, moveColumn, reset } = useColumnConfig("companyTable", COLUMNS);

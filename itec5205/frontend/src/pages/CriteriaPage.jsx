@@ -49,8 +49,8 @@ function toPayload(kind, form) {
   const common = { name: form.name.trim(), description: form.description || "" };
   if (kind === "screen") return { ...common, filters: form.filters, screen: screenCriteria(form.filters) };
   if (kind === "data") {
-    const { scope, universe, years, existing, import_history, import_statistics, import_calculated_stats } = form;
-    return { ...common, scope, universe, tickers: parseTickers(form.tickers), years, existing, import_history, import_statistics, import_calculated_stats };
+    const { scope, universe, years, existing, import_history, import_statistics, import_calculated_stats, import_earnings } = form;
+    return { ...common, scope, universe, tickers: parseTickers(form.tickers), years, existing, import_history, import_statistics, import_calculated_stats, import_earnings: !!import_earnings };
   }
   if (kind === "prediction") {
     return {

@@ -6,6 +6,7 @@ import Modal from "../../components/Modal";
 import Req from "../../components/Req";
 import { CloseIcon, DatabaseIcon, DownloadIcon, StopIcon } from "../../layout/icons";
 import { getSettings } from "../settings/settings";
+import { markDelisted } from "./DelistedCompanies";
 
 function pct(progress) {
   if (!progress || !progress.total) return 0;
@@ -48,6 +49,32 @@ function failureHint(error) {
 }
 
 /** Table of failed tickers with a plain reason + the raw error; entries are {ticker, error}. */
+// A failure that says Yahoo has no data for the ticker -- may be delisted.
+const looksDelisted = (error) => /No data returned|possibly delisted/i.test(error || "");
+
+function MarkDelistedButton({ ticker }) {
+  const [state, setState] = useState(null); // null | "saving" | "done" | error text
+  const mark = async () => {
+    if (!window.confirm(`Mark ${ticker} as delisted? Its data is removed and imports skip it. You can take it off the list again on the Market Data page.`)) return;
+    setState("saving");
+    try {
+      await markDelisted([ticker], "Marked delisted from a failed import");
+      setState("done");
+    } catch (e) {
+      setState(e.response?.data?.error || e.message);
+    }
+  };
+  if (state === "done") return <span className="muted" style={{ fontSize: "0.78rem" }}>On the delisted list</span>;
+  return (
+    <>
+      <button className="btn secondary" style={{ padding: "2px 8px", fontSize: "0.75rem" }} onClick={mark} disabled={state === "saving"}>
+        Mark delisted
+      </button>
+      {state && state !== "saving" && <span className="error-text" style={{ fontSize: "0.75rem" }}> {state}</span>}
+    </>
+  );
+}
+
 export function FailedList({ failed, count }) {
   const more = (count || 0) - (failed || []).length;
   return (
@@ -68,6 +95,7 @@ export function FailedList({ failed, count }) {
                 {f.error && (
                   <div className="muted" style={{ fontSize: "0.78rem", fontFamily: "monospace", wordBreak: "break-word" }}>{f.error}</div>
                 )}
+                {looksDelisted(f.error) && <div style={{ marginTop: 4 }}><MarkDelistedButton ticker={f.ticker} /></div>}
               </td>
             </tr>
           ))}
@@ -264,6 +292,7 @@ export const DEFAULT_IMPORT_OPTIONS = {
   import_history: true,
   import_statistics: true,
   import_calculated_stats: true,
+  import_earnings: true,
 };
 
 /** Import options to start from: the Settings page's data defaults. */
@@ -277,7 +306,7 @@ export const parseTickers = (text) =>
 
 export const importOptionsInvalid = (v) =>
   (v.scope === "specific" && parseTickers(v.tickers).length === 0) ||
-  (!v.import_history && !v.import_statistics && !v.import_calculated_stats);
+  (!v.import_history && !v.import_statistics && !v.import_calculated_stats && !v.import_earnings);
 
 const checkLabel = { display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" };
 
@@ -356,6 +385,12 @@ export function ImportOptionsFields({ value, onChange, name = "import-scope" }) 
           label="Import calculated statistics"
           help="1-year change and volatility from the prices"
         />
+        <OptionCheck
+          checked={!!value.import_earnings}
+          onChange={(v) => set({ import_earnings: v })}
+          label="Import financial results"
+          help="Earnings release dates (last, next, all past) with EPS"
+        />
       </div>
       <div className="filters-grid" style={{ marginTop: 10 }}>
         <div>
@@ -395,6 +430,7 @@ export function ImportPanel() {
       import_history: options.import_history,
       import_statistics: options.import_statistics,
       import_calculated_stats: options.import_calculated_stats,
+      import_earnings: options.import_earnings,
     }));
   };
 

@@ -3,6 +3,7 @@ indicators, backed by a single AQL query joining companies + stock_stats.
 """
 
 from ..db.arango_client import get_db
+from .earnings import earnings_for
 from .universes import universe_tickers
 
 # Whitelisted sortable fields -> which merged-document attribute they map to.
@@ -49,6 +50,9 @@ SORTABLE_FIELDS = {
     "up_months": "calc.up_months_1y",
     "worst_month": "calc.worst_month_1y",
     "trend_return": "calc.trend_return_1y",
+    # Financial results dates (services/earnings.py), joined as `earn`.
+    "last_report_date": "earn.last_report_date",
+    "next_report_date": "earn.next_report_date",
 }
 
 # Fields that aren't a single stored attribute but a computed expression --
@@ -56,6 +60,9 @@ SORTABLE_FIELDS = {
 COMPUTED_SORT_EXPRESSIONS = {
     "day_change": "(stats.previous_close == null || stats.previous_close == 0) ? null : "
     "(stats.current_price - stats.previous_close) / stats.previous_close",
+    # Calendar days until the next earnings release / since the last one.
+    "days_to_report": "earn.next_report_date == null ? null : DATE_DIFF(DATE_FORMAT(DATE_NOW(), '%yyyy-%mm-%dd'), earn.next_report_date, 'd')",
+    "days_since_report": "earn.last_report_date == null ? null : DATE_DIFF(earn.last_report_date, DATE_FORMAT(DATE_NOW(), '%yyyy-%mm-%dd'), 'd')",
 }
 
 FILTERABLE_RANGES = {
@@ -88,6 +95,8 @@ FILTERABLE_RANGES = {
     "worst_month": "calc.worst_month_1y",
     "trend_return": "calc.trend_return_1y",
     "day_change": f"({COMPUTED_SORT_EXPRESSIONS['day_change']})",
+    "days_to_report": f"({COMPUTED_SORT_EXPRESSIONS['days_to_report']})",
+    "days_since_report": f"({COMPUTED_SORT_EXPRESSIONS['days_since_report']})",
 }
 
 
@@ -150,6 +159,7 @@ def search_companies(
         FOR company IN companies
             LET stats = DOCUMENT('stock_stats', company._key)
             LET calc = DOCUMENT('calculated_stats', company._key)
+            LET earn = DOCUMENT('earnings_dates', company._key)
             FILTER {filter_expr}
             SORT {sort_field} {sort_dir}
             LIMIT @offset, @limit
@@ -187,13 +197,18 @@ def search_companies(
                 max_drawdown: calc.max_drawdown_1y,
                 up_months: calc.up_months_1y,
                 worst_month: calc.worst_month_1y,
-                trend_return: calc.trend_return_1y
+                trend_return: calc.trend_return_1y,
+                last_report_date: earn.last_report_date,
+                next_report_date: earn.next_report_date,
+                next_report_confirmed: earn.next_confirmed,
+                last_quarter_end: earn.last_quarter_end
             }}
     """
     count_aql = f"""
         FOR company IN companies
             LET stats = DOCUMENT('stock_stats', company._key)
             LET calc = DOCUMENT('calculated_stats', company._key)
+            LET earn = DOCUMENT('earnings_dates', company._key)
             FILTER {filter_expr}
             COLLECT WITH COUNT INTO total
             RETURN total
@@ -231,6 +246,7 @@ def get_company_detail(ticker: str) -> dict | None:
         "company": {k: v for k, v in (company or {}).items() if not k.startswith("_")},
         "stats": {k: v for k, v in (stats or {}).items() if not k.startswith("_")},
         "history": history,
+        "earnings": earnings_for(ticker),
     }
 
 

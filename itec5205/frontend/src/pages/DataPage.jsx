@@ -6,6 +6,7 @@ import ActionMenu from "../components/ActionMenu";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import Modal from "../components/Modal";
 import { EXISTING_MODES, FailedList, ImportPanel, ImportStatus, UNIVERSES, universeKey } from "../features/dataImport/ImportControls";
+import DelistedCompanies from "../features/dataImport/DelistedCompanies";
 import {
   BarChartIcon,
   ClockIcon,
@@ -111,7 +112,7 @@ function ImportRunModal({ runKey, onClose }) {
 
   const st = run && (STATUS[run.status] || { label: run.status, tone: "info" });
   const failed = run && (run.failed_errors || (run.failed_tickers || []).map((ticker) => ({ ticker })));
-  const what = run && [run.import_history && "Price history", run.import_statistics && "Statistics", run.import_calculated_stats && "Calculated statistics"].filter(Boolean);
+  const what = run && [run.import_history && "Price history", run.import_statistics && "Statistics", run.import_calculated_stats && "Calculated statistics", run.import_earnings && "Financial results"].filter(Boolean);
   const rows = run
     ? [
         ["Started", fmtWhen(run.created_at)],
@@ -127,6 +128,7 @@ function ImportRunModal({ runKey, onClose }) {
         ["Failed", fmtInt(run.failed ?? 0)],
         ...(run.remaining ? [["Not started (stopped)", fmtInt(run.remaining)]] : []),
         ["New price rows", fmtInt(run.records)],
+        ...(run.import_earnings ? [["Financial results rows", fmtInt(run.earnings_records)]] : []),
         ...(run.error ? [["Error", run.error]] : []),
       ]
     : [];
@@ -392,6 +394,7 @@ export default function DataPage() {
           <ImportPanel />
         </div>
         <RecentImports refreshKey={refreshKey} />
+        <DelistedCompanies refreshKey={refreshKey} />
         </div>
         <div className="data-col">
           <Summary refreshKey={refreshKey} />
