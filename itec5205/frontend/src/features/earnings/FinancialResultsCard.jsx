@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ClockIcon } from "../../layout/icons";
+import SalesEarningsCharts from "./SalesEarningsCharts";
 
 // Stored dates are plain YYYY-MM-DD (US market dates); read them as local
 // calendar days so the time zone can't move them by one.
@@ -95,6 +96,8 @@ export default function FinancialResultsCard({ earnings }) {
             </div>
             <div><strong>Next EPS estimate</strong><div>{fmtEps(summary.next_eps_estimate)}</div></div>
           </div>
+
+          <SalesEarningsCharts statements={earnings?.statements} reports={reports} />
 
           {reports.length > 0 && (
             <table style={{ width: "100%" }}>

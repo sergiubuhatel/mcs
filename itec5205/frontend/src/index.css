@@ -146,7 +146,7 @@ tr:hover td { background: var(--color-bg-hover); }
 :root { --header-height: 72px; --bottom-bar-height: 52px; }
 /* Bottom bar: always there, never covered (dialogs stop above it). */
 .bottom-bar { height: var(--bottom-bar-height); flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 0 16px; border-top: 1px solid var(--color-divider); background: var(--color-bg-primary); }
-.dark .dark .danger-box { display: flex; gap: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(220, 38, 38, 0.45); background: rgba(220, 38, 38, 0.08); color: var(--color-text-primary); font-size: 0.85rem; }
+.danger-box { display: flex; gap: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(220, 38, 38, 0.45); background: rgba(220, 38, 38, 0.08); color: var(--color-text-primary); font-size: 0.85rem; }
 .btn.btn-danger-solid { background: #dc2626; border-color: #dc2626; color: #fff; }
 .brand-link { display: flex; align-items: center; gap: 10px; min-width: 0; text-decoration: none; color: var(--color-text-primary); }
 .brand-link:hover { text-decoration: none; }
@@ -628,3 +628,4 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 .statement-bar .btn.disabled { opacity: 0.6; pointer-events: none; }
 .statement-bar .muted { flex: 1 1 300px; min-width: 0; }
 .sleeve-card-table { table-layout: fixed; }
+.sales-earnings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }

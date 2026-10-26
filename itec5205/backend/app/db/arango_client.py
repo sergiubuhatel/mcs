@@ -53,6 +53,11 @@ COLLECTIONS = {
     "earnings_reports": [
         {"type": "persistent", "fields": ["ticker", "date"], "unique": False},
     ],
+    # Sales / net income / diluted EPS per quarter and year (`_key` =
+    # ticker_freq_periodEnd), accumulated import after import.
+    "financial_statements": [
+        {"type": "persistent", "fields": ["ticker", "freq", "period_end"], "unique": False},
+    ],
     "earnings_dates": [
         {"type": "persistent", "fields": ["next_report_date"], "unique": False},
         {"type": "persistent", "fields": ["last_report_date"], "unique": False},

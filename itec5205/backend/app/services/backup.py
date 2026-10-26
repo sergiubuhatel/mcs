@@ -1,67 +1,85 @@
 """Export / import / delete ALL app data (the bottom bar's buttons).
 
-Export format: gzip-compressed JSON Lines, so a multi-million-row database
-streams out and back in without holding it in memory. Line 1 is a header
-`{"format": "itec5205-data", "version": 1, "exported_at", "counts"}`; every
-other line is one document: `{"c": <collection>, "d": <document>}` (without
-ArangoDB's `_id`/`_rev`; `_key` kept, so links between documents survive).
+Export and import use ArangoDB's own tools: `arangodump` writes the whole
+database (every collection's structure, indexes and documents, compressed)
+into a folder, packed here into one .tar for download; `arangorestore`
+recreates every collection from such a file exactly as it was dumped --
+collections in the file replace the ones in the database. Both binaries are
+copied into the backend image from the arangodb image (backend/Dockerfile).
 
-Import upserts every document (same `_key` = replaced), so on a new
-installation it reproduces the exported database; to restore an exact copy
-over existing data, delete all data first. It runs in a background thread of
-the API process; progress is polled from `restore_status()`.
+Restores run in a background thread of the API process; progress is polled
+from `restore_status()`.
 """
 
-import gzip
-import json
 import os
+import shutil
+import subprocess
+import tarfile
+import tempfile
 import threading
 import uuid
-import zlib
 from datetime import datetime, timezone
 
-from ..db.arango_client import COLLECTIONS, ensure_collections, get_db
+from .. import config
+from ..db.arango_client import COLLECTIONS, get_db
 
-FORMAT = "itec5205-data"
-VERSION = 1
-BATCH = 5000
-_CHUNK = 1 << 20  # compress ~1 MB of text at a time
-
-
-def app_collections() -> list[str]:
-    return list(COLLECTIONS)
+DUMP_DIR = "arangodump"  # folder name inside the .tar
+THREADS = "4"
 
 
 def counts() -> dict[str, int]:
     db = get_db()
-    return {name: db.collection(name).count() for name in app_collections() if db.has_collection(name)}
+    return {name: db.collection(name).count() for name in COLLECTIONS if db.has_collection(name)}
 
 
-def export_stream():
-    """Yields the gzip-compressed export, chunk by chunk."""
-    db = get_db()
-    compressor = zlib.compressobj(6, zlib.DEFLATED, 31)  # wbits 31 = gzip container
-    header = {"format": FORMAT, "version": VERSION,
-              "exported_at": datetime.now(timezone.utc).isoformat(), "counts": counts()}
-    buffer = [json.dumps(header) + "\n"]
-    size = 0
-    for name in header["counts"]:
-        cursor = db.aql.execute(
-            "FOR d IN @@c RETURN UNSET(d, '_id', '_rev')",
-            bind_vars={"@c": name}, batch_size=BATCH, stream=True, ttl=3600,
-        )
-        for doc in cursor:
-            line = json.dumps({"c": name, "d": doc}, separators=(",", ":")) + "\n"
-            buffer.append(line)
-            size += len(line)
-            if size >= _CHUNK:
-                yield compressor.compress("".join(buffer).encode())
-                buffer, size = [], 0
-    yield compressor.compress("".join(buffer).encode())
-    yield compressor.flush()
+def _connection() -> list[str]:
+    endpoint = config.ARANGO_HOST.replace("https://", "ssl://").replace("http://", "tcp://")
+    return [
+        "--configuration", "none",  # no arangodump.conf / arangorestore.conf in this image
+        "--server.endpoint", endpoint,
+        "--server.username", config.ARANGO_USER,
+        "--server.password", config.ARANGO_PASSWORD,
+        "--server.database", config.ARANGO_DB,
+    ]
 
 
-# One restore at a time; its progress lives in this process.
+def _run(command: list[str]):
+    done = subprocess.run(command, capture_output=True, text=True)
+    if done.returncode != 0:
+        lines = (done.stderr or done.stdout).strip().splitlines()
+        raise RuntimeError(f"{command[0]} failed: {' '.join(lines[-3:]) or f'exit code {done.returncode}'}")
+    return done.stdout
+
+
+def dump_to_tar() -> str:
+    """Dump the whole database; returns the path of the .tar (caller deletes)."""
+    work = tempfile.mkdtemp(prefix="arangodump-")
+    try:
+        folder = os.path.join(work, DUMP_DIR)
+        _run(["arangodump", *_connection(), "--output-directory", folder, "--overwrite", "true",
+              "--compress-output", "true", "--threads", THREADS, "--all-databases", "false"])
+        fd, archive = tempfile.mkstemp(suffix=".tar")
+        os.close(fd)
+        with tarfile.open(archive, "w") as tar:  # dump files are already gzip-compressed
+            tar.add(folder, arcname=DUMP_DIR)
+        return archive
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def _unpack(archive: str, into: str) -> str:
+    """The dump folder inside an Export All .tar, or ValueError."""
+    try:
+        with tarfile.open(archive) as tar:
+            tar.extractall(into, filter="data")
+    except (tarfile.TarError, OSError) as exc:
+        raise ValueError("Not a file from Export All (expected an ArangoDB dump .tar)") from exc
+    folder = os.path.join(into, DUMP_DIR)
+    if not os.path.isfile(os.path.join(folder, "dump.json")):
+        raise ValueError("Not a file from Export All (no ArangoDB dump inside)")
+    return folder
+
+
 _restore = {}
 _restore_lock = threading.Lock()
 
@@ -76,77 +94,36 @@ def _set(**patch):
         _restore.update(patch)
 
 
-def _open(path):
-    with open(path, "rb") as fh:
-        gzipped = fh.read(2) == b"\x1f\x8b"
-    return gzip.open(path, "rt", encoding="utf-8") if gzipped else open(path, "r", encoding="utf-8")
-
-
-def read_header(path) -> dict:
-    """The file's header line, or ValueError when it isn't an export."""
+def start_restore(archive: str) -> str:
+    """Unpack (checks the file) and restore in the background."""
+    work = tempfile.mkdtemp(prefix="arangorestore-")
     try:
-        with _open(path) as fh:
-            header = json.loads(fh.readline())
-    except (OSError, ValueError, UnicodeDecodeError) as exc:
-        raise ValueError("Not an export file from this app (expected a .jsonl.gz from Export All)") from exc
-    if header.get("format") != FORMAT:
-        raise ValueError("Not an export file from this app (expected a .jsonl.gz from Export All)")
-    if header.get("version", 0) > VERSION:
-        raise ValueError(f"The file is from a newer version of the app (format {header['version']})")
-    return header
-
-
-def start_restore(path: str, header: dict) -> str:
+        folder = _unpack(archive, work)
+    except ValueError:
+        shutil.rmtree(work, ignore_errors=True)
+        raise
+    finally:
+        os.remove(archive)
     with _restore_lock:
         if _restore.get("status") == "running":
-            raise RuntimeError("An import of all data is already running")
+            shutil.rmtree(work, ignore_errors=True)
+            raise RuntimeError("An import is already running")
         job = uuid.uuid4().hex
         _restore.clear()
-        _restore.update({
-            "job": job, "status": "running", "total": sum(header.get("counts", {}).values()),
-            "done": 0, "collection": None, "skipped": {}, "exported_at": header.get("exported_at"),
-            "started_at": datetime.now(timezone.utc).isoformat(),
-        })
-    threading.Thread(target=_run_restore, args=(path,), daemon=True).start()
+        _restore.update({"job": job, "status": "running", "started_at": datetime.now(timezone.utc).isoformat()})
+    threading.Thread(target=_run_restore, args=(folder, work), daemon=True).start()
     return job
 
 
-def _run_restore(path: str):
-    db = ensure_collections()
-    known = set(app_collections())
-    skipped: dict[str, int] = {}
-    pending: dict[str, list] = {}
-    done = 0
-
-    def flush(name):
-        nonlocal done
-        docs = pending.pop(name, [])
-        if docs:
-            db.collection(name).insert_many(docs, overwrite=True, raise_on_document_error=True)
-            done += len(docs)
-            _set(done=done, collection=name)
-
+def _run_restore(folder: str, work: str):
     try:
-        with _open(path) as fh:
-            fh.readline()  # header, checked before the upload was accepted
-            for line in fh:
-                if not line.strip():
-                    continue
-                row = json.loads(line)
-                name = row["c"]
-                if name not in known:  # a collection this version no longer has
-                    skipped[name] = skipped.get(name, 0) + 1
-                    continue
-                pending.setdefault(name, []).append(row["d"])
-                if len(pending[name]) >= BATCH:
-                    flush(name)
-            for name in list(pending):
-                flush(name)
-        _set(status="done", done=done, skipped=skipped, finished_at=datetime.now(timezone.utc).isoformat())
+        _run(["arangorestore", *_connection(), "--input-directory", folder, "--create-database", "true",
+              "--create-collection", "true", "--import-data", "true", "--overwrite", "true", "--threads", THREADS])
+        _set(status="done", counts=counts(), finished_at=datetime.now(timezone.utc).isoformat())
     except Exception as exc:  # noqa: BLE001 - reported to the page
-        _set(status="failed", error=str(exc), done=done, finished_at=datetime.now(timezone.utc).isoformat())
+        _set(status="failed", error=str(exc), finished_at=datetime.now(timezone.utc).isoformat())
     finally:
-        os.remove(path)
+        shutil.rmtree(work, ignore_errors=True)
 
 
 def delete_all() -> dict[str, int]:

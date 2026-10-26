@@ -14,6 +14,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Desktop builds. Separate layer = editing requirements.txt doesn't redo it.
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
+# ArangoDB's own backup tools for Export All / Import All (static binaries,
+# same version as the arangodb service).
+COPY --from=arangodb:3.11 /usr/bin/arangodump /usr/bin/arangorestore /usr/local/bin/
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

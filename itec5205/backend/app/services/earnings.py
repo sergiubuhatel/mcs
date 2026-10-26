@@ -107,6 +107,45 @@ def fetch_earnings_history(yf_ticker: yf.Ticker, ticker: str, full: bool, expect
     return list({r["_key"]: r for r in rows}.values())
 
 
+# Sales and earnings per period from Yahoo's fundamentals timeseries (the
+# same source as yfinance's income statement). Yahoo only serves the latest
+# 5 quarters and 4 years, so every import upserts what it gets into
+# `financial_statements` and the stored history grows from there on.
+_STATEMENT_URL = ("https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/{t}"
+                  "?symbol={t}&type={types}&period1=493590046&period2={now}")
+_STATEMENT_FIELDS = {"TotalRevenue": "revenue", "NetIncome": "net_income", "DilutedEPS": "eps_diluted"}
+
+
+def fetch_statements(yf_ticker: yf.Ticker, ticker: str) -> list[dict]:
+    types = ",".join(f"{freq}{field}" for freq in ("quarterly", "annual") for field in _STATEMENT_FIELDS)
+    response = yf_ticker._data.get(_STATEMENT_URL.format(t=ticker, types=types, now=int(datetime.now().timestamp())))
+    if response.status_code == 429:
+        raise EarningsPageThrottled("Yahoo's fundamentals came back with HTTP 429 (too many requests)")
+    periods: dict[str, dict] = {}
+    for result in ((response.json().get("timeseries") or {}).get("result") or []):
+        kind = (result.get("meta", {}).get("type") or [""])[0]
+        freq = "quarterly" if kind.startswith("quarterly") else "annual"
+        field = _STATEMENT_FIELDS.get(kind.removeprefix(freq))
+        for point in result.get(kind) or []:
+            if not point or not field:
+                continue
+            end = point["asOfDate"]
+            row = periods.setdefault(f"{freq}_{end}", {
+                "_key": f"{ticker}_{freq}_{end}", "ticker": ticker, "freq": freq, "period_end": end,
+            })
+            row[field] = (point.get("reportedValue") or {}).get("raw")
+    now = datetime.now(timezone.utc).isoformat()
+    return [{**row, "updated_at": now} for row in periods.values()]
+
+
+def store_statements(yf_ticker: yf.Ticker, ticker: str) -> int:
+    """Upsert (merge) the periods Yahoo serves now; older ones stay."""
+    rows = fetch_statements(yf_ticker, ticker)
+    if rows:
+        get_db().collection("financial_statements").insert_many(rows, overwrite_mode="update")
+    return len(rows)
+
+
 def _epoch_day(seconds, tz=_MARKET_TZ) -> str | None:
     if not seconds:
         return None
@@ -166,13 +205,30 @@ def import_earnings(yf_ticker: yf.Ticker, ticker: str, info: dict) -> int:
         )
         db.collection("earnings_reports").insert_many(rows, overwrite=True)
     db.collection("earnings_dates").insert(summarize(ticker, info), overwrite=True)
+    store_statements(yf_ticker, ticker)
     return len(rows)
+
+
+def statements_for(ticker: str, fetch_missing: bool = True) -> list[dict]:
+    """Stored sales/earnings periods, oldest first; fetched from Yahoo the
+    first time a company without any is shown."""
+    query = ("FOR s IN financial_statements FILTER s.ticker == @t SORT s.freq, s.period_end "
+             "RETURN KEEP(s, 'freq', 'period_end', 'revenue', 'net_income', 'eps_diluted')")
+    rows = list(get_db().aql.execute(query, bind_vars={"t": ticker}))
+    if not rows and fetch_missing:
+        try:
+            store_statements(yf.Ticker(ticker), ticker)
+        except Exception:  # noqa: BLE001 - the page still shows everything else
+            return []
+        rows = list(get_db().aql.execute(query, bind_vars={"t": ticker}))
+    return rows
 
 
 def earnings_for(ticker: str) -> dict:
     """Summary + full history (newest first) for the company page."""
     db = get_db()
     return {
+        "statements": statements_for(ticker),
         "summary": db.collection("earnings_dates").get(ticker),
         "reports": list(db.aql.execute(
             "FOR e IN earnings_reports FILTER e.ticker == @t SORT e.date DESC "

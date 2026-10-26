@@ -68,10 +68,11 @@ def purge_ticker(ticker: str, reason: str, source: str = "import") -> dict:
         "FOR p IN stock_prices FILTER p.ticker == @t REMOVE p IN stock_prices RETURN 1",
         bind_vars={"t": ticker},
     )))
-    removed["earnings_reports"] = len(list(db.aql.execute(
-        "FOR e IN earnings_reports FILTER e.ticker == @t REMOVE e IN earnings_reports RETURN 1",
-        bind_vars={"t": ticker},
-    )))
+    for name in ("earnings_reports", "financial_statements"):
+        removed[name] = len(list(db.aql.execute(
+            "FOR e IN @@c FILTER e.ticker == @t REMOVE e IN @@c RETURN 1",
+            bind_vars={"t": ticker, "@c": name},
+        )))
     removed["pools"] = len(list(db.aql.execute(
         """
         FOR p IN pools

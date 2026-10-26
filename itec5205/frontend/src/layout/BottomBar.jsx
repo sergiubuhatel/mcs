@@ -5,11 +5,10 @@ import Modal from "../components/Modal";
 import { DownloadIcon, TrashIcon, UploadIcon } from "./icons";
 
 const fmtInt = (n) => (n == null ? "–" : Number(n).toLocaleString());
-const fmtWhen = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "–");
 
 // Readable names for the collection counts shown before deleting.
 const GROUPS = [
-  ["Market data", ["companies", "sectors", "industries", "stock_prices", "stock_stats", "calculated_stats", "earnings_reports", "earnings_dates", "delisted_tickers"]],
+  ["Market data", ["companies", "sectors", "industries", "stock_prices", "stock_stats", "calculated_stats", "earnings_reports", "earnings_dates", "financial_statements", "delisted_tickers"]],
   ["Forecasts", ["price_predictions", "arima_predictions", "forecast_runs"]],
   ["Pools and portfolios", ["pools", "portfolios", "rl_runs"]],
   ["Criteria and workflows", ["criteria", "workflows", "workflow_runs"]],
@@ -23,27 +22,24 @@ function groupCounts(counts) {
   return other ? [...rows, ["Other", other]] : rows;
 }
 
-function ImportAllModal({ isOpen, onClose }) {
-  const [file, setFile] = useState(null);
+function ImportAllModal({ file, onClose }) {
   const [status, setStatus] = useState(null); // restore progress from the server
   const [error, setError] = useState(null);
   const [uploading, setUploading] = useState(false);
   const running = status?.status === "running";
 
   useEffect(() => {
-    if (!isOpen) return;
-    setFile(null);
+    setStatus(null);
     setError(null);
-    apiClient.get("/api/backup/import/status").then((r) => setStatus(r.data.status === "running" ? r.data : null)).catch(() => {});
-  }, [isOpen]);
+  }, [file]);
 
   useEffect(() => {
-    if (!isOpen || !running) return undefined;
+    if (!running) return undefined;
     const timer = setInterval(() => {
       apiClient.get("/api/backup/import/status").then((r) => setStatus(r.data)).catch(() => {});
     }, 2000);
     return () => clearInterval(timer);
-  }, [isOpen, running]);
+  }, [running]);
 
   const start = async () => {
     setUploading(true);
@@ -61,20 +57,21 @@ function ImportAllModal({ isOpen, onClose }) {
     }
   };
 
-  const pct = status?.total ? Math.floor((status.done / status.total) * 100) : 0;
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Import all data" maxWidth={560}>
+    <Modal isOpen={!!file} onClose={running ? () => {} : onClose} title="Import all data" maxWidth={560}>
       <div style={{ display: "grid", gap: 10, fontSize: "0.88rem" }}>
-        <p style={{ margin: 0 }}>
-          Loads a file made with <strong>Export All</strong>, e.g. on a new installation. Every document in the file is added;
-          one with the same key replaces what is stored. For an exact copy of the exported data, use Delete All Data first.
-        </p>
+        <div><strong>{file?.name}</strong> <span className="muted">· {((file?.size || 0) / 1e6).toFixed(1)} MB</span></div>
         {!status && (
           <>
-            <input type="file" accept=".gz,.jsonl,.json,application/gzip" onChange={(e) => setFile(e.target.files?.[0] || null)} disabled={uploading} />
-            {file && <span className="muted">{file.name} · {(file.size / 1e6).toFixed(1)} MB</span>}
+            <div className="danger-box" role="alert">
+              <UploadIcon style={{ color: "#dc2626", flexShrink: 0, marginTop: 2 }} />
+              <div>
+                <strong style={{ color: "#dc2626" }}>The data in this file replaces the current data.</strong> Every collection in
+                the file (an ArangoDB dump made with Export All) is recreated exactly as it was exported.
+              </div>
+            </div>
             <div>
-              <button className="btn" onClick={start} disabled={!file || uploading}>
+              <button className="btn" onClick={start} disabled={uploading}>
                 <UploadIcon /> {uploading ? "Uploading…" : "Import"}
               </button>
             </div>
@@ -82,11 +79,10 @@ function ImportAllModal({ isOpen, onClose }) {
         )}
         {status && (
           <div>
-            <div><strong>{running ? "Importing…" : status.status === "done" ? "Import finished" : "Import failed"}</strong></div>
-            <div className="muted">
-              Export of {fmtWhen(status.exported_at)} · {fmtInt(status.done)} of {fmtInt(status.total)} documents ({pct}%)
-              {status.collection ? ` · ${status.collection}` : ""}
-            </div>
+            <strong>{running ? "Importing… (several minutes for the full database)" : status.status === "done" ? "Import finished" : "Import failed"}</strong>
+            {status.counts && (
+              <div className="muted">{fmtInt(Object.values(status.counts).reduce((a, b) => a + b, 0))} documents in the database now.</div>
+            )}
             {status.error && <p className="error-text" style={{ margin: "6px 0 0" }}>{status.error}</p>}
             {status.status === "done" && (
               <button className="btn" style={{ marginTop: 10 }} onClick={() => window.location.reload()}>Reload the app</button>
@@ -169,29 +165,66 @@ function DeleteAllModal({ isOpen, onClose }) {
 
 // Whole-database actions. Job progress (imports, training) stays on its own
 // page; this bar holds only these buttons and is never covered.
-export default function BottomBar() {
-  const [dialog, setDialog] = useState(null); // "import" | "delete" | null
-  const link = useRef(null);
+// Export All: the browser asks where to save (Chrome / Edge); others save
+// to their download folder, or ask if the browser is set to.
+async function exportAll() {
+  const name = `itec5205-arangodb-${new Date().toISOString().slice(0, 10)}.tar`;
+  let handle = null;
+  if (window.showSaveFilePicker) {
+    try {
+      handle = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: "ArangoDB dump", accept: { "application/x-tar": [".tar"] } }] });
+    } catch (e) {
+      if (e.name === "AbortError") return; // closed the dialog
+      throw e;
+    }
+  }
+  const id = toast.info("Exporting the database… (a few minutes)", { autoClose: false });
+  try {
+    const response = await fetch("/api/backup/export");
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || `HTTP ${response.status}`);
+    if (handle) {
+      await response.body.pipeTo(await handle.createWritable());
+    } else {
+      const url = URL.createObjectURL(await response.blob());
+      Object.assign(document.createElement("a"), { href: url, download: name }).click();
+      URL.revokeObjectURL(url);
+    }
+    toast.update(id, { render: `Exported to ${handle ? handle.name : name}`, type: "success", autoClose: 5000 });
+  } catch (e) {
+    toast.update(id, { render: `Export failed: ${e.message}`, type: "error", autoClose: 8000 });
+  }
+}
 
-  const exportAll = () => {
-    link.current.click(); // the browser streams the download itself
-    toast.info("Export started: the browser downloads one compressed file (a few minutes for the full database).");
-  };
+// Whole-database actions. Job progress (imports, training) stays on its own
+// page; this bar holds only these buttons and is never covered.
+export default function BottomBar() {
+  const [importFile, setImportFile] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const picker = useRef(null);
 
   return (
     <div className="bottom-bar">
-      <button className="btn secondary" onClick={() => setDialog("import")} title="Load a file made with Export All">
+      <button className="btn secondary" onClick={() => picker.current.click()} title="Choose a file made with Export All">
         <UploadIcon /> Import All
       </button>
-      <button className="btn secondary" onClick={exportAll} title="Download every collection as one .jsonl.gz file">
+      <input
+        ref={picker}
+        type="file"
+        accept=".tar,application/x-tar"
+        hidden
+        onChange={(e) => {
+          setImportFile(e.target.files?.[0] || null);
+          e.target.value = ""; // the same file can be chosen again
+        }}
+      />
+      <button className="btn secondary" onClick={exportAll} title="Save the whole database (ArangoDB dump) to a file">
         <DownloadIcon /> Export All
       </button>
-      <a ref={link} href="/api/backup/export" download hidden aria-hidden="true" />
-      <button className="btn danger" onClick={() => setDialog("delete")} title="Empty the whole database">
+      <button className="btn danger" onClick={() => setDeleting(true)} title="Empty the whole database">
         <TrashIcon /> Delete All Data
       </button>
-      <ImportAllModal isOpen={dialog === "import"} onClose={() => setDialog(null)} />
-      <DeleteAllModal isOpen={dialog === "delete"} onClose={() => setDialog(null)} />
+      <ImportAllModal file={importFile} onClose={() => setImportFile(null)} />
+      <DeleteAllModal isOpen={deleting} onClose={() => setDeleting(false)} />
     </div>
   );
 }
