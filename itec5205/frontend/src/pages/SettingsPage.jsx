@@ -88,7 +88,7 @@ const SECTIONS = [
     text: "How the Stock Screener opens.",
     fields: [
       { key: "start_criteria_id", label: "Start from a saved search", type: "criteria", help: "Open the Stock Screener with this Screening Criteria already filled in (None = all companies)." },
-      { key: "page_size", label: "Rows per page", type: "select", options: opts([25, 50, 100, 250, 600, 1000]), number: true, help: "Results grid page size." },
+      { key: "page_size", label: "Rows per page", type: "select", options: opts([25, 50, 100, 250, 600, 1000, { value: 5000, label: "All" }]), number: true, help: "Results grid page size (All = every result on one page)." },
       { key: "sort_by", label: "Sort by", type: "select", options: SORT_COLUMNS, help: "Results grid sort column." },
       { key: "sort_dir", label: "Sort direction", type: "select", options: opts([{ value: "desc", label: "Descending ↓" }, { value: "asc", label: "Ascending ↑" }]), help: "Results grid sort direction." },
       { key: "market_cap_unit", label: "Market cap unit", type: "select", options: UNITS, help: "Unit the market cap min / max are typed in." },

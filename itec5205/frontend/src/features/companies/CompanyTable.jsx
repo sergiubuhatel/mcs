@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchRequested, setFilters, toggleSelectAll, toggleSelected } from "./companiesSlice";
+import { clearSelected, fetchRequested, selectTickers, setFilters, toggleSelectAll, toggleSelected } from "./companiesSlice";
 import { BookmarkPlusIcon, DownloadIcon, FilterIcon, ListIcon, SpinnerIcon } from "../../layout/icons";
 import { apiClient } from "../../api/client";
 import { SearchBox } from "../../components/PageParts";
@@ -236,13 +236,27 @@ export default function CompanyTable() {
     dispatch(fetchRequested());
   };
 
+  // Every result of the current search (all pages; the signal filter too).
+  const allResults = async () => {
+    const { data } = await apiClient.get("/api/companies", { params: { ...buildParams(filters), limit: ALL_RESULTS, offset: 0 } });
+    return filters.signal ? data.results.filter((r) => signals[r.ticker] === filters.signal) : data.results;
+  };
+
+  const [selectingAll, setSelectingAll] = useState(false);
+  const selectAllResults = async () => {
+    setSelectingAll(true);
+    try {
+      dispatch(selectTickers((await allResults()).map((r) => r.ticker)));
+    } finally {
+      setSelectingAll(false);
+    }
+  };
+
   // Every result (all pages, current filters + sort), visible columns only.
   const exportCsv = async () => {
     setExporting(true);
     try {
-      const { data } = await apiClient.get("/api/companies", { params: { ...buildParams(filters), limit: ALL_RESULTS, offset: 0 } });
-      let rows = data.results;
-      if (filters.signal) rows = rows.filter((r) => signals[r.ticker] === filters.signal);
+      const rows = await allResults();
       const cols = visibleColumns.filter((c) => c.csv);
       const lines = [cols.map((c) => csvCell(c.label)).join(",")];
       for (const r of rows) lines.push(cols.map((c) => csvCell(c.csv(r))).join(","));
@@ -292,6 +306,19 @@ export default function CompanyTable() {
           <button className="btn secondary" onClick={exportCsv} disabled={exporting || total === 0} title="Download every result (all pages) as CSV, with the visible columns">
             {exporting ? <SpinnerIcon className="spin" /> : <DownloadIcon />} Export
           </button>
+          <button
+            className="btn secondary"
+            onClick={selectAllResults}
+            disabled={selectingAll || total === 0}
+            title="Select every company that matches the search, on all pages"
+          >
+            {selectingAll ? <SpinnerIcon className="spin" /> : null} Select all {total.toLocaleString()}
+          </button>
+          {selectedCount > 0 && (
+            <button className="btn secondary" onClick={() => dispatch(clearSelected())} title="Unselect every company">
+              Clear selection
+            </button>
+          )}
           <button className="btn" onClick={() => setPoolOpen(true)} disabled={selectedCount === 0} title={selectedCount ? "Save the selected companies as a stock pool" : "Select companies with the checkboxes first"}>
             <BookmarkPlusIcon /> Create Stock Pool ({selectedCount})
           </button>
@@ -364,6 +391,7 @@ export default function CompanyTable() {
           {total === 0
             ? "No results"
             : `Showing ${filters.offset + 1}–${Math.min(filters.offset + filters.limit, total)} of ${total}`}
+          {selectedCount > 0 && ` · ${selectedCount.toLocaleString()} selected`}
           {q && ` · ${shownRows.length} on this page match "${rowQuery.trim()}"`}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -376,6 +404,7 @@ export default function CompanyTable() {
               <option value={250}>250</option>
               <option value={600}>600</option>
               <option value={1000}>1000</option>
+              <option value={ALL_RESULTS}>All</option>
             </select>
           </label>
           <button
