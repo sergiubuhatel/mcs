@@ -5,10 +5,41 @@
 //
 // The buttons each chart shows are a Settings value: text such as
 // "1M, 3M, 1Y, ALL", where a range is a number + D (days), W (weeks),
-// M (months) or Y (years), or ALL.
+// M (months) or Y (years), or ALL. A custom range is "YYYY-MM-DD..YYYY-MM-DD".
 
 const UNITS = { D: "days", W: "weeks", M: "months", Y: "years" };
 const UNIT_ORDER = { D: 1, W: 7, M: 30, Y: 365 };
+const UNIT_WORDS = { D: "day", W: "week", M: "month", Y: "year" };
+const CUSTOM = /^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/;
+
+/** Custom range key for two YYYY-MM-DD dates (earliest first). */
+export const customRange = (from, to) => (from <= to ? `${from}..${to}` : `${to}..${from}`);
+
+/** {from, to} of a custom range key, or null for a preset range. */
+export function customDates(key) {
+  const m = CUSTOM.exec(String(key || ""));
+  return m ? { from: m[1], to: m[2] } : null;
+}
+
+/** "2M" -> "2 months (2M)" for menus. */
+export function intervalName(key) {
+  if (key === "ALL") return "All history (ALL)";
+  const n = Number(key.slice(0, -1));
+  return `${n} ${UNIT_WORDS[key.slice(-1)]}${n === 1 ? "" : "s"} (${key})`;
+}
+
+/** Short label of a range for "+12% (1Y)" texts. */
+export function rangeLabel(key) {
+  const c = customDates(key);
+  return c ? `${c.from} – ${c.to}` : key;
+}
+
+/** False when a custom range ends before the series' last date (a forecast
+ * drawn after it would float detached from the history shown). */
+export function rangeReachesEnd(items, key, dateKey = "date") {
+  const c = customDates(key);
+  return !c || !items.length || c.to >= String(items[items.length - 1][dateKey]).slice(0, 10);
+}
 
 /** "3M" -> {key: "3M", months: 3}; "ALL" -> {key: "ALL"}; null if invalid. */
 export function parseInterval(text) {
@@ -49,6 +80,13 @@ function cutoffFor(lastDate, interval) {
  * interval, anchored on the array's own last date (not "now"). */
 export function filterByInterval(items, intervalKey, dateKey = "date") {
   if (items.length === 0) return items;
+  const custom = customDates(intervalKey);
+  if (custom) {
+    return items.filter((item) => {
+      const day = String(item[dateKey]).slice(0, 10);
+      return day >= custom.from && day <= custom.to;
+    });
+  }
   const lastDate = new Date(items[items.length - 1][dateKey]);
   const cutoff = cutoffFor(lastDate, parseInterval(intervalKey));
   if (!cutoff) return items;

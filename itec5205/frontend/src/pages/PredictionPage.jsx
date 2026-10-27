@@ -13,8 +13,9 @@ import {
   TrendChartIcon,
 } from "../layout/icons";
 import { ALL_RESULTS } from "../features/companies/companiesSaga";
-import { filterByInterval } from "../utils/dateRanges";
-import { chartIntervals, getSettings, tickerList } from "../features/settings/settings";
+import RangePicker from "../components/RangePicker";
+import { filterByInterval, rangeReachesEnd } from "../utils/dateRanges";
+import { getSettings, tickerList } from "../features/settings/settings";
 
 // Trading days per horizon -- matches backend services/horizons.py (1-4M)
 // plus the short 1-day / 1-week points shown in the predicted-prices table.
@@ -134,18 +135,14 @@ function PriceForecastCard({ ticker, company, lstm, arima, range, setRange, band
         action={
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             {forecast && <BandLevelSelect value={bandLevel} onChange={setBandLevel} />}
-            <div className="seg">
-              {chartIntervals("forecast").map(({ key: r }) => (
-                <button key={r} className={r === range ? "active" : ""} onClick={() => setRange(r)}>{r}</button>
-              ))}
-            </div>
+            <RangePicker section="forecast" value={range} onChange={setRange} />
           </div>
         }
       />
       {history.length === 0 ? (
         <p className="muted">No price history stored for {ticker}.</p>
       ) : (
-        <ForecastChart history={history} forecast={forecast} format={money} historyName="Price" height={300} />
+        <ForecastChart history={history} forecast={rangeReachesEnd(company?.history || [], range) ? forecast : null} format={money} historyName="Price" height={300} />
       )}
     </div>
   );

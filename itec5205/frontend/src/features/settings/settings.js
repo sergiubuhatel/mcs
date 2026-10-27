@@ -4,11 +4,12 @@
 // getSettings() in their useState initializers.
 import { apiClient } from "../../api/client";
 import { setFilters } from "../companies/companiesSlice";
-import { intervalsFrom } from "../../utils/dateRanges";
+import { intervalsFrom, parseIntervals } from "../../utils/dateRanges";
 
 export const DEFAULT_SETTINGS = {
   general: {
-    chart_ranges: "1M, 2M, 3M, 4M, 6M, 7M, 8M, 9M, 10M, 11M, 1Y, 2Y, 3Y, 4Y, 5Y, 10Y, ALL", // range buttons of those charts
+    chart_ranges: "1M, 3M, 6M, 1Y, 3Y, 5Y, ALL", // range buttons of those charts
+    chart_more_ranges: "2M, 4M, 7M, 8M, 9M, 10M, 2Y, 4Y, 10Y", // their "More" menu
     chart_range: "1Y", // company + portfolio detail price charts
     list_page_size: 10, // Workflows, Pools, Portfolios, criteria grids
     next_days: 5, // "next N days" forecast tables
@@ -36,6 +37,7 @@ export const DEFAULT_SETTINGS = {
     lstm_epochs: 100,
     horizon: "3M", // Price Forecasts signal horizon
     chart_ranges: "1M, 3M, 6M, 1Y, ALL", // range buttons of the Price Forecasts chart
+    chart_more_ranges: "2M, 4M, 2Y, 3Y, 5Y", // its "More" menu
     chart_range: "6M", // Price Forecasts chart
     band_level: 95, // confidence level (%) of the forecast bands on every chart
     quick_tickers: "AAPL, MSFT, NVDA, GOOGL, AMZN",
@@ -155,6 +157,12 @@ export async function saveSettings(dispatch, values) {
 
 /** Range buttons of a chart: "general" (company + portfolio detail) or "forecast". */
 export const chartIntervals = (section) => intervalsFrom(current[section].chart_ranges, DEFAULT_SETTINGS[section].chart_ranges);
+
+/** The "More" menu of those charts (ranges not already a button; may be empty). */
+export function chartMoreIntervals(section) {
+  const buttons = new Set(chartIntervals(section).map((iv) => iv.key));
+  return parseIntervals(current[section].chart_more_ranges ?? DEFAULT_SETTINGS[section].chart_more_ranges).intervals.filter((iv) => !buttons.has(iv.key));
+}
 
 // Comma-separated ticker text -> ["AAPL", ...].
 export const tickerList = (text) =>

@@ -650,3 +650,22 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
   .parts-allocation { grid-template-columns: minmax(0, 1fr); }
   .parts-donut { order: -1; }
 }
+
+/* Chart range picker: buttons, a "More" menu and a Custom date range. */
+.range-picker { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.range-picker .btn { display: inline-flex; align-items: center; gap: 4px; }
+.range-pop-anchor { position: relative; display: inline-block; }
+.range-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; background: var(--color-bg-secondary); border: 1px solid var(--color-divider); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); }
+.range-menu { min-width: 180px; padding: 6px; display: grid; }
+.range-menu button { text-align: left; padding: 6px 10px; border: 0; border-radius: 6px; background: none; color: var(--color-text-primary); font-size: 0.83rem; cursor: pointer; white-space: nowrap; }
+.range-menu button:hover { background: var(--color-bg-tertiary); }
+.range-menu button.active { color: var(--btn-accent); font-weight: 700; }
+.range-menu button.sep { position: relative; margin-top: 9px; }
+.range-menu button.sep::before { content: ""; position: absolute; left: 6px; right: 6px; top: -5px; border-top: 1px solid var(--color-divider); }
+.range-custom { width: 330px; padding: 12px 14px 14px; }
+.range-custom-head { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 10px; }
+.range-custom-head .icon-btn { margin-left: auto; }
+.range-custom-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.range-custom-fields label { display: grid; gap: 4px; font-size: 0.8rem; color: var(--color-text-secondary); }
+.range-custom-fields input { width: 100%; padding: 6px 8px; border: 1px solid var(--color-divider); border-radius: 7px; background: var(--color-bg-primary); color: var(--color-text-primary); color-scheme: light dark; font-size: 0.85rem; }
+@media (max-width: 600px) { .range-custom { width: min(330px, calc(100vw - 32px)); } }

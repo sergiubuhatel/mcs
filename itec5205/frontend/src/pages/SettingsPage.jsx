@@ -19,7 +19,8 @@ import { DEFAULT_SETTINGS, getSavedSettings, getSettings, saveSettings } from ".
 import { parseIntervals } from "../utils/dateRanges";
 
 // A chart's initial range is picked from the buttons typed in the same section.
-const rangeOptions = (section) => (form) => opts(parseIntervals(form[section].chart_ranges).intervals.map((i) => i.key));
+const rangeOptions = (section) => (form) =>
+  opts(parseIntervals(`${form[section].chart_ranges}, ${form[section].chart_more_ranges || ""}`).intervals.map((i) => i.key));
 const RANGES_HELP = "Number + D (days), W (weeks), M (months) or Y (years), or ALL; comma-separated, shown shortest first.";
 
 const opts = (list) => list.map((v) => (typeof v === "object" ? v : { value: v, label: String(v) }));
@@ -59,7 +60,8 @@ const SECTIONS = [
     text: "Charts and lists shared by several pages.",
     fields: [
       { key: "chart_ranges", label: "Price chart range buttons", type: "ranges", help: `Range buttons of the company and portfolio detail charts. ${RANGES_HELP}` },
-      { key: "chart_range", label: "Price chart range", type: "select", options: rangeOptions("general"), help: "Initial interval of the company and portfolio detail charts (one of the buttons above)." },
+      { key: "chart_more_ranges", label: "Price chart \"More\" ranges", type: "ranges", optional: true, help: `Ranges in the charts' More menu (blank = no menu). A Custom date range is always offered. ${RANGES_HELP}` },
+      { key: "chart_range", label: "Price chart range", type: "select", options: rangeOptions("general"), help: "Initial interval of the company and portfolio detail charts (a button or a More range above)." },
       { key: "list_page_size", label: "Rows per list page", type: "select", options: opts([5, 10, 20, 50]), number: true, help: "Page size of the Workflows, Stock Pools and My Portfolios grids." },
       { key: "next_days", label: "Next-days forecast rows", type: "number", min: 1, max: 60, help: "How many daily steps the 'next days' forecast tables show at first." },
     ],
@@ -107,7 +109,8 @@ const SECTIONS = [
       { key: "horizon", label: "Signal horizon", type: "select", options: opts(["1M", "2M", "3M", "4M"]), help: "Horizon the Price Forecasts page rates signals at first." },
       { key: "band_level", label: "Forecast band confidence", type: "select", options: opts(BAND_LEVELS.map((lv) => ({ value: lv, label: `${lv}%` }))), number: true, help: "Initial confidence level of the shaded forecast bands on the company, portfolio and Price Forecasts charts (each chart can still change it)." },
       { key: "chart_ranges", label: "Forecast chart range buttons", type: "ranges", help: `Range buttons of the Price Forecasts chart. ${RANGES_HELP}` },
-      { key: "chart_range", label: "Forecast chart range", type: "select", options: rangeOptions("forecast"), help: "Initial history shown on the Price Forecasts chart (one of the buttons above)." },
+      { key: "chart_more_ranges", label: "Forecast chart \"More\" ranges", type: "ranges", optional: true, help: `Ranges in its More menu (blank = no menu). A Custom date range is always offered. ${RANGES_HELP}` },
+      { key: "chart_range", label: "Forecast chart range", type: "select", options: rangeOptions("forecast"), help: "Initial history shown on the Price Forecasts chart (a button or a More range above)." },
       { key: "quick_tickers", label: "Quick-pick tickers", type: "text", help: "Shown on Price Forecasts before anything has been forecast (comma-separated)." },
       { key: "models", label: "Pass rule", type: "select", options: opts(Object.entries(MODEL_RULES).map(([value, label]) => ({ value, label }))), help: "Which forecasts a company must pass in a new Forecast Settings." },
       { key: "training_value", label: "Training window", type: "number", min: 1, unitKey: "training_unit", unitOptions: opts(TRAINING_UNITS), help: "History a new Forecast Settings trains on." },
@@ -201,11 +204,11 @@ function validate(form) {
       if (f.type === "ranges") {
         const { intervals, invalid } = parseIntervals(v);
         if (invalid.length) return `${section.title}: ${f.label} — "${invalid.join(", ")}" is not a range (e.g. 5D, 2W, 3M, 1Y, ALL)`;
-        if (!intervals.length) return `${section.title}: ${f.label} needs at least one range`;
+        if (!intervals.length && !f.optional) return `${section.title}: ${f.label} needs at least one range`;
         continue;
       }
       if (typeof f.options === "function" && !f.options(form).some((o) => String(o.value) === String(v)))
-        return `${section.title}: ${f.label} must be one of the range buttons`;
+        return `${section.title}: ${f.label} must be one of the range buttons or More ranges`;
       if (f.type !== "number") continue;
       if (v === "" || v == null) {
         if (f.blank) continue;

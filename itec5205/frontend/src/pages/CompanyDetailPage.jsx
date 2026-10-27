@@ -3,9 +3,10 @@ import { useParams } from "react-router-dom";
 import { apiClient } from "../api/client";
 import ForecastChart, { BandLevelSelect, forecastFromDocs } from "../components/ForecastChart";
 import ForecastPanels from "../features/predictions/ForecastPanels";
-import { filterByInterval } from "../utils/dateRanges";
+import RangePicker from "../components/RangePicker";
+import { filterByInterval, rangeLabel, rangeReachesEnd } from "../utils/dateRanges";
 import BackButton from "../layout/BackButton";
-import { chartIntervals, getSettings } from "../features/settings/settings";
+import { getSettings } from "../features/settings/settings";
 import FinancialResultsCard, { fmtDay, nextReportLabel, relativeDays } from "../features/earnings/FinancialResultsCard";
 
 function fmtPct(v) {
@@ -142,11 +143,11 @@ export default function CompanyDetailPage() {
                 <h3 style={{ margin: 0 }}>Price history{forecast && showForecast ? " and forecast" : ""}</h3>
                 {periodChangePct !== null && (
                   <span style={{ color: changeColor(periodChangePct), fontWeight: 600 }}>
-                    {periodChangePct > 0 ? "+" : ""}{periodChangePct.toFixed(2)}% ({range})
+                    {periodChangePct > 0 ? "+" : ""}{periodChangePct.toFixed(2)}% ({rangeLabel(range)})
                   </span>
                 )}
                 {periodVolatility !== null && (
-                  <span className="muted">Volatility ({range}): <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(periodVolatility)}</strong></span>
+                  <span className="muted">Volatility ({rangeLabel(range)}): <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(periodVolatility)}</strong></span>
                 )}
               </div>
               <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
@@ -158,21 +159,12 @@ export default function CompanyDetailPage() {
                 {forecast && showForecast && (
                   <BandLevelSelect value={bandLevel} onChange={setBandLevel} />
                 )}
-                {chartIntervals("general").map((iv) => (
-                  <button
-                    key={iv.key}
-                    className={range === iv.key ? "btn" : "btn secondary"}
-                    style={{ padding: "4px 10px", fontSize: "0.78rem" }}
-                    onClick={() => setRange(iv.key)}
-                  >
-                    {iv.key}
-                  </button>
-                ))}
+                <RangePicker section="general" value={range} onChange={setRange} />
               </div>
             </div>
             <ForecastChart
               history={rangeHistory.map((h) => ({ date: h.date, value: h.close }))}
-              forecast={showForecast ? forecast : null}
+              forecast={showForecast && rangeReachesEnd(history, range) ? forecast : null}
               format={(v) => `$${Number(v).toFixed(2)}`}
               historyName="Close"
               height={300}

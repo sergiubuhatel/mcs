@@ -3,7 +3,8 @@ import { useSelector } from "react-redux";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { apiClient } from "../api/client";
-import { filterByInterval } from "../utils/dateRanges";
+import RangePicker from "../components/RangePicker";
+import { filterByInterval, rangeLabel, rangeReachesEnd } from "../utils/dateRanges";
 import { useColumnConfig } from "../utils/useColumnConfig";
 import ActionMenu from "../components/ActionMenu";
 import ColumnPicker from "../components/ColumnPicker";
@@ -16,7 +17,7 @@ import { StatTiles } from "../components/PageParts";
 import SignalBoard, { SignalBadge } from "../features/signals/SignalBoard";
 import BackButton from "../layout/BackButton";
 import { ChevronDownIcon, ChevronRightIcon, ClockIcon, CopyIcon, DatabaseIcon, EditIcon, GrowthIcon, LayersIcon, ListIcon, PieChartIcon, SaveIcon, StarIcon, TrendChartIcon, TrendDownIcon, TrendUpIcon } from "../layout/icons";
-import { chartIntervals, getSettings } from "../features/settings/settings";
+import { getSettings } from "../features/settings/settings";
 import { fmtDay, nextReportLabel, relativeDays } from "../features/earnings/FinancialResultsCard";
 
 function fmtPct(v) {
@@ -624,10 +625,10 @@ export default function PortfolioDetailPage() {
               >?</span>
             </h3>
             {periodChangePct !== null && (
-              <span style={{ color: changeColor(periodChangePct), fontWeight: 600 }}>{signed(periodChangePct)} ({range})</span>
+              <span style={{ color: changeColor(periodChangePct), fontWeight: 600 }}>{signed(periodChangePct)} ({rangeLabel(range)})</span>
             )}
             {periodVolatility !== null && (
-              <span className="muted">Volatility ({range}): <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(periodVolatility)}</strong></span>
+              <span className="muted">Volatility ({rangeLabel(range)}): <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(periodVolatility)}</strong></span>
             )}
             {portfolio.sharpe_ratio != null && (
               <span className="muted">| Sharpe: <strong style={{ color: "var(--color-text-primary)" }}>{portfolio.sharpe_ratio}</strong></span>
@@ -643,16 +644,7 @@ export default function PortfolioDetailPage() {
               </label>
             )}
             {forecastIndex && showForecast && <BandLevelSelect value={bandLevel} onChange={setBandLevel} />}
-            {chartIntervals("general").map((iv) => (
-              <button
-                key={iv.key}
-                className={range === iv.key ? "btn" : "btn secondary"}
-                style={{ padding: "4px 10px", fontSize: "0.78rem" }}
-                onClick={() => setRange(iv.key)}
-              >
-                {iv.key}
-              </button>
-            ))}
+            <RangePicker section="general" value={range} onChange={setRange} />
           </div>
         </div>
         {rangeSeries.length === 0 ? (
@@ -660,7 +652,7 @@ export default function PortfolioDetailPage() {
         ) : (
           <ForecastChart
             history={rangeSeries}
-            forecast={showForecast ? forecastIndex : null}
+            forecast={showForecast && rangeReachesEnd(series, range) ? forecastIndex : null}
             format={(v) => Number(v).toFixed(1)}
             historyName="Index value"
             area
