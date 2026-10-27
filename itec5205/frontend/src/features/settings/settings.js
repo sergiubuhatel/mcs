@@ -9,7 +9,7 @@ import { intervalsFrom } from "../../utils/dateRanges";
 export const DEFAULT_SETTINGS = {
   general: {
     chart_ranges: "1M, 2M, 3M, 4M, 6M, 7M, 8M, 9M, 10M, 11M, 1Y, 2Y, 3Y, 4Y, 5Y, 10Y, ALL", // range buttons of those charts
-    chart_range: "4Y", // company + portfolio detail price charts
+    chart_range: "1Y", // company + portfolio detail price charts
     list_page_size: 10, // Workflows, Pools, Portfolios, criteria grids
     next_days: 5, // "next N days" forecast tables
   },
