@@ -83,7 +83,13 @@ export default function ScreenerForecastBar() {
           if (res.data.finished) loadSignals();
           else pollRef.current = setTimeout(() => poll(runId), 2000);
         })
-        .catch(() => localStorage.removeItem(RUN_KEY));
+        .catch((err) => {
+          if (runIdRef.current !== runId) return;
+          // Only a deleted run ends polling; a network blip (sleep, backend
+          // restart) retries, or the progress would freeze where it was.
+          if (err.response?.status === 404) localStorage.removeItem(RUN_KEY);
+          else pollRef.current = setTimeout(() => poll(runId), 10000);
+        });
     },
     [loadSignals]
   );

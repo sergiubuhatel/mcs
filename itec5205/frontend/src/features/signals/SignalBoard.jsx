@@ -125,7 +125,12 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
           if (res.data.finished) loadBoard();
           else pollRef.current = setTimeout(() => poll(runId), 2000);
         })
-        .catch((err) => setError(err.response?.data?.error || err.message));
+        .catch((err) => {
+          if (runIdRef.current !== runId) return;
+          // Keep polling through a network blip; only a missing run stops it.
+          if (err.response?.status === 404) setError(err.response.data?.error || err.message);
+          else pollRef.current = setTimeout(() => poll(runId), 10000);
+        });
     },
     [loadBoard]
   );

@@ -381,7 +381,11 @@ export default function PredictionPage() {
           setRefreshKey((k) => k + 1);
         } else pollRef.current = setTimeout(() => poll(runId), 2000);
       })
-      .catch((err) => setRunError(apiError(err)));
+      .catch((err) => {
+        // Keep polling through a network blip; only a missing run stops it.
+        if (err.response?.status === 404) setRunError(apiError(err));
+        else pollRef.current = setTimeout(() => poll(runId), 10000);
+      });
   };
 
   const forecastNow = () => {
