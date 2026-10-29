@@ -12,7 +12,8 @@ x-backend-env: &backend-env
   TICKERS_FILE: /data/tickers.txt
   RUSSELL3000_FILE: /data/russell3000.txt
   RL_MODELS_DIR: /data/rl_models
-  CORS_ORIGINS: http://localhost:5173,http://localhost:8080
+  # Add your public https://... hostname via .env when using the tunnel.
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080}
   # One math thread per process: workers run several processes side by side,
   # and PyTorch/NumPy default to one thread per CPU core each.
   OMP_NUM_THREADS: "1"
@@ -144,6 +145,20 @@ services:
         condition: service_started
     ports:
       - "8080:80"
+
+  # Cloudflare Tunnel (optional): publishes only the frontend over HTTPS.
+  # Off by default; start with  docker compose --profile tunnel up -d
+  # Needs CLOUDFLARE_TUNNEL_TOKEN in .env (Zero Trust > Networks > Tunnels).
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: itec5205-cloudflared
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - frontend
 
 volumes:
   redis_data:
