@@ -3,7 +3,8 @@ import { toast } from "react-toastify";
 import { apiClient, authHeaders } from "../api/client";
 import Modal from "../components/Modal";
 import { isAdminUser, useAuth } from "../auth/Authorization";
-import { DownloadIcon, TrashIcon, UploadIcon } from "./icons";
+import { DatabaseIcon, DownloadIcon, PieChartIcon, TrashIcon, TrendChartIcon, UploadIcon, WorkflowIcon } from "./icons";
+import { useRunningJobs } from "../features/activity/runningJobs";
 
 const fmtInt = (n) => (n == null ? "–" : Number(n).toLocaleString());
 
@@ -164,8 +165,6 @@ function DeleteAllModal({ isOpen, onClose }) {
   );
 }
 
-// Whole-database actions. Job progress (imports, training) stays on its own
-// page; this bar holds only these buttons and is never covered.
 // Export All: the browser asks where to save (Chrome / Edge); others save
 // to their download folder, or ask if the browser is set to.
 async function exportAll() {
@@ -196,19 +195,84 @@ async function exportAll() {
   }
 }
 
-// Whole-database actions. Job progress (imports, training) stays on its own
-// page; this bar holds only these buttons and is never covered.
-// The buttons are for admins and installers only; others see an empty bar.
+const JOB_KINDS = {
+  import: { label: "Import", color: "#16a34a", icon: DatabaseIcon },
+  forecast: { label: "Forecast", color: "#0891b2", icon: TrendChartIcon },
+  rl: { label: "RL", color: "#dc2626", icon: PieChartIcon },
+  workflow: { label: "Workflow", color: "#6366f1", icon: WorkflowIcon },
+};
+const JOB_LABELS = {
+  "Trained an LSTM forecast": "LSTM",
+  "Trained an ARIMA forecast": "ARIMA",
+  "Ran forecasts (LSTM + ARIMA)": "LSTM + ARIMA",
+};
+const MAX_SHOWN = 3;
+
+// Everyone's running jobs (import, LSTM / ARIMA forecasts, RL, workflows):
+// who started each one and how far it is, live.
+function RunningJobs() {
+  const jobs = useRunningJobs();
+  if (jobs.length === 0) return null;
+  const shown = jobs.slice(0, MAX_SHOWN);
+  const more = jobs.slice(MAX_SHOWN);
+  return (
+    <div className="running-strip">
+      {shown.map((j) => {
+        const k = JOB_KINDS[j.kind] || JOB_KINDS.workflow;
+        const Icon = k.icon;
+        const label = JOB_LABELS[j.action] || k.label;
+        const user = j.name || j.username;
+        return (
+          <div key={j._key} className="running-chip" title={`${user}: ${j.action}${j.details ? ` · ${j.details}` : ""}`}>
+            <Icon width={15} height={15} style={{ color: k.color, flexShrink: 0 }} />
+            <span className="running-chip-text">
+              <strong>{user}</strong> · {label}
+              {j.details ? ` · ${j.details}` : ""}
+            </span>
+            {j.status === "queued" ? (
+              <span className="muted">Queued</span>
+            ) : (
+              <>
+                <span className="running-chip-track">
+                  <span
+                    className={`running-chip-fill ${j.percent == null ? "indeterminate" : ""}`}
+                    style={{ width: j.percent == null ? undefined : `${j.percent}%`, background: k.color }}
+                  />
+                </span>
+                <span className="running-chip-pct">{j.percent == null ? "…" : `${j.percent}%`}</span>
+              </>
+            )}
+          </div>
+        );
+      })}
+      {more.length > 0 && (
+        <span className="muted" title={more.map((j) => `${j.name || j.username}: ${j.action}`).join(" · ")}>
+          +{more.length} more
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Everyone's running jobs on the left; whole-database actions on the right,
+// for admins and installers only. The bar is never covered.
 export default function BottomBar() {
   const { keycloak } = useAuth();
   const [importFile, setImportFile] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const picker = useRef(null);
 
-  if (!isAdminUser(keycloak)) return <div className="bottom-bar" />;
+  if (!isAdminUser(keycloak)) {
+    return (
+      <div className="bottom-bar">
+        <RunningJobs />
+      </div>
+    );
+  }
 
   return (
     <div className="bottom-bar">
+      <RunningJobs />
       <button className="btn secondary" onClick={() => picker.current.click()} title="Choose a file made with Export All">
         <UploadIcon /> Import All
       </button>

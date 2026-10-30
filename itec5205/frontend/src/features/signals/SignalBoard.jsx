@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiClient } from "../../api/client";
 import { CheckCircleIcon, StarIcon, TrendChartIcon } from "../../layout/icons";
+import { busyText, useBusyByOthers } from "../activity/runningJobs";
 import { HORIZONS } from "../predictions/ForecastTables";
 import { getSettings } from "../settings/settings";
 
@@ -93,6 +94,7 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
   const [error, setError] = useState(null);
   const [run, setRun] = useState(null);
   const [starting, setStarting] = useState(false);
+  const busy = useBusyByOthers("forecast");
   const [trainingDays, setTrainingDays] = useState(() => getSettings().forecast.training_days);
   const [epochs, setEpochs] = useState(() => getSettings().forecast.lstm_epochs);
   const [refining, setRefining] = useState(false);
@@ -273,9 +275,10 @@ export default function SignalBoard({ poolId, portfolioId, onRefined, refreshKey
           LSTM max epochs
           <input type="number" min={1} value={epochs} onChange={(e) => setEpochs(e.target.value)} disabled={running} />
         </label>
-        <button className="btn" onClick={forecastAll} disabled={running || starting}>
+        <button className="btn" onClick={forecastAll} disabled={running || starting || !!busy}>
           <TrendChartIcon /> {starting ? "Queuing forecasts…" : running ? "Forecasting..." : `Forecast all (LSTM + ARIMA)`}
         </button>
+        {!running && busy && <span className="busy-hint">{busyText(busy)}</span>}
         {running && (
           <button className="btn secondary" onClick={cancel} title="Stop this run's remaining jobs">
             Cancel

@@ -50,3 +50,9 @@ def dashboard():
 @bp.get("/overview")
 def overview():
     return jsonify(activity.overview())
+
+
+@bp.get("/running")
+def running():
+    """Queued/running jobs with their user and progress (bottom bar)."""
+    return jsonify({"jobs": activity.running_jobs()})

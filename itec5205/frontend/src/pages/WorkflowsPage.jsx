@@ -14,6 +14,7 @@ import { EyeIcon, ListIcon, PlayIcon, PlusIcon, SaveIcon, StopIcon, WorkflowIcon
 import { KINDS, autoWorkflowName, describeCriteria, uniqueName } from "../features/workflows/criteriaConfig";
 import WorkflowRunPanel, { ACTIVE, KIND_STYLE, RunProgress, RunStatus } from "../features/workflows/WorkflowRunPanel";
 import { getSettings } from "../features/settings/settings";
+import { busyText, useBusyByOthers } from "../features/activity/runningJobs";
 
 const apiError = (err) => err.response?.data?.error || err.message;
 const ellipsis = { display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
@@ -176,6 +177,7 @@ export default function WorkflowsPage() {
     }
   };
 
+  const busy = useBusyByOthers("workflow"); // one user's workflow at a time
   const run = (p) =>
     apiClient
       .post(`/api/workflows/${p._key}/run`)
@@ -282,6 +284,7 @@ export default function WorkflowsPage() {
         />
       </div>
 
+      {busy && <p className="busy-hint" style={{ margin: "0 0 12px" }}>{busyText(busy)}</p>}
       <div className="card filter-card">
         <SearchBox id="search-workflows" value={query} onChange={setQuery} placeholder="Search workflows by name, criteria or description…" />
         <div className="filter-row">
@@ -357,7 +360,7 @@ export default function WorkflowsPage() {
                         extraItems={[
                           active
                             ? { label: "Stop run", icon: StopIcon, onClick: () => cancel(p) }
-                            : { label: "Run", icon: PlayIcon, onClick: () => run(p) },
+                            : { label: "Run", icon: PlayIcon, onClick: () => run(p), disabled: !!busy },
                           { label: "View", icon: EyeIcon, onClick: () => setActiveId(p._key) },
                         ]}
                         onEdit={() => open(p)}

@@ -7,6 +7,7 @@ import Req from "../../components/Req";
 import { CloseIcon, DatabaseIcon, DownloadIcon, StopIcon } from "../../layout/icons";
 import { getSettings } from "../settings/settings";
 import { markDelisted } from "./DelistedCompanies";
+import { busyText, useBusyByOthers } from "../activity/runningJobs";
 
 function pct(progress) {
   if (!progress || !progress.total) return 0;
@@ -419,6 +420,7 @@ export function ImportOptionsFields({ value, onChange, name = "import-scope" }) 
 export function ImportPanel() {
   const dispatch = useDispatch();
   const importActive = useSelector((s) => ["starting", "running", "stopping"].includes(s.dataImport.status));
+  const busy = useBusyByOthers("import"); // one import at a time across users
   const [options, setOptions] = useState(defaultImportOptions);
 
   const submit = () => {
@@ -437,9 +439,10 @@ export function ImportPanel() {
   return (
     <div>
       <ImportOptionsFields value={options} onChange={setOptions} />
-      <button className="btn btn-lg" style={{ marginTop: 14 }} onClick={submit} disabled={importActive || importOptionsInvalid(options)}>
+      <button className="btn btn-lg" style={{ marginTop: 14 }} onClick={submit} disabled={importActive || !!busy || importOptionsInvalid(options)}>
         <DownloadIcon width={18} height={18} /> {importActive ? "Importing..." : "Start Import"}
       </button>
+      {busy && <p className="busy-hint">{busyText(busy)}</p>}
     </div>
   );
 }

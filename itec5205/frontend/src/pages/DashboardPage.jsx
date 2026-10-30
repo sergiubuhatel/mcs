@@ -9,7 +9,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiClient } from "../api/client";
-import { getSocket, joinRoom, leaveRoom } from "../api/socket";
+import { getSocket } from "../api/socket";
+import { useRunningJobs } from "../features/activity/runningJobs";
 import { PageHeader } from "../components/PageParts";
 import LoadingSpinner from "../components/LoadingSpinner";
 import RangePicker from "../components/RangePicker";
@@ -37,7 +38,6 @@ import {
 const POLL_MS = 15000;
 const OVERVIEW_POLL_MS = 60000;
 const OVERVIEW_MIN_GAP_MS = 10000; // job progress pings come every 2 s
-const ROOM = "dashboard";
 const RECENT_JOBS = 6;
 
 // What page a user has open (heartbeat path -> sidebar name).
@@ -472,6 +472,7 @@ function WorkflowCard({ run, companies }) {
 // -------------------------------------------------------------------- page
 
 export default function DashboardPage() {
+  useRunningJobs(); // makes sure the app-wide "dashboard" room is joined
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [overview, setOverview] = useState(null);
@@ -509,11 +510,10 @@ export default function DashboardPage() {
         loadOverview();
       }, 300);
     };
+    // The app joins room "dashboard" once (features/activity/runningJobs.js);
+    // leaving it here would stop the bottom bar's live updates too.
     const socket = getSocket();
-    const join = () => joinRoom(ROOM); // again after every reconnect
-    socket.on("connect", join);
     socket.on("dashboard_changed", onChange);
-    if (socket.connected) join();
 
     load();
     loadOverview(true);
@@ -524,9 +524,7 @@ export default function DashboardPage() {
       clearInterval(id);
       clearInterval(idOverview);
       clearTimeout(timer);
-      socket.off("connect", join);
       socket.off("dashboard_changed", onChange);
-      leaveRoom(ROOM);
     };
   }, []);
 

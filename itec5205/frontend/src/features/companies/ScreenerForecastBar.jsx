@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { apiClient } from "../../api/client";
+import { busyText, useBusyByOthers } from "../activity/runningJobs";
 import { ArrowDownRightIcon, BarChartIcon, CheckIcon, MixedIcon, TrendDownIcon, TrendChartIcon, TrendUpIcon } from "../../layout/icons";
 import { progressText } from "../signals/SignalBoard";
 import { ALL_RESULTS, buildParams, screenCriteria } from "./companiesSaga";
@@ -35,6 +36,7 @@ export default function ScreenerForecastBar() {
   const [run, setRun] = useState(null);
   const [error, setError] = useState(null);
   const [starting, setStarting] = useState(false);
+  const busy = useBusyByOthers("forecast"); // one user's forecasts at a time
   const [trainingDays, setTrainingDays] = useState(() => getSettings().forecast.training_days);
   const [epochs, setEpochs] = useState(() => getSettings().forecast.lstm_epochs);
   const pollRef = useRef(null);
@@ -170,9 +172,12 @@ export default function ScreenerForecastBar() {
           {running ? (
             <button className="btn secondary" onClick={cancel} title="Stop this run's remaining jobs">Cancel run</button>
           ) : (
-            <button className="btn" onClick={forecastAll} disabled={results.length === 0 || starting}>
-              <TrendChartIcon /> {starting ? "Queuing forecasts…" : "Run Forecasts (LSTM + ARIMA)"}
-            </button>
+            <>
+              <button className="btn" onClick={forecastAll} disabled={results.length === 0 || starting || !!busy}>
+                <TrendChartIcon /> {starting ? "Queuing forecasts…" : "Run Forecasts (LSTM + ARIMA)"}
+              </button>
+              {busy && <span className="busy-hint">{busyText(busy)}</span>}
+            </>
           )}
         </div>
       </div>

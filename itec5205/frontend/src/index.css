@@ -763,3 +763,18 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
   background: linear-gradient(135deg, #8b5cf6, #6366f1); color: #fff; font-size: 0.72rem; font-weight: 700; flex-shrink: 0;
 }
 .user-menu .theme-toggle { padding-top: 4px; padding-bottom: 4px; }
+
+/* Bottom bar: everyone's running jobs (layout/BottomBar.jsx RunningJobs). */
+.running-strip { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; overflow: hidden; margin-right: auto; }
+.running-chip {
+  display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 420px; padding: 5px 10px; border-radius: 9px;
+  border: 1px solid var(--color-divider); background: var(--color-bg-secondary); font-size: 0.8rem; color: var(--color-text-primary);
+}
+.running-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.running-chip-track { position: relative; width: 70px; height: 6px; border-radius: 999px; background: var(--color-bg-tertiary); overflow: hidden; flex-shrink: 0; }
+.running-chip-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; transition: width 0.4s; }
+.running-chip-fill.indeterminate { width: 35%; animation: running-slide 1.2s ease-in-out infinite; }
+@keyframes running-slide { from { left: -35%; } to { left: 100%; } }
+.running-chip-pct { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 32px; text-align: right; flex-shrink: 0; }
+.busy-hint { margin: 6px 0 0; font-size: 0.8rem; color: #b45309; }
+.dark .busy-hint { color: #fbbf24; }

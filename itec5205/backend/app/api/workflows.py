@@ -24,6 +24,7 @@ from ..services import workflow_service as svc
 from ..tasks.celery_app import celery_app
 from ..tasks.workflow_tasks import run_workflow
 from ..tasks.stop_flags import request_stop
+from ..services.activity import refuse_if_busy
 
 bp = Blueprint("workflows", __name__)
 
@@ -152,6 +153,9 @@ def workflow_delete(workflow_id):
 
 @bp.post("/api/workflows/<workflow_id>/run")
 def workflow_run(workflow_id):
+    busy = refuse_if_busy("workflow")  # one user's workflow at a time
+    if busy:
+        return busy
     workflow = svc.get_workflow(workflow_id)
     if workflow is None:
         return jsonify({"error": "Workflow not found"}), 404

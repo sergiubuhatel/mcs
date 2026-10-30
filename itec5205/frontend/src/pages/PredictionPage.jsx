@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import ForecastChart, { BandLevelSelect, forecastFromDocs } from "../components/ForecastChart";
 import { apiClient } from "../api/client";
+import { busyText, useBusyByOthers } from "../features/activity/runningJobs";
 import { PageHeader, QuickTipsBar } from "../components/PageParts";
 import ForecastPanels from "../features/predictions/ForecastPanels";
 import {
@@ -385,6 +386,7 @@ export default function PredictionPage() {
       });
   };
 
+  const busy = useBusyByOthers("forecast");
   const forecastNow = () => {
     setRunError(null);
     apiClient
@@ -496,9 +498,10 @@ export default function PredictionPage() {
           {running && ` Forecasting… ${done}/${(run.counts?.lstm.total || 0) + (run.counts?.arima.total || 0)} models done${run.queued ? " (waiting for a free worker)" : ""}.`}
         </span>
         {runError && <span className="error-text">{runError}</span>}
-        <button className="btn" onClick={forecastNow} disabled={running || !company}>
+        <button className="btn" onClick={forecastNow} disabled={running || !company || !!busy}>
           <TrendChartIcon width={15} height={15} /> {running ? "Forecasting…" : lstm || arima ? "Re-forecast (LSTM + ARIMA)" : "Forecast now"}
         </button>
+        {!running && busy && <span className="busy-hint">{busyText(busy)}</span>}
         <button className="btn secondary" onClick={() => setShowDetails((v) => !v)}>{showDetails ? "Hide model details" : "Model details & settings"}</button>
       </div>
 

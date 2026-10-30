@@ -463,3 +463,48 @@ def overview() -> dict:
     }
     _overview_cache.update(at=time.monotonic(), data=data)
     return data
+
+
+# ------------------------------------------------------------ running jobs
+# The bottom bar (every page, every user) shows these with their progress, and
+# a user can't start an import / forecast while someone else's is running.
+
+_RUNNING_TTL = 1.5  # seconds; every open page refetches on each progress ping
+_running_cache: dict = {"at": 0.0, "data": None}
+_RUNNING_FIELDS = ("_key", "kind", "action", "details", "user_id", "username", "name", "created_at", "status", "percent")
+VERBS = {"import": "importing data", "forecast": "running forecasts", "rl": "building an RL portfolio", "workflow": "running a workflow"}
+
+
+def running_jobs() -> list[dict]:
+    """Jobs started in the last day that are queued or running, newest first."""
+    if _running_cache["data"] is not None and time.monotonic() - _running_cache["at"] < _RUNNING_TTL:
+        return _running_cache["data"]
+    docs = get_db().aql.execute(
+        "FOR a IN user_activity FILTER a.job != null AND a.final_status == null AND a.created_at >= @since "
+        "SORT a.created_at DESC RETURN a",
+        bind_vars={"since": (_now() - timedelta(days=1)).isoformat()},
+    )
+    jobs = [
+        {k: d.get(k) for k in _RUNNING_FIELDS}
+        for d in map(_with_status, docs)
+        if d.get("status") in ("running", "queued")
+    ]
+    _running_cache.update(at=time.monotonic(), data=jobs)
+    return jobs
+
+
+def busy_by_others(kind: str, user: dict | None) -> str | None:
+    """Why `user` can't start a `kind` job now (someone else's is running), or None."""
+    me = user["id"] if user else None
+    for job in running_jobs():
+        if job["kind"] == kind and job["user_id"] != me:
+            return f"{job['name'] or job['username']} is {VERBS.get(kind, 'running a job')} -- try again when it finishes"
+    return None
+
+
+def refuse_if_busy(kind: str):
+    """A 409 response when another user's `kind` job is running, else None."""
+    from flask import jsonify  # noqa: PLC0415
+
+    reason = busy_by_others(kind, current_user())
+    return (jsonify({"error": reason, "busy": True}), 409) if reason else None

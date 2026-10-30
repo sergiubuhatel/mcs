@@ -8,6 +8,7 @@ from celery.result import AsyncResult
 from flask import Blueprint, jsonify, request
 
 from ..db.arango_client import get_db
+from ..services.activity import refuse_if_busy
 from ..services.horizons import MAX_HORIZON_DAYS
 from ..services.lstm_service import DEFAULT_LOOKBACK_DAYS
 from ..services.universes import MAX_RESULTS
@@ -19,6 +20,9 @@ bp = Blueprint("predictions", __name__, url_prefix="/api/predictions")
 
 @bp.post("/train")
 def train():
+    busy = refuse_if_busy("forecast")
+    if busy:
+        return busy
     body = request.get_json(silent=True) or {}
     ticker = body.get("ticker")
     if not ticker:

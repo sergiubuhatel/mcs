@@ -11,6 +11,7 @@ from celery.result import AsyncResult
 from flask import Blueprint, jsonify, request
 
 from ..db.arango_client import get_db
+from ..services.activity import refuse_if_busy
 from ..services.delisting import clear_delisted, list_delisted, purge_ticker
 from ..services.universes import INDEXES, existing_mode, normalize_universe, imported_tickers, tickers_to_import, universe_tickers
 from ..services.yahoo_import import _last_closed_session_date
@@ -27,6 +28,9 @@ def trigger_import():
     ("all" default = both indexes + every imported company | "sp500" |
     "russell3000"); `existing` ("skip" | "update" |
     "reimport", see services/universes.py; older clients send `only_missing`)."""
+    busy = refuse_if_busy("import")  # one import at a time across users
+    if busy:
+        return busy
     body = request.get_json(silent=True) or {}
     tickers = body.get("tickers")
     scope = "specific" if tickers else "all"
@@ -212,6 +216,9 @@ def stop_import(task_id: str):
 @bp.post("/import/resume/<task_id>")
 def resume_import(task_id: str):
     """Continue a previously-stopped import from where it left off."""
+    busy = refuse_if_busy("import")
+    if busy:
+        return busy
     result = AsyncResult(task_id, app=celery_app)
     prior = result.result if result.state == "SUCCESS" else None
     remaining = (prior or {}).get("remaining_tickers") if isinstance(prior, dict) else None

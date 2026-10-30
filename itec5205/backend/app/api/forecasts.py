@@ -15,6 +15,7 @@ from celery.result import AsyncResult
 from flask import Blueprint, jsonify, request
 
 from ..db.arango_client import get_db
+from ..services.activity import refuse_if_busy
 from ..services.horizons import MAX_HORIZON_DAYS
 from ..services.lstm_service import DEFAULT_LOOKBACK_DAYS
 from ..services.pool_service import get_pool
@@ -51,6 +52,9 @@ def resolve_tickers(body: dict) -> tuple[list[str] | None, dict, str | None]:
 
 @bp.post("/batch")
 def start_batch():
+    busy = refuse_if_busy("forecast")  # one user's forecasts at a time
+    if busy:
+        return busy
     body = request.get_json(silent=True) or {}
     tickers, source, error = resolve_tickers(body)
     if error:

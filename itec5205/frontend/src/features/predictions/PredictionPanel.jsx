@@ -4,6 +4,7 @@ import { fetchExistingRequested, trainRequested } from "./predictionsSlice";
 import { TrendChartIcon } from "../../layout/icons";
 import { HorizonTable, NextDaysTable, money } from "./ForecastTables";
 import { getSettings } from "../settings/settings";
+import { busyText, useBusyByOthers } from "../activity/runningJobs";
 
 export default function PredictionPanel({ ticker, lookbackDays }) {
   const dispatch = useDispatch();
@@ -18,6 +19,7 @@ export default function PredictionPanel({ ticker, lookbackDays }) {
   const training = status === "starting" || status === "training";
   const pct = progress && progress.total ? Math.min(100, Math.round((progress.completed / progress.total) * 100)) : 0;
 
+  const busy = useBusyByOthers("forecast");
   const start = () => dispatch(trainRequested({ ticker, epochs: Number(epochs), seq_len: 20, lookback_days: lookbackDays }));
 
   return (
@@ -28,9 +30,10 @@ export default function PredictionPanel({ ticker, lookbackDays }) {
           <label style={{ display: "block", fontSize: "0.78rem", color: "var(--color-text-secondary)" }}>Max epochs</label>
           <input type="number" value={epochs} onChange={(e) => setEpochs(e.target.value)} style={{ width: 90 }} disabled={training} />
         </div>
-        <button className="btn" onClick={start} disabled={training}>
+        <button className="btn" onClick={start} disabled={training || !!busy}>
           <TrendChartIcon /> {training ? "Training..." : "Train / retrain LSTM"}
         </button>
+        {!training && busy && <span className="busy-hint">{busyText(busy)}</span>}
       </div>
 
       {training && (

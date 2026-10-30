@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { fetchExistingRequested, trainRequested } from "./arimaSlice";
 import { TrendChartIcon } from "../../layout/icons";
 import { HorizonTable, NextDaysTable, money } from "../predictions/ForecastTables";
+import { busyText, useBusyByOthers } from "../activity/runningJobs";
 
 const orderLabel = (order) => (order ? `(${order.join(", ")})` : "-");
 
@@ -18,15 +19,17 @@ export default function ArimaPanel({ ticker, lookbackDays }) {
   const training = status === "starting" || status === "training";
   const pct = progress && progress.total ? Math.min(100, Math.round((progress.completed / progress.total) * 100)) : 0;
 
+  const busy = useBusyByOthers("forecast");
   const start = () => dispatch(trainRequested({ ticker, lookback_days: Number(lookbackDays) }));
 
   return (
     <div className="card">
       <h3>ARIMA price forecast</h3>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-        <button className="btn" onClick={start} disabled={training}>
+        <button className="btn" onClick={start} disabled={training || !!busy}>
           <TrendChartIcon /> {training ? "Fitting..." : "Fit / refit ARIMA"}
         </button>
+        {!training && busy && <span className="busy-hint">{busyText(busy)}</span>}
       </div>
 
       {training && (
