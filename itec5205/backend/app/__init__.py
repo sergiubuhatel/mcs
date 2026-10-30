@@ -1,6 +1,12 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
+from . import config
+from .auth import current_user
 from .extensions import cors, socketio
+
+# Reachable without a token: the health probe, and the tab-closing beacon,
+# which can't send headers and verifies the token in its body itself.
+PUBLIC_PATHS = {"/api/health", "/api/activity/leave"}
 
 
 def create_app() -> Flask:
@@ -25,6 +31,16 @@ def create_app() -> Flask:
     app.register_blueprint(orders.bp)
     app.register_blueprint(backup.bp)
     app.register_blueprint(activity.bp)
+
+    # Every API call needs a valid Keycloak access token (Authorization: Bearer).
+    @app.before_request
+    def require_sign_in():
+        if (not config.KEYCLOAK_ENABLED or request.method == "OPTIONS"
+                or not request.path.startswith("/api/") or request.path in PUBLIC_PATHS):
+            return None
+        if current_user() is None:
+            return jsonify({"error": "Sign in first"}), 401
+        return None
 
     # Dashboard: log every change a signed-in user makes (services/activity.py).
     from .services.activity import record_request

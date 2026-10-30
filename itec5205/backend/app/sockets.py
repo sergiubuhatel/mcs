@@ -8,7 +8,18 @@ polling the status endpoint.
 
 from flask_socketio import join_room, leave_room
 
+from . import config
+from .auth import verify_token
 from .extensions import socketio
+
+
+@socketio.on("connect")
+def handle_connect(auth=None):
+    """Only signed-in users: the client sends its Keycloak token as `auth`."""
+    if not config.KEYCLOAK_ENABLED:
+        return True
+    token = (auth or {}).get("token") if isinstance(auth, dict) else None
+    return bool(token) and verify_token(token) is not None
 
 
 @socketio.on("join")
