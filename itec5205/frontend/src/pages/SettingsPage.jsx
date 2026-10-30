@@ -62,7 +62,7 @@ const SECTIONS = [
       { key: "chart_ranges", label: "Price chart range buttons", type: "ranges", help: `Range buttons of the company and portfolio detail charts. ${RANGES_HELP}` },
       { key: "chart_more_ranges", label: "Price chart \"More\" ranges", type: "ranges", optional: true, help: `Ranges in the charts' More menu (blank = no menu). A Custom date range is always offered. ${RANGES_HELP}` },
       { key: "chart_range", label: "Price chart range", type: "select", options: rangeOptions("general"), help: "Initial interval of the company and portfolio detail charts (a button or a More range above)." },
-      { key: "list_page_size", label: "Rows per list page", type: "select", options: opts([5, 10, 20, 50]), number: true, help: "Page size of the Workflows, Stock Pools and My Portfolios grids." },
+      { key: "list_page_size", label: "Rows per list page", type: "select", options: opts([5, 10, 20, 50]), number: true, help: "Page size of the Workflows, Stock Pools and Portfolios grids." },
       { key: "next_days", label: "Next-days forecast rows", type: "number", min: 1, max: 60, help: "How many daily steps the 'next days' forecast tables show at first." },
     ],
   },

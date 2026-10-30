@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { apiClient } from "../api/client";
+import { apiClient, authHeaders } from "../api/client";
 import Modal from "../components/Modal";
 import { isAdminUser, useAuth } from "../auth/Authorization";
 import { DownloadIcon, TrashIcon, UploadIcon } from "./icons";
@@ -181,7 +181,7 @@ async function exportAll() {
   }
   const id = toast.info("Exporting the database… (a few minutes)", { autoClose: false });
   try {
-    const response = await fetch("/api/backup/export");
+    const response = await fetch("/api/backup/export", { headers: await authHeaders() });
     if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || `HTTP ${response.status}`);
     if (handle) {
       await response.body.pipeTo(await handle.createWritable());

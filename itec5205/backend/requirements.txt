@@ -16,5 +16,6 @@ stable-baselines3
 torch
 statsmodels
 waitress
+pyjwt[crypto]
 pytesseract
 pillow

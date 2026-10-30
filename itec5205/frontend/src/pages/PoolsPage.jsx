@@ -209,7 +209,7 @@ export default function PoolsPage() {
           <div className="toolbar">
             <SearchBox id="search-pools" value={query} onChange={setQuery} placeholder="Search by name or ticker…" />
             <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleVisible} onMove={moveColumn} onReset={reset} />
-            <button className="btn" onClick={() => navigate("/")} title="Pools are saved from the Stock Screener: select rows there and save them">
+            <button className="btn" onClick={() => navigate("/screener")} title="Pools are saved from the Stock Screener: select rows there and save them">
               <PlusIcon width={15} height={15} /> New pool
             </button>
           </div>

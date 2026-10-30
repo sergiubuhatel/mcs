@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { NavLink } from "react-router-dom";
-import { ChevronDownIcon, GearIcon, PowerIcon, UserIcon } from "./icons";
+import { ChevronDownIcon, GearIcon, GridIcon, PowerIcon, UserIcon } from "./icons";
+import { apiClient } from "../api/client";
 import { toggleDarkMode } from "../features/theme/themeSlice";
 import { USE_KEYCLOAK } from "../auth/keycloak";
 import { isAdminUser, roleLabel, useAuth } from "../auth/Authorization";
@@ -50,6 +51,12 @@ function UserMenu() {
   const username = profile.preferred_username || "—";
   const displayName = profile.name || username;
 
+  // Mark the user offline on the Dashboard right away, then end the session.
+  const logout = async () => {
+    await apiClient.post("/api/activity/logout").catch(() => {});
+    keycloak.logout({ redirectUri: window.location.origin });
+  };
+
   useEffect(() => {
     if (!open) return undefined;
     const onClickOutside = (e) => {
@@ -72,7 +79,7 @@ function UserMenu() {
             <div>Username: <span>{username}</span></div>
             <div>Role: <span>{roleLabel(keycloak)}</span></div>
           </div>
-          <button className="user-menu-logout" onClick={() => keycloak.logout({ redirectUri: window.location.origin })}>
+          <button className="user-menu-logout" onClick={logout}>
             <PowerIcon /> Logout
           </button>
         </div>
@@ -108,6 +115,10 @@ export default function TopBar({ sidebarCollapsed, onToggleSidebar }) {
       </div>
       </div>
       <div className="flex shrink-0 items-center gap-3">
+      <NavLink to="/" end className={({ isActive }) => `theme-toggle ${isActive ? "active" : ""}`} title="Who is signed in and what everyone is doing">
+        <span className="theme-toggle-icon"><GridIcon width={18} height={18} /></span>
+        Dashboard
+      </NavLink>
       {isAdminUser(keycloak) && (
       <NavLink to="/settings" className={({ isActive }) => `theme-toggle ${isActive ? "active" : ""}`} title="Initial values for every page">
         <span className="theme-toggle-icon"><GearIcon width={18} height={18} /></span>

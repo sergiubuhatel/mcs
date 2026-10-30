@@ -12,7 +12,7 @@ import should actually fetch.
 from .. import config
 from ..db.arango_client import get_db
 from .delisting import delisted_tickers
-from .yahoo_import import get_up_to_date_tickers, read_tickers
+from .yahoo_import import _last_closed_session_date, get_up_to_date_tickers, read_tickers
 
 # Index ticker lists (also the screener's Index filter).
 INDEXES = {
@@ -29,6 +29,12 @@ DEFAULT_UNIVERSE = "all"
 # Most rows one request may ask for ("all results"): above any index size.
 MAX_RESULTS = 5000
 EXISTING_MODES = ("skip", "update", "reimport")
+# Market benchmarks (Dashboard: a portfolio against the S&P 500 and the Dow):
+# every import that fetches prices also catches these up when they are behind,
+# for the same years, whatever was asked. DIA (the Dow Jones ETF) stands for
+# the Dow: Yahoo's "DOW" is Dow Inc., and the ^DJI index can't be an
+# ArangoDB key.
+BENCHMARKS = ("SPY", "DIA")
 
 
 def normalize_universe(universe: str | None) -> str:
@@ -68,8 +74,28 @@ def imported_tickers() -> set[str]:
 
 def tickers_to_import(tickers: list[str], existing: str, import_history: bool) -> tuple[list[str], str]:
     """`tickers` minus the ones `existing` says to leave alone, and the mode
-    actually used. "update" is about price-history gaps, so without history it
-    fetches everything. "skip" with no new company left falls back to "update"
+    actually used, plus any BENCHMARKS whose prices are behind."""
+    chosen, existing = _requested_to_import(tickers, existing, import_history)
+    if import_history:
+        chosen += [b for b in _behind(BENCHMARKS) if b not in chosen]
+    return chosen, existing
+
+
+def _behind(tickers) -> list[str]:
+    """Those whose prices stop before the last closed session (indexed
+    per-ticker lookups, not get_up_to_date_tickers' scan of every price)."""
+    cutoff = _last_closed_session_date().isoformat()
+    latest = get_db().aql.execute(
+        "FOR t IN @tickers RETURN {t, d: FIRST(FOR p IN stock_prices FILTER p.ticker == t "
+        "SORT p.date DESC LIMIT 1 RETURN p.date)}",
+        bind_vars={"tickers": list(tickers)},
+    )
+    return [row["t"] for row in latest if (row["d"] or "") < cutoff]
+
+
+def _requested_to_import(tickers: list[str], existing: str, import_history: bool) -> tuple[list[str], str]:
+    """"update" is about price-history gaps, so without history it fetches
+    everything. "skip" with no new company left falls back to "update"
     (the user's rule: an import that would do nothing catches up instead)."""
     if existing == "skip":
         have = imported_tickers()

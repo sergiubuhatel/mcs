@@ -73,6 +73,9 @@ def load(path):
 
 def save(realm, path):
     realm["loginTheme"] = LOGIN_THEME
+    # The backups carry the realms' private signing keys; drop them so
+    # Keycloak generates new ones (anyone holding a backup could sign tokens).
+    realm.get("components", {}).pop("org.keycloak.keys.KeyProvider", None)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(realm, f, indent=2)
     print(f"-> {path} (realm {realm['realm']})")

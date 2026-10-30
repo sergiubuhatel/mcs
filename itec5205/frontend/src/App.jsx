@@ -24,6 +24,8 @@ import CombinePortfoliosPage from "./pages/CombinePortfoliosPage";
 import LoadingSpinner from "./components/LoadingSpinner";
 import { loadSettings } from "./features/settings/settings";
 import { RequireAdminUser } from "./auth/Authorization";
+import useHeartbeat from "./auth/useHeartbeat";
+import DashboardPage from "./pages/DashboardPage";
 
 export default function App() {
   const darkMode = useSelector((s) => s.theme.darkMode);
@@ -32,6 +34,7 @@ export default function App() {
   // Pages read their initial values from the Settings page, so they render
   // only once those are loaded (built-in defaults if the backend is down).
   const [settingsReady, setSettingsReady] = useState(false);
+  useHeartbeat();
 
   useEffect(() => {
     loadSettings(dispatch).finally(() => setSettingsReady(true));
@@ -53,7 +56,8 @@ export default function App() {
             <LoadingSpinner />
           ) : (
           <Routes>
-            <Route path="/" element={<ScreenerPage />} />
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/screener" element={<ScreenerPage />} />
             <Route path="/data" element={<DataPage />} />
             <Route path="/workflows" element={<WorkflowsPage />} />
             <Route path="/criteria/:kind" element={<CriteriaPage />} />

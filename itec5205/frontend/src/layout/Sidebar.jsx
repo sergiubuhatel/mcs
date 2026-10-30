@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { apiClient } from "../api/client";
-import { isAdminUser, useAuth } from "../auth/Authorization";
 import CarletonLockup from "./CarletonLockup";
 import CarletonCrest from "./CarletonLogo";
 import {
@@ -41,7 +40,7 @@ const GROUPS = [
     icon: SearchIcon,
     color: "#3b82f6",
     items: [
-      { to: "/", end: true, label: "Stock Screener", icon: ListIcon, hint: "Filter the S&P 500 by fundamentals and save a pool" },
+      { to: "/screener", label: "Stock Screener", icon: ListIcon, hint: "Filter the S&P 500 by fundamentals and save a pool" },
       { to: "/criteria/screen", label: "Screening Criteria", icon: SlidersIcon, hint: "Saved screener searches for workflows" },
       { to: "/pools", label: "Stock Pools", icon: BookmarkPlusIcon, hint: "Saved pools: signal board, forecasts and the RL builder" },
     ],
@@ -60,7 +59,7 @@ const GROUPS = [
     icon: PieChartIcon,
     color: "#22c55e",
     items: [
-      { to: "/portfolio", label: "My Portfolios", icon: BarChartIcon, hint: "Saved portfolios with performance and allocation" },
+      { to: "/portfolio", label: "Portfolios", icon: BarChartIcon, hint: "Saved portfolios with performance and allocation" },
       { to: "/criteria/portfolio", label: "Portfolio Constraints", icon: SlidersIcon, hint: "Saved portfolio criteria: RL limits and settings" },
     ],
   },
@@ -105,13 +104,6 @@ const GROUPS = [
   },
 ];
 
-// App-wide initial values; a single item, no group heading.
-const SETTINGS_GROUP = {
-  title: "Settings",
-  standalone: true,
-  items: [{ to: "/settings", label: "Settings", icon: GearIcon, hint: "Initial values for every page", standalone: true }],
-};
-
 const ACTIVE_RUN = ["queued", "running"];
 const POLL_MS = 10000;
 
@@ -155,7 +147,6 @@ function NavItem({ item, collapsed, counts }) {
 
 export default function Sidebar({ collapsed }) {
   const counts = { runningWorkflows: useRunningWorkflows() };
-  const { keycloak } = useAuth();
   return (
     <aside
       className="flex h-full flex-col border-r shrink-0 transition-[width]"
@@ -170,13 +161,13 @@ export default function Sidebar({ collapsed }) {
         className="flex items-center justify-center px-3"
         style={{ height: "var(--header-height)", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}
       >
-        <NavLink to="/" className="brand-link" title="Home: Stock Screener" aria-label="Carleton University — home">
+        <NavLink to="/" className="brand-link" title="Home: Dashboard" aria-label="Carleton University — home">
           {collapsed ? <CarletonCrest height={36} /> : <CarletonLockup height={42} />}
         </NavLink>
       </div>
 
       <nav className="flex min-h-0 flex-col px-3 py-3" style={{ overflowY: "auto" }}>
-        {[...GROUPS, ...(isAdminUser(keycloak) ? [SETTINGS_GROUP] : [])].map((group) => {
+        {GROUPS.map((group) => {
           const GroupIcon = group.icon;
           return (
             <div key={group.title} className="nav-group flex flex-col" style={{ gap: 2 }}>

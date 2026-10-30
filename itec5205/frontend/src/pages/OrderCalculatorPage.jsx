@@ -456,7 +456,7 @@ export default function OrderCalculatorPage() {
                 ? `${chosen.holdings.length} stocks · targets add up to ${+allocSum.toFixed(2)}%`
                 : plan.targets.length
                 ? `${plan.targets.length} stocks typed by hand · ${+allocSum.toFixed(2)}%`
-                : "Portfolios come from My Portfolios (RL or hand-built)."}
+                : "Portfolios come from the Portfolios page (RL or hand-built)."}
             </span>
           </div>
           <div>

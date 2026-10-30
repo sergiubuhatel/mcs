@@ -100,6 +100,13 @@ COLLECTIONS = {
     "settings": [],
     # Order Calculator plan (targets + accounts): one document, `_key` "default".
     "order_plans": [],
+    # Dashboard (services/activity.py): one document per signed-in user
+    # (`_key` = Keycloak user id), and a log of what each user did.
+    "user_sessions": [],
+    "user_activity": [
+        {"type": "persistent", "fields": ["created_at"], "unique": False},
+        {"type": "persistent", "fields": ["user_id", "kind"], "unique": False},
+    ],
 }
 
 

@@ -199,7 +199,7 @@ export default function PortfoliosPage() {
       <PageHeader
         icon={PieChartIcon}
         color="#3b82f6"
-        title="My portfolios"
+        title="Portfolios"
         description="Saved portfolio allocations: RL-optimized ones from stock pools and workflow runs, and portfolios you built by hand."
       />
       <StatTiles tiles={tiles} />

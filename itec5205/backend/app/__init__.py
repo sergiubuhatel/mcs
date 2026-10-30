@@ -9,7 +9,7 @@ def create_app() -> Flask:
     cors.init_app(app, resources={r"/api/*": {"origins": "*"}})
     socketio.init_app(app)
 
-    from .api import arima, backup, companies, forecasts, signals, data, orders, workflows, pools, portfolios, predictions, rl, settings
+    from .api import activity, arima, backup, companies, forecasts, signals, data, orders, workflows, pools, portfolios, predictions, rl, settings
 
     app.register_blueprint(companies.bp)
     app.register_blueprint(pools.bp)
@@ -24,6 +24,12 @@ def create_app() -> Flask:
     app.register_blueprint(settings.bp)
     app.register_blueprint(orders.bp)
     app.register_blueprint(backup.bp)
+    app.register_blueprint(activity.bp)
+
+    # Dashboard: log every change a signed-in user makes (services/activity.py).
+    from .services.activity import record_request
+
+    app.after_request(record_request)
 
     from . import sockets  # noqa: F401 - registers Socket.IO event handlers
 

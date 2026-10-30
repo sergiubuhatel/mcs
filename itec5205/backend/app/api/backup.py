@@ -7,6 +7,7 @@ from datetime import date
 from celery.result import AsyncResult
 from flask import Blueprint, Response, jsonify, request
 
+from ..auth import require_admin
 from ..db.arango_client import get_db
 from ..services import backup
 from ..tasks.celery_app import celery_app
@@ -22,6 +23,7 @@ def summary():
 
 
 @bp.get("/export")
+@require_admin
 def export_all():
     """The whole database as an arangodump .tar (dumped first, then sent)."""
     try:
@@ -45,6 +47,7 @@ def export_all():
 
 
 @bp.post("/import")
+@require_admin
 def import_all():
     """Multipart `file` = an Export All .tar; restored in the background."""
     upload = request.files.get("file")
@@ -78,6 +81,7 @@ def _busy() -> str | None:
 
 
 @bp.delete("/all")
+@require_admin
 def delete_all():
     """Body `{"confirm": "DELETE"}` -- empties every collection."""
     if (request.get_json(silent=True) or {}).get("confirm") != "DELETE":

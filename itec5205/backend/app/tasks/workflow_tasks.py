@@ -16,6 +16,7 @@ from datetime import date, datetime, timezone
 from celery.result import AsyncResult
 
 from ..db.arango_client import get_db
+from ..extensions import notify_dashboard
 from ..services.horizons import MAX_HORIZON_DAYS
 from ..services.lstm_service import MIN_HISTORY_DAYS
 from ..services.workflow_service import (
@@ -80,6 +81,7 @@ def run_workflow(self, run_id: str):
     def save(**patch):
         col.update({"_key": run_id, **patch})
         run.update(patch)
+        notify_dashboard(force=patch.get("status") not in (None, "running"))  # live on the Dashboard
 
     def check_stop():
         if is_stop_requested(self.request.id):
@@ -106,7 +108,7 @@ def run_workflow(self, run_id: str):
             universe = normalize_universe(data_c.get("universe"))
             wanted = data_c["tickers"] if data_c["scope"] == "specific" else universe_tickers(universe)
             to_import, existing = tickers_to_import(wanted, existing_mode(data_c), data_c["import_history"])
-            skipped = len(wanted) - len(to_import)
+            skipped = max(len(wanted) - len(to_import), 0)  # benchmarks may add a few
             if not to_import:
                 step("data", 1, "Nothing to import: every company is already imported or up to date", status="done", requested=len(wanted), up_to_date=skipped, imported=0, failed=0)
             else:
@@ -114,7 +116,7 @@ def run_workflow(self, run_id: str):
                     tickers=to_import, years=data_c["years"], import_history=data_c["import_history"],
                     import_statistics=data_c["import_statistics"], import_calculated_stats=data_c["import_calculated_stats"],
                     import_earnings=data_c.get("import_earnings", False),
-                    scope=data_c["scope"], source="workflow", universe=universe, skipped=len(wanted) - len(to_import),
+                    scope=data_c["scope"], source="workflow", universe=universe, skipped=skipped,
                     existing=existing,
                 )
                 children.append(imp.id)

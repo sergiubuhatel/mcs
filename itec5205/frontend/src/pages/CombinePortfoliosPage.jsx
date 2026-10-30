@@ -315,7 +315,7 @@ export default function CombinePortfoliosPage() {
             <span className="step-number">3</span>
             <div style={{ minWidth: 0, flex: 1 }}>
               <h3 style={{ margin: 0 }}>{editId ? "Update the portfolio" : "Save as a portfolio"}</h3>
-              <p className="muted" style={{ margin: 0 }}>It appears in My Portfolios with its performance and forecast, and can be chosen in the Order Calculator.</p>
+              <p className="muted" style={{ margin: 0 }}>It appears in Portfolios with its performance and forecast, and can be chosen in the Order Calculator.</p>
             </div>
           </div>
           <div className="order-inputs">

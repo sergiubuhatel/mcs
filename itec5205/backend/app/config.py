@@ -20,3 +20,10 @@ RUSSELL3000_FILE = os.environ.get("RUSSELL3000_FILE", "/data/russell3000.txt")
 RL_MODELS_DIR = os.environ.get("RL_MODELS_DIR", "/data/rl_models")
 
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
+
+# Keycloak (login). Internal URL: the backend reaches Keycloak directly on the
+# compose network; only the realm's public keys are fetched (no admin login).
+KEYCLOAK_ENABLED = os.environ.get("KEYCLOAK_ENABLED", "true").lower() != "false"
+KEYCLOAK_URL = os.environ.get("KEYCLOAK_URL", "http://keycloak:8080/auth")
+KEYCLOAK_REALM = os.environ.get("KEYCLOAK_REALM", "Carleton")
+KEYCLOAK_CLIENT = os.environ.get("KEYCLOAK_CLIENT", "carleton_client")

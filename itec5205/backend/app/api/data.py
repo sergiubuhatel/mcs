@@ -63,11 +63,11 @@ def trigger_import():
         scope=scope,
         source="manual",
         universe=universe if scope == "all" else None,
-        skipped=requested - len(tickers),
+        skipped=max(requested - len(tickers), 0),
         existing=existing,
     )
     return jsonify({"task_id": task.id, "ticker_count": len(tickers), "requested": requested,
-                    "skipped": requested - len(tickers)}), 202
+                    "skipped": max(requested - len(tickers), 0)}), 202
 
 
 @bp.get("/imports")
