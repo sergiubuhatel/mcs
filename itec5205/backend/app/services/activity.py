@@ -347,12 +347,12 @@ def dashboard(limit: int = 100) -> dict:
 
 
 # ------------------------------------------------------------------- overview
-# The Dashboard's top half: totals with 14-day trends, the newest portfolio
-# against equal weights and the S&P 500 / Dow, the latest workflow run and
-# worker health.
+# The Dashboard's top half: totals with 14-day trends, a portfolio against
+# the S&P 500 / the Dow / other portfolios (its own endpoint),
+# the latest workflow run and worker health.
 # Heavier than `dashboard()` (price history), so cached briefly.
 
-BENCHMARK_LABELS = {"portfolio": "Portfolio", "equal": "Equal weight", "SPY": "S&P 500 (SPY)", "DIA": "Dow Jones (DIA)"}
+BENCHMARK_LABELS = {"portfolio": "Portfolio", "SPY": "S&P 500 (SPY)", "DIA": "Dow Jones (DIA)"}
 TREND_DAYS = 14
 HISTORY_DAYS = 2520  # ~10 years of trading days: the chart's longest range
 _OVERVIEW_TTL = 20  # seconds
@@ -375,45 +375,97 @@ def _per_day(collection: str, extra_filter: str = "") -> list[dict]:
     return [{"day": d, "n": rows.get(d, 0)} for d in days]
 
 
-def _latest_portfolio() -> dict | None:
-    """Newest portfolio against the same stocks equally weighted and the
-    market benchmarks (S&P 500 / Dow ETFs) over up to HISTORY_DAYS; the page
-    cuts the range picked and rebases every line to 100 at its start. A
-    holding without prices yet on a day counts as a 0% return that day."""
+_PERF_TTL = 60  # seconds; prices change once a day
+_perf_cache: dict = {}
+
+
+def _get_portfolio(db, key: str | None) -> dict | None:
+    if key and db.collection("portfolios").has(key):
+        p = db.collection("portfolios").get(key)
+        return p if p.get("holdings") else None
+    return None
+
+
+def portfolio_performance(portfolio_id: str | None = None, compare_ids: list[str] = ()) -> dict | None:
+    """A portfolio (default: the newest) against the market benchmarks
+    (S&P 500 / Dow ETFs) and any other portfolios to compare, over up to HISTORY_DAYS. The page cuts the range
+    picked and rebases every line to 100 at its start. A holding without
+    prices yet on a day counts as a 0% return that day."""
     from .portfolio_service import _returns_matrix  # noqa: PLC0415
     from .universes import BENCHMARKS  # noqa: PLC0415
 
-    rows = list(get_db().aql.execute(
-        "FOR p IN portfolios FILTER LENGTH(p.holdings) > 0 SORT p.created_at DESC LIMIT 1 RETURN p"
-    ))
-    if not rows:
-        return None
-    p = rows[0]
-    tickers = [h["ticker"] for h in p["holdings"]]
-    weights = np.array([h["weight"] for h in p["holdings"]], dtype=float)
-    returns = _returns_matrix(list(dict.fromkeys(tickers + list(BENCHMARKS))), lookback_days=HISTORY_DAYS)
+    cache_key = (portfolio_id, tuple(compare_ids))
+    hit = _perf_cache.get(cache_key)
+    if hit and time.monotonic() - hit[0] < _PERF_TTL:
+        return hit[1]
+
+    db = get_db()
+    main = _get_portfolio(db, portfolio_id)
+    if main is None:
+        rows = list(db.aql.execute(
+            "FOR p IN portfolios FILTER LENGTH(p.holdings) > 0 SORT p.created_at DESC LIMIT 1 RETURN p"
+        ))
+        if not rows:
+            return None
+        main = rows[0]
+    others = [o for o in (_get_portfolio(db, k) for k in dict.fromkeys(compare_ids)) if o and o["_key"] != main["_key"]]
+
+    def weights_of(p):
+        return [h["ticker"] for h in p["holdings"]], np.array([h["weight"] for h in p["holdings"]], dtype=float)
+
+    every = [h["ticker"] for p in [main, *others] for h in p["holdings"]]
+    returns = _returns_matrix(list(dict.fromkeys(every + list(BENCHMARKS))), lookback_days=HISTORY_DAYS)
     if returns.empty:
         return None
     returns = returns.fillna(0.0)
-    held = returns.reindex(columns=tickers).fillna(0.0).values
-    daily = {"portfolio": held @ weights, "equal": held.mean(axis=1)}
+
+    def daily_of(p):
+        tickers, weights = weights_of(p)
+        return returns.reindex(columns=tickers).fillna(0.0).values @ weights
+
+    tickers, _ = weights_of(main)
+    daily = {"portfolio": daily_of(main)}
+    labels = dict(BENCHMARK_LABELS)
     for b in BENCHMARKS:  # a benchmark not imported (yet) has no line
         if b in returns.columns and returns[b].abs().sum() > 0:
             daily[b] = returns[b].values
+    for o in others:
+        daily[f"p_{o['_key']}"] = daily_of(o)
+        labels[f"p_{o['_key']}"] = o["name"]
     lines = {key: 100 * np.cumprod(1 + r) for key, r in daily.items()}
-    series = [
-        {"date": str(d)[:10], **{key: round(float(v[i]), 2) for key, v in lines.items()}}
-        for i, d in enumerate(returns.index)
-    ]
-    return {
-        "id": p["_key"],
-        "name": p["name"],
-        "method": p.get("method"),
-        "created_at": p.get("created_at"),
+    data = {
+        "id": main["_key"],
+        "name": main["name"],
+        "method": main.get("method"),
+        "created_at": main.get("created_at"),
         "holdings": len(tickers),
-        "lines": [{"key": key, "label": BENCHMARK_LABELS.get(key, key)} for key in lines],
-        "series": series,
+        "lines": [{"key": key, "label": labels.get(key, key), "compare": key.startswith("p_")} for key in lines],
+        "series": [
+            {"date": str(d)[:10], **{key: round(float(v[i]), 2) for key, v in lines.items()}}
+            for i, d in enumerate(returns.index)
+        ],
     }
+    _perf_cache[cache_key] = (time.monotonic(), data)
+    return data
+
+
+# Per-user Dashboard choices (stored on the user's session document).
+_PREF_KEYS = ("portfolio_id", "compare_ids")
+
+
+def get_preferences(user: dict) -> dict:
+    col = get_db().collection("user_sessions")
+    doc = col.get(user["id"]) if col.has(user["id"]) else None
+    return (doc or {}).get("dashboard") or {}
+
+
+def save_preferences(user: dict, prefs: dict) -> dict:
+    clean = {k: prefs.get(k) for k in _PREF_KEYS}
+    clean["compare_ids"] = [str(k) for k in (clean.get("compare_ids") or [])]
+    col = get_db().collection("user_sessions")
+    if col.has(user["id"]):
+        col.update({"_key": user["id"], "dashboard": clean}, merge=False)
+    return clean
 
 
 def _latest_workflow_run() -> dict | None:
@@ -444,11 +496,6 @@ def overview() -> dict:
     if _overview_cache["data"] is not None and time.monotonic() - _overview_cache["at"] < _OVERVIEW_TTL:
         return _overview_cache["data"]
     db = get_db()
-    try:
-        portfolio = _latest_portfolio()
-    except Exception:
-        log.exception("Dashboard portfolio performance")
-        portfolio = None
     data = {
         "totals": {name: db.collection(name).count() for name in ("companies", "pools", "portfolios", "workflows")},
         "trends": {
@@ -457,7 +504,6 @@ def overview() -> dict:
             "portfolios": _per_day("portfolios"),
             "jobs": _per_day("user_activity", "FILTER d.job != null"),
         },
-        "portfolio": portfolio,
         "workflow_run": _latest_workflow_run(),
         "workers": _workers(),
     }

@@ -1,7 +1,7 @@
 // Home page: who is signed in, what page each user has open, and everything
 // they did -- imports, forecasts, RL, workflows... -- with the live status of
 // the jobs they started, plus totals with 14-day trends, the newest portfolio
-// against equal weights / the S&P 500 / the Dow, and the latest workflow run.
+// against the S&P 500 / the Dow / other portfolios, and the latest workflow run.
 // Data: GET /api/activity/dashboard and /api/activity/overview, refetched
 // whenever the backend pushes `dashboard_changed` over Socket.IO (room
 // "dashboard": sign-ins/outs, page changes, actions, job progress).
@@ -252,11 +252,10 @@ function KpiTile({ icon: Icon, color, label, value, sub, trend, noun }) {
 // the baselines are thinner and dashed so the portfolio stands out.
 const LINE_STYLE = {
   portfolio: { stroke: "#2563eb", strokeWidth: 2.5 },
-  equal: { stroke: "#a855f7", strokeWidth: 2 },
   SPY: { stroke: "#f59e0b", strokeWidth: 2, strokeDasharray: "6 4" },
   DIA: { stroke: "#94a3b8", strokeWidth: 2, strokeDasharray: "6 4" },
 };
-const SHORT_LABEL = { portfolio: "Portfolio", equal: "Equal wt.", SPY: "S&P 500", DIA: "Dow" };
+const SHORT_LABEL = { portfolio: "Portfolio", SPY: "S&P 500", DIA: "Dow" };
 
 // Total return, volatility, Sharpe (no risk-free rate) and max drawdown of a
 // value series, annualized from daily values.
@@ -275,8 +274,123 @@ function seriesStats(values) {
   return { total_return: values[values.length - 1] / values[0] - 1, volatility: vol, sharpe: vol ? (mean * 252) / vol : null, max_drawdown: drawdown };
 }
 
-function PerformanceCard({ portfolio }) {
+// Extra colors for portfolios added to compare (the benchmarks keep theirs).
+const COMPARE_COLORS = ["#10b981", "#ec4899", "#06b6d4", "#84cc16", "#f43f5e", "#eab308", "#a855f7", "#14b8a6", "#f97316", "#0ea5e9"];
+const styleOf = (line, i) => LINE_STYLE[line.key] || { stroke: COMPARE_COLORS[i % COMPARE_COLORS.length], strokeWidth: 1.8 };
+const shortName = (name, n = 14) => (name.length > n ? `${name.slice(0, n - 1)}…` : name);
+const portfolioLabel = (p) => `${p.name} · ${new Date(p.created_at).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}`;
+
+// Picks the portfolio shown (default: the newest) and the portfolios compared
+// with it; the choice is saved for the signed-in user and restored next time.
+function PerformanceCard() {
+  const [portfolios, setPortfolios] = useState([]);
+  const [selection, setSelection] = useState(null); // {portfolio_id, compare_ids}
+  const [portfolio, setPortfolio] = useState(undefined); // undefined = loading
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    apiClient.get("/api/portfolios").then((r) => setPortfolios(r.data.portfolios || [])).catch(() => {});
+    apiClient
+      .get("/api/activity/preferences")
+      .then((r) => setSelection({ portfolio_id: null, compare_ids: [], ...r.data.preferences }))
+      .catch(() => setSelection({ portfolio_id: null, compare_ids: [] }));
+  }, []);
+
+  useEffect(() => {
+    if (!selection) return undefined;
+    let alive = true;
+    setError(null);
+    apiClient
+      .get("/api/activity/performance", {
+        params: { portfolio_id: selection.portfolio_id || undefined, compare: selection.compare_ids.join(",") || undefined },
+      })
+      .then((r) => alive && setPortfolio(r.data.portfolio))
+      .catch((e) => alive && setError(e.response?.data?.error || e.message));
+    return () => {
+      alive = false;
+    };
+  }, [selection]);
+
+  const choose = (patch) => {
+    const next = { ...selection, ...patch };
+    next.compare_ids = next.compare_ids.filter((k) => k !== next.portfolio_id);
+    setSelection(next);
+    apiClient.put("/api/activity/preferences", next).catch(() => {}); // remembered for next time
+  };
+
+  const sorted = useMemo(() => [...portfolios].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))), [portfolios]);
+  const shownId = portfolio?.id || selection?.portfolio_id;
+  const addable = sorted.filter((p) => p._key !== shownId && !selection?.compare_ids.includes(p._key));
+  const byId = Object.fromEntries(portfolios.map((p) => [p._key, p]));
+
+  const picker = selection && sorted.length > 0 && (
+    <div className="perf-picker">
+      <label className="perf-picker-main">
+        <span className="muted">Portfolio</span>
+        <select value={shownId || ""} onChange={(e) => choose({ portfolio_id: e.target.value })} title={portfolio?.name}>
+          {sorted.map((p) => (
+            <option key={p._key} value={p._key}>
+              {portfolioLabel(p)}
+            </option>
+          ))}
+        </select>
+        {shownId && (
+          <Link to={`/portfolios/${shownId}`} className="btn secondary btn-sm open-portfolio" title="Open this portfolio: holdings, allocation, forecast">
+            Open portfolio ↗
+          </Link>
+        )}
+      </label>
+      <div className="perf-compare">
+        <span className="muted">Compare with</span>
+        {selection.compare_ids.map((k, i) => (
+          <span key={k} className="compare-chip" style={{ borderColor: COMPARE_COLORS[i % COMPARE_COLORS.length] }} title={byId[k]?.name || k}>
+            <span className="compare-dot" style={{ background: COMPARE_COLORS[i % COMPARE_COLORS.length] }} />
+            {byId[k] ? (
+              <Link to={`/portfolios/${k}`} className="compare-link" title={`Open ${byId[k].name}`}>
+                {shortName(byId[k].name, 28)} <span className="compare-open">↗</span>
+              </Link>
+            ) : (
+              "Deleted portfolio"
+            )}
+            <button onClick={() => choose({ compare_ids: selection.compare_ids.filter((x) => x !== k) })} aria-label="Remove from comparison" title="Remove">
+              ×
+            </button>
+          </span>
+        ))}
+        {addable.length > 0 && (
+          <select
+            className="compare-add"
+            value=""
+            onChange={(e) => e.target.value && choose({ compare_ids: [...selection.compare_ids, e.target.value] })}
+            title="Add another portfolio to the chart"
+          >
+            <option value="">+ Add portfolio…</option>
+            {addable.map((p) => (
+              <option key={p._key} value={p._key}>
+                {portfolioLabel(p)}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+    </div>
+  );
+
+  return <PerformanceView portfolio={portfolio} picker={picker} error={error} />;
+}
+
+// Where a chart line drills through to: a portfolio's page, or the
+// benchmark ETF's company page.
+function lineHref(key, portfolio) {
+  if (key === "portfolio") return `/portfolios/${portfolio.id}`;
+  if (key.startsWith("p_")) return `/portfolios/${key.slice(2)}`;
+  return `/companies/${encodeURIComponent(key)}`;
+}
+
+function PerformanceView({ portfolio, picker, error }) {
+  const navigate = useNavigate();
   const [range, setRange] = useState("1Y");
+  const [hovered, setHovered] = useState(null); // line key highlighted from the legend / table
   // The range picked, every line rebased to 100 on its first day.
   const { series, stats } = useMemo(() => {
     if (!portfolio) return { series: [], stats: {} };
@@ -289,11 +403,19 @@ function PerformanceCard({ portfolio }) {
   if (!portfolio) {
     return (
       <div className="card">
-        <CardHeader icon={TrendChartIcon} color="#2563eb" title="Portfolio performance" subtitle="No portfolio yet." />
+        <CardHeader
+          icon={TrendChartIcon}
+          color="#2563eb"
+          title="Portfolio performance"
+          subtitle={error ? `Could not load: ${error}` : portfolio === null ? "No portfolio yet." : "Loading…"}
+        />
+        {picker}
       </div>
     );
   }
   const { lines } = portfolio;
+  let compareIndex = 0;
+  const styled = lines.map((l) => ({ ...l, style: styleOf(l, l.compare ? compareIndex++ : 0) }));
   const rows = [
     ["Total return", "total_return", (v) => fmtPct(v, true), true],
     ["Volatility", "volatility", (v) => fmtPct(v), false],
@@ -310,8 +432,8 @@ function PerformanceCard({ portfolio }) {
         title={`Portfolio performance – ${rangeTitle(range)}`}
         subtitle={
           <>
-            Newest portfolio, <Link to={`/portfolios/${portfolio.id}`}>{portfolio.name}</Link> ({portfolio.holdings} holdings), vs equal
-            weight, the S&amp;P 500 (SPY) and the Dow (DIA), all rebased to 100.
+            <Link to={`/portfolios/${portfolio.id}`}>{portfolio.name}</Link> ({portfolio.holdings} holdings) vs the S&amp;P 500 (SPY), the
+            Dow (DIA){lines.some((l) => l.compare) ? " and the portfolios added" : ""}, all rebased to 100.
           </>
         }
         actions={
@@ -322,6 +444,7 @@ function PerformanceCard({ portfolio }) {
           )
         }
       />
+      {picker}
       <div style={{ marginBottom: 8 }}>
         <RangePicker section="general" value={range} onChange={setRange} />
       </div>
@@ -349,14 +472,31 @@ function PerformanceCard({ portfolio }) {
                 label={{ value: "Value (rebased to 100)", angle: -90, position: "insideLeft", offset: 6, style: { fontSize: 11, fill: "var(--color-text-secondary)", textAnchor: "middle" } }}
               />
               <Tooltip {...tooltipProps} formatter={(v, name) => [v == null ? "–" : Number(v).toFixed(2), name]} />
-              <Legend wrapperStyle={{ fontSize: "0.78rem" }} />
-              {lines.map(({ key, label }) =>
-                key === "portfolio" ? (
-                  <Area key={key} type="monotone" dataKey={key} name={label} fill="url(#perf-area)" dot={false} isAnimationActive={false} {...LINE_STYLE[key]} />
+              <Legend
+                wrapperStyle={{ fontSize: "0.78rem", cursor: "pointer" }}
+                onClick={(e) => e?.dataKey && navigate(lineHref(e.dataKey, portfolio))}
+                onMouseEnter={(e) => setHovered(e?.dataKey || null)}
+                onMouseLeave={() => setHovered(null)}
+              />
+              {styled.map(({ key, label, style }) => {
+                const common = {
+                  type: "monotone",
+                  dataKey: key,
+                  name: label,
+                  dot: false,
+                  isAnimationActive: false,
+                  ...style,
+                  strokeOpacity: hovered && hovered !== key ? 0.15 : 1,
+                  strokeWidth: hovered === key ? style.strokeWidth + 1.5 : style.strokeWidth,
+                  style: { cursor: "pointer" },
+                  onClick: () => navigate(lineHref(key, portfolio)),
+                };
+                return key === "portfolio" ? (
+                  <Area key={key} {...common} fill="url(#perf-area)" fillOpacity={hovered && hovered !== key ? 0.2 : 1} />
                 ) : (
-                  <Line key={key} type="monotone" dataKey={key} name={label} dot={false} isAnimationActive={false} {...(LINE_STYLE[key] || {})} />
-                )
-              )}
+                  <Line key={key} {...common} />
+                );
+              })}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -365,8 +505,17 @@ function PerformanceCard({ portfolio }) {
             <thead>
               <tr>
                 <th style={{ cursor: "default" }}>Metric</th>
-                {lines.map(({ key, label }) => (
-                  <th key={key} style={{ cursor: "default", color: LINE_STYLE[key]?.stroke }} title={label}>{SHORT_LABEL[key] || key}</th>
+                {styled.map(({ key, label, style }) => (
+                  <th
+                    key={key}
+                    style={{ cursor: "default", color: style.stroke }}
+                    onMouseEnter={() => setHovered(key)}
+                    onMouseLeave={() => setHovered(null)}
+                  >
+                    <Link to={lineHref(key, portfolio)} className="perf-col-link" style={{ color: style.stroke }} title={`Open ${label}`}>
+                      {SHORT_LABEL[key] || shortName(label)}
+                    </Link>
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -374,7 +523,7 @@ function PerformanceCard({ portfolio }) {
               {rows.map(([label, stat, fmt, colored]) => (
                 <tr key={stat}>
                   <td>{label}</td>
-                  {lines.map(({ key }) => (
+                  {styled.map(({ key }) => (
                     <td key={key} style={{ fontWeight: key === "portfolio" ? 700 : undefined, color: colored ? signColor(stats[key]?.[stat]) : undefined }}>
                       {fmt(stats[key]?.[stat])}
                     </td>
@@ -589,7 +738,7 @@ export default function DashboardPage() {
 
       {overview && (
         <div className="dash-row">
-          <PerformanceCard portfolio={overview.portfolio} />
+          <PerformanceCard />
           <WorkflowCard run={overview.workflow_run} companies={totals.companies} />
         </div>
       )}

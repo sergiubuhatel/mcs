@@ -56,3 +56,25 @@ def overview():
 def running():
     """Queued/running jobs with their user and progress (bottom bar)."""
     return jsonify({"jobs": activity.running_jobs()})
+
+
+@bp.get("/performance")
+def performance():
+    """`?portfolio_id=` (default: the newest) `&compare=id1,id2,...`."""
+    compare = [k for k in (request.args.get("compare") or "").split(",") if k]
+    try:
+        data = activity.portfolio_performance(request.args.get("portfolio_id") or None, compare)
+    except Exception as exc:  # e.g. price data missing
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"portfolio": data})
+
+
+@bp.route("/preferences", methods=["GET", "PUT"])
+def preferences():
+    """The signed-in user's Dashboard choices: {portfolio_id, compare_ids}."""
+    user = current_user()
+    if user is None:
+        return jsonify({"preferences": {}})
+    if request.method == "PUT":
+        return jsonify({"preferences": activity.save_preferences(user, request.get_json(silent=True) or {})})
+    return jsonify({"preferences": activity.get_preferences(user)})
