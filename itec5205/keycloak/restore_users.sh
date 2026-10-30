@@ -13,11 +13,11 @@
 #
 # Options (also settable as environment variables):
 #   -r  KC_REALM        Realm name                (default: master)
-#   -c  KC_CONTAINER    Container name            (default: keycloak-https)
+#   -c  KC_CONTAINER    Container name            (default: itec5205-keycloak)
 #   -i  KC_IMAGE        Keycloak image            (default: quay.io/keycloak/keycloak:26.2.3)
-#   -n  KC_NETWORK      Docker network name       (default: keycloak_default)
+#   -n  KC_NETWORK      Docker network name       (default: itec5205_default)
 #   -D  KC_DB           Database type             (default: postgres)
-#   -U  KC_DB_URL       DB JDBC URL               (default: jdbc:postgresql://postgres:5432/keycloak)
+#   -U  KC_DB_URL       DB JDBC URL               (default: jdbc:postgresql://keycloak-db:5432/keycloak)
 #   -u  KC_DB_USER      DB username               (default: keycloak)
 #   -p  KC_DB_PASSWORD  DB password               (default: password)
 #
@@ -36,13 +36,13 @@ shift
 
 # ---------- defaults ---------------------------------------------------------
 KC_REALM="${KC_REALM:-master}"
-KC_CONTAINER="${KC_CONTAINER:-keycloak-https}"
+KC_CONTAINER="${KC_CONTAINER:-itec5205-keycloak}"
 KC_IMAGE="${KC_IMAGE:-quay.io/keycloak/keycloak:26.2.3}"
-KC_NETWORK="${KC_NETWORK:-keycloak_default}"
+KC_NETWORK="${KC_NETWORK:-itec5205_default}"
 KC_DB="${KC_DB:-postgres}"
-KC_DB_URL="${KC_DB_URL:-jdbc:postgresql://postgres:5432/keycloak}"
+KC_DB_URL="${KC_DB_URL:-jdbc:postgresql://keycloak-db:5432/keycloak}"
 KC_DB_USER="${KC_DB_USER:-keycloak}"
-KC_DB_PASSWORD="${KC_DB_PASSWORD:-password}"
+KC_DB_PASSWORD="${KC_DB_PASSWORD:-keycloak}"
 
 # ---------- argument parsing -------------------------------------------------
 while getopts "r:c:i:n:D:U:u:p:h" opt; do

@@ -23,3 +23,6 @@ stage5
 # Export All database dumps (Market Data bottom bar) -- never commit
 export/
 *.tar
+
+# Keycloak backups (password hashes + realm private keys) -- never commit
+keycloak/backups/
