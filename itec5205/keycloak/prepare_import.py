@@ -18,19 +18,26 @@ everywhere by `Carleton`:
     master user `<old>_admin` -> `carleton_admin`, the default role, and the
     `<old>-realm` admin client in master;
   * every realm uses the `carleton` login theme (Carleton University logo).
-Only the application users in KEEP_USERS are imported (with their password
-hashes); all other settings are kept as they are.
+When the backup is of another realm (the original `dta` export), only the
+application users in KEEP_USERS are imported; a backup that is already the
+Carleton realm (saved by backup_keycloak.sh) keeps every user. Users keep
+their password hashes; all other settings are kept as they are.
+
+With several backups of a realm, the newest (by the YYYYmmdd_HHMMSS in the
+file name) is used.
 """
 
 import glob
 import json
 import os
+import re
 import sys
 
 NEW_REALM = "Carleton"
 NEW_PREFIX = "carleton"
 LOGIN_THEME = "carleton"
-# Application users to keep (master keeps its Keycloak admin accounts).
+# Application users kept when converting another realm's backup (master
+# keeps its Keycloak admin accounts).
 KEEP_USERS = {"sbuhatel"}
 
 
@@ -86,7 +93,13 @@ def main():
         sys.exit(__doc__)
     backup_dir, out_dir = sys.argv[1], sys.argv[2]
 
-    files = sorted(glob.glob(os.path.join(backup_dir, "*.json")))
+    # Oldest first by the timestamp in the name (not the name itself:
+    # "..._Carleton_..." would sort before "..._dta_...").
+    def stamp(path):
+        m = re.search(r"(\d{8}_\d{6})", os.path.basename(path))
+        return m.group(1) if m else ""
+
+    files = sorted(glob.glob(os.path.join(backup_dir, "*.json")), key=stamp)
     realms = [load(f) for f in files]
     master = [r for r in realms if r["realm"] == "master"]
     apps = [r for r in realms if r["realm"] != "master"]
@@ -96,10 +109,11 @@ def main():
     master, app = master[-1], apps[-1]
 
     rename = make_renamer(app["realm"])
-    app["users"] = [
-        u for u in app.get("users", [])
-        if u["username"] in KEEP_USERS or u.get("serviceAccountClientId")
-    ]
+    if app["realm"] != NEW_REALM:
+        app["users"] = [
+            u for u in app.get("users", [])
+            if u["username"] in KEEP_USERS or u.get("serviceAccountClientId")
+        ]
     os.makedirs(out_dir, exist_ok=True)
     save(rename(master), os.path.join(out_dir, "master-realm.json"))
     save(rename(app), os.path.join(out_dir, f"{NEW_REALM}-realm.json"))
