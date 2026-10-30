@@ -198,14 +198,14 @@ async function exportAll() {
 
 // Whole-database actions. Job progress (imports, training) stays on its own
 // page; this bar holds only these buttons and is never covered.
-// Admins and installers only; nobody else sees the bar.
+// The buttons are for admins and installers only; others see an empty bar.
 export default function BottomBar() {
   const { keycloak } = useAuth();
   const [importFile, setImportFile] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const picker = useRef(null);
 
-  if (!isAdminUser(keycloak)) return null;
+  if (!isAdminUser(keycloak)) return <div className="bottom-bar" />;
 
   return (
     <div className="bottom-bar">
