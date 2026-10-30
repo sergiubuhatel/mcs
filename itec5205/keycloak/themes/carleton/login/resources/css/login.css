@@ -1,0 +1,308 @@
+/* ============================================================
+   Carleton University — Keycloak Login Theme (ITEC 5205)
+   App dark palette:
+     bg-primary   #2d3748
+     bg-secondary #283141
+     bg-tertiary  #232a36
+     blue-500     #1868ff
+     blue-600     #1450d0
+     text-primary #f7fafc
+   ============================================================ */
+
+/* ----------------------------------------------------------
+   Page background
+   ---------------------------------------------------------- */
+html,
+body {
+  background-color: #2d3748 !important;
+  background-image: none !important;
+  color: #f7fafc !important;
+  font-family: Inter, system-ui, Arial, sans-serif !important;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+/* Dot-grid texture */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(100,116,139,0.4) 1px, transparent 1px);
+  background-size: 26px 26px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ----------------------------------------------------------
+   Page wrapper — center card in viewport
+   ---------------------------------------------------------- */
+.login-pf-page {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  min-height: 100vh !important;
+  background: transparent !important;
+  padding-top: 4rem !important;
+  padding-left: 1.5rem !important;
+  padding-right: 1.5rem !important;
+  padding-bottom: 1.5rem !important;
+  box-sizing: border-box !important;
+}
+
+/* ----------------------------------------------------------
+   Hide realm name
+   ---------------------------------------------------------- */
+#kc-header,
+#kc-header-wrapper,
+.login-pf-page-header {
+  display: none !important;
+}
+
+/* ----------------------------------------------------------
+   Logo above card
+   ---------------------------------------------------------- */
+.login-pf-page::before {
+  content: "";
+  display: block;
+  width: 240px;
+  height: 64px;
+  background: url(../img/logo.svg) center / contain no-repeat;
+  margin-bottom: 1.25rem;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* ----------------------------------------------------------
+   Login card
+   ---------------------------------------------------------- */
+.card-pf {
+  width: 420px !important;
+  max-width: 420px !important;
+  min-width: 0 !important;
+  flex-shrink: 0 !important;
+  background-color: #283141 !important;
+  border: 1px solid #3d4a5c !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6) !important;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+  padding: 2rem !important;
+  box-sizing: border-box !important;
+}
+
+/* Blue top accent bar */
+.card-pf::before {
+  content: "";
+  display: block;
+  height: 3px;
+  background: linear-gradient(90deg, #1868ff, #5590ff);
+  position: absolute;
+  top: 0; left: 0; right: 0;
+}
+
+/* ----------------------------------------------------------
+   Card header / title
+   ---------------------------------------------------------- */
+.login-pf-header {
+  background: transparent !important;
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+#kc-page-title {
+  color: #f7fafc !important;
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+/* ----------------------------------------------------------
+   Form labels
+   ---------------------------------------------------------- */
+label,
+.login-pf label {
+  color: #a0aec0 !important;
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+/* ----------------------------------------------------------
+   Inputs
+   ---------------------------------------------------------- */
+input[type="text"],
+input[type="password"],
+input[type="email"] {
+  background-color: #232a36 !important;
+  border: 1px solid #3d4a5c !important;
+  border-radius: 7px !important;
+  color: #f7fafc !important;
+  caret-color: #5590ff;
+  color-scheme: dark;
+  width: 100% !important;
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.95rem !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus {
+  border-color: #1868ff !important;
+  box-shadow: 0 0 0 3px rgba(24,104,255,0.25) !important;
+}
+
+input::placeholder {
+  color: #4a5568 !important;
+}
+
+/* Password field + toggle wrapper */
+.pf-c-input-group,
+.kc-input-group {
+  background-color: #232a36 !important;
+  border: 1px solid #3d4a5c !important;
+  border-radius: 7px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.pf-c-input-group input[type="password"],
+.kc-input-group input[type="password"] {
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 7px 0 0 7px !important;
+}
+
+.pf-c-input-group button,
+.kc-input-group button {
+  background: transparent !important;
+  border: none !important;
+  color: #718096 !important;
+  padding: 0 0.6rem !important;
+  cursor: pointer;
+}
+
+.pf-c-input-group button:hover,
+.kc-input-group button:hover {
+  color: #a0aec0 !important;
+}
+
+/* Form group spacing */
+.form-group {
+  margin-bottom: 1rem !important;
+}
+
+/* ----------------------------------------------------------
+   Remember me checkbox
+   ---------------------------------------------------------- */
+.login-pf-settings label {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  font-size: 0.875rem !important;
+  color: #a0aec0 !important;
+}
+
+input[type="checkbox"] {
+  accent-color: #1868ff;
+}
+
+/* ----------------------------------------------------------
+   Sign In button
+   ---------------------------------------------------------- */
+#kc-login,
+input[type="submit"]#kc-login {
+  background-color: #1868ff !important;
+  border: none !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+  padding: 0.6rem 1.25rem !important;
+  width: 100% !important;
+  cursor: pointer;
+  transition: background-color 0.15s, box-shadow 0.15s;
+}
+
+#kc-login:hover {
+  background-color: #1450d0 !important;
+  box-shadow: 0 4px 14px rgba(24,104,255,0.4) !important;
+}
+
+#kc-login:active {
+  background-color: #1040c0 !important;
+}
+
+/* ----------------------------------------------------------
+   Links
+   ---------------------------------------------------------- */
+a {
+  color: #5590ff !important;
+  text-decoration: none !important;
+}
+
+a:hover {
+  color: #1868ff !important;
+  text-decoration: underline !important;
+}
+
+/* ----------------------------------------------------------
+   Footer / info section
+   ---------------------------------------------------------- */
+#kc-info,
+#kc-registration {
+  color: #718096 !important;
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 0.875rem;
+}
+
+/* ----------------------------------------------------------
+   Alerts / errors
+   ---------------------------------------------------------- */
+.alert-error,
+#kc-error-message,
+.kc-feedback-text {
+  background-color: rgba(239,68,68,0.15) !important;
+  border: 1px solid rgba(239,68,68,0.4) !important;
+  border-radius: 8px !important;
+  color: #fca5a5 !important;
+  padding: 0.75rem 1rem !important;
+  margin-bottom: 1rem !important;
+}
+
+.alert-warning {
+  background-color: rgba(234,179,8,0.12) !important;
+  border: 1px solid rgba(234,179,8,0.4) !important;
+  border-radius: 8px !important;
+  color: #fde68a !important;
+  padding: 0.75rem 1rem !important;
+  margin-bottom: 1rem !important;
+}
+
+.alert-success {
+  background-color: rgba(34,197,94,0.12) !important;
+  border: 1px solid rgba(34,197,94,0.4) !important;
+  border-radius: 8px !important;
+  color: #86efac !important;
+  padding: 0.75rem 1rem !important;
+  margin-bottom: 1rem !important;
+}
+
+/* ----------------------------------------------------------
+   Scrollbar
+   ---------------------------------------------------------- */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #232a36; }
+::-webkit-scrollbar-thumb { background: #3d4a5c; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #718096; }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { apiClient } from "../api/client";
+import { isAdminUser, useAuth } from "../auth/Authorization";
 import CarletonLockup from "./CarletonLockup";
 import CarletonCrest from "./CarletonLogo";
 import {
@@ -154,6 +155,7 @@ function NavItem({ item, collapsed, counts }) {
 
 export default function Sidebar({ collapsed }) {
   const counts = { runningWorkflows: useRunningWorkflows() };
+  const { keycloak } = useAuth();
   return (
     <aside
       className="flex h-full flex-col border-r shrink-0 transition-[width]"
@@ -174,7 +176,7 @@ export default function Sidebar({ collapsed }) {
       </div>
 
       <nav className="flex min-h-0 flex-col px-3 py-3" style={{ overflowY: "auto" }}>
-        {[...GROUPS, SETTINGS_GROUP].map((group) => {
+        {[...GROUPS, ...(isAdminUser(keycloak) ? [SETTINGS_GROUP] : [])].map((group) => {
           const GroupIcon = group.icon;
           return (
             <div key={group.title} className="nav-group flex flex-col" style={{ gap: 2 }}>

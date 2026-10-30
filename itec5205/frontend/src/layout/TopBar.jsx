@@ -1,7 +1,10 @@
+import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { NavLink } from "react-router-dom";
-import { GearIcon } from "./icons";
+import { ChevronDownIcon, GearIcon, PowerIcon, UserIcon } from "./icons";
 import { toggleDarkMode } from "../features/theme/themeSlice";
+import { USE_KEYCLOAK } from "../auth/keycloak";
+import { isAdminUser, roleLabel, useAuth } from "../auth/Authorization";
 
 function SunIcon() {
   return (
@@ -38,9 +41,50 @@ function BarsIcon() {
   );
 }
 
+// Logged-in user; the dropdown shows username + role and Logout.
+function UserMenu() {
+  const { keycloak } = useAuth();
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const profile = keycloak.tokenParsed || {};
+  const username = profile.preferred_username || "—";
+  const displayName = profile.name || username;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onClickOutside = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="user-menu">
+      <button className="theme-toggle" onClick={() => setOpen((o) => !o)} title="Signed-in user" aria-expanded={open}>
+        <span className="theme-toggle-icon"><UserIcon width={18} height={18} /></span>
+        {displayName}
+        <ChevronDownIcon style={{ transform: open ? "rotate(180deg)" : "none" }} />
+      </button>
+      {open && (
+        <div className="user-menu-panel">
+          <div className="user-menu-info">
+            <div>Username: <span>{username}</span></div>
+            <div>Role: <span>{roleLabel(keycloak)}</span></div>
+          </div>
+          <button className="user-menu-logout" onClick={() => keycloak.logout({ redirectUri: window.location.origin })}>
+            <PowerIcon /> Logout
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TopBar({ sidebarCollapsed, onToggleSidebar }) {
   const dispatch = useDispatch();
   const darkMode = useSelector((s) => s.theme.darkMode);
+  const { keycloak } = useAuth();
 
   return (
     <header
@@ -64,10 +108,12 @@ export default function TopBar({ sidebarCollapsed, onToggleSidebar }) {
       </div>
       </div>
       <div className="flex shrink-0 items-center gap-3">
+      {isAdminUser(keycloak) && (
       <NavLink to="/settings" className={({ isActive }) => `theme-toggle ${isActive ? "active" : ""}`} title="Initial values for every page">
         <span className="theme-toggle-icon"><GearIcon width={18} height={18} /></span>
         Settings
       </NavLink>
+      )}
       <button
         className="theme-toggle"
         onClick={() => dispatch(toggleDarkMode())}
@@ -76,6 +122,7 @@ export default function TopBar({ sidebarCollapsed, onToggleSidebar }) {
         <span className={darkMode ? "theme-toggle-icon sun" : "theme-toggle-icon moon"}>{darkMode ? <SunIcon /> : <MoonIcon />}</span>
         {darkMode ? "Light Mode" : "Dark Mode"}
       </button>
+      {USE_KEYCLOAK && <UserMenu />}
       </div>
     </header>
   );

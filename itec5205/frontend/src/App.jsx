@@ -23,6 +23,7 @@ import ImportPortfolioPage from "./pages/ImportPortfolioPage";
 import CombinePortfoliosPage from "./pages/CombinePortfoliosPage";
 import LoadingSpinner from "./components/LoadingSpinner";
 import { loadSettings } from "./features/settings/settings";
+import { RequireAdminUser } from "./auth/Authorization";
 
 export default function App() {
   const darkMode = useSelector((s) => s.theme.darkMode);
@@ -61,7 +62,7 @@ export default function App() {
             <Route path="/prediction" element={<PredictionPage />} />
             <Route path="/companies/:ticker" element={<CompanyDetailPage />} />
             <Route path="/portfolios/:id" element={<PortfolioDetailPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings" element={<RequireAdminUser><SettingsPage /></RequireAdminUser>} />
             <Route path="/orders" element={<OrderCalculatorPage />} />
             <Route path="/import-portfolio" element={<ImportPortfolioPage />} />
             <Route path="/combine-portfolios" element={<CombinePortfoliosPage />} />

@@ -123,11 +123,81 @@ services:
       backend:
         condition: service_started
 
+  # ---- Keycloak (login) -------------------------------------------------
+  # Served by the frontend nginx under /auth, so the same URL works locally
+  # (http://localhost:8080/auth) and through the tunnel; admin console at
+  # /auth/admin. Realms: master (Keycloak admins) and Carleton (app users).
+  keycloak-db:
+    image: postgres:15
+    container_name: itec5205-keycloak-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
+    volumes:
+      - keycloak_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Converts keycloak/backup_initial_settings into import files (renames the
+  # realm to Carleton, sets the Carleton login theme), then exits. Keycloak
+  # imports them only into an empty database (existing realms are skipped).
+  keycloak-import:
+    image: itec5205-backend
+    pull_policy: never
+    container_name: itec5205-keycloak-import
+    restart: "no"
+    command: python /keycloak/prepare_import.py /keycloak/backup_initial_settings /import
+    volumes:
+      - ./keycloak:/keycloak:ro
+      - keycloak_import:/import
+    depends_on:
+      backend:
+        condition: service_started
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2.3
+    container_name: itec5205-keycloak
+    restart: unless-stopped
+    command: start --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /auth
+      # Hostname comes from the request (localhost:8080 or the tunnel host);
+      # nginx passes X-Forwarded-Proto/Host so tunnel URLs are https.
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      # Single node: no cluster discovery (it waits ~20 s for stale nodes).
+      KC_CACHE: local
+      # No KC_BOOTSTRAP_ADMIN_*: the imported master realm already has its
+      # admins, and a second "admin" makes the first start abort.
+    ports:
+      - "9090:8080"
+    volumes:
+      - keycloak_import:/opt/keycloak/data/import:ro
+      - ./keycloak/themes:/opt/keycloak/themes:ro
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+      keycloak-import:
+        condition: service_completed_successfully
+
   frontend:
     build: ./frontend
     container_name: itec5205-frontend
     restart: unless-stopped
     depends_on:
+      keycloak:
+        condition: service_started
       backend:
         condition: service_started
         # Recreating backend changes its IP; restarting frontend makes nginx
@@ -163,3 +233,5 @@ services:
 volumes:
   redis_data:
   rl_models:
+  keycloak_db:
+  keycloak_import:

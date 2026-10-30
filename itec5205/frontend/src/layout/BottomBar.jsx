@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { apiClient } from "../api/client";
 import Modal from "../components/Modal";
+import { isAdminUser, useAuth } from "../auth/Authorization";
 import { DownloadIcon, TrashIcon, UploadIcon } from "./icons";
 
 const fmtInt = (n) => (n == null ? "–" : Number(n).toLocaleString());
@@ -197,10 +198,14 @@ async function exportAll() {
 
 // Whole-database actions. Job progress (imports, training) stays on its own
 // page; this bar holds only these buttons and is never covered.
+// Admins and installers only; nobody else sees the bar.
 export default function BottomBar() {
+  const { keycloak } = useAuth();
   const [importFile, setImportFile] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const picker = useRef(null);
+
+  if (!isAdminUser(keycloak)) return null;
 
   return (
     <div className="bottom-bar">

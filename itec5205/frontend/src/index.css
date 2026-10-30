@@ -547,6 +547,24 @@ a.theme-toggle .theme-toggle-icon { color: var(--color-text-secondary); }
 a.theme-toggle.active { border-color: var(--btn-accent); color: var(--btn-accent); }
 a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 
+/* Logged-in user (top bar, right) + its dropdown: username, role, logout. */
+.user-menu { position: relative; }
+.user-menu .theme-toggle-icon { color: var(--color-text-secondary); }
+.user-menu-panel {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; min-width: 220px;
+  background: var(--color-bg-secondary); border: 1px solid var(--color-divider); border-radius: 9px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); overflow: hidden; font-size: 0.85rem;
+}
+.user-menu-info { padding: 10px 14px; background: var(--color-bg-tertiary); border-bottom: 1px solid var(--color-divider); color: var(--color-text-secondary); }
+.user-menu-info div + div { margin-top: 4px; }
+.user-menu-info span { color: var(--color-text-primary); }
+.user-menu-logout {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 14px; text-align: left;
+  background: transparent; border: none; cursor: pointer; color: var(--color-text-primary);
+}
+.user-menu-logout:hover { background: var(--color-bg-tertiary); }
+.user-menu-logout svg { color: #dc2626; }
+
 /* Settings layout v2: fixed 3 x 2 grid, cards in a row share one height,
    compact rows (user suggestion screenshot 2026-10-11). */
 .settings-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
