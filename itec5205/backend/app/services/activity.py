@@ -11,6 +11,7 @@
 """
 
 import logging
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -515,16 +516,26 @@ def overview() -> dict:
 # The bottom bar (every page, every user) shows these with their progress, and
 # a user can't start an import / forecast while someone else's is running.
 
-_RUNNING_TTL = 1.5  # seconds; every open page refetches on each progress ping
+_RUNNING_TTL = 3  # seconds; every open page refetches on each progress ping
+_running_lock = threading.Lock()
 _running_cache: dict = {"at": 0.0, "data": None}
 _RUNNING_FIELDS = ("_key", "kind", "action", "details", "user_id", "username", "name", "created_at", "status", "percent")
 VERBS = {"import": "importing data", "forecast": "running forecasts", "rl": "building an RL portfolio", "workflow": "running a workflow"}
 
 
 def running_jobs() -> list[dict]:
-    """Jobs started in the last day that are queued or running, newest first."""
+    """Jobs started in the last day that are queued or running, newest first.
+    Every open page asks after each progress ping: one request computes, the
+    others wait for it and share the result (no stampede on the request threads)."""
     if _running_cache["data"] is not None and time.monotonic() - _running_cache["at"] < _RUNNING_TTL:
         return _running_cache["data"]
+    with _running_lock:
+        if _running_cache["data"] is not None and time.monotonic() - _running_cache["at"] < _RUNNING_TTL:
+            return _running_cache["data"]
+        return _compute_running()
+
+
+def _compute_running() -> list[dict]:
     docs = get_db().aql.execute(
         "FOR a IN user_activity FILTER a.job != null AND a.final_status == null AND a.created_at >= @since "
         "SORT a.created_at DESC RETURN a",

@@ -8,10 +8,11 @@ their states on read, and the wall-clock duration is stored when the last
 task finishes (RQ5 throughput).
 """
 
+import threading
+import time
 import uuid
 from datetime import datetime, timezone
 
-from celery.result import AsyncResult
 from flask import Blueprint, jsonify, request
 
 from ..db.arango_client import get_db
@@ -24,6 +25,7 @@ from ..tasks.arima_tasks import train_arima_prediction
 from ..tasks.celery_app import celery_app
 from ..tasks.predict_tasks import train_lstm_prediction
 from ..tasks.stop_flags import request_stop
+from ..tasks.task_states import task_states
 
 bp = Blueprint("forecasts", __name__, url_prefix="/api/forecasts")
 
@@ -89,7 +91,30 @@ def start_batch():
     return jsonify(_status(run)), 202
 
 
+_STATUS_TTL = 3  # seconds: every open page polls a running run
+_status_cache: dict = {}
+_status_lock = threading.Lock()
+
+
 def _status(run: dict) -> dict:
+    """Progress of a run. While it runs, the answer is shared for a few
+    seconds (the bottom bar, Dashboard and forecast pages all poll it)."""
+    if run.get("finished_at"):
+        return _compute_status(run)
+    key = run["_key"]
+    hit = _status_cache.get(key)
+    if hit and time.monotonic() - hit[0] < _STATUS_TTL and not run.get("cancelled_at"):
+        return hit[1]
+    with _status_lock:
+        hit = _status_cache.get(key)
+        if hit and time.monotonic() - hit[0] < _STATUS_TTL and not run.get("cancelled_at"):
+            return hit[1]
+        result = _compute_status(run)
+        _status_cache[key] = (time.monotonic(), result)
+        return result
+
+
+def _compute_status(run: dict) -> dict:
     # Celery drops task results after a day (result_expires), after which every
     # job of an old run reads as PENDING -- a finished run must answer from what
     # was stored when it finished, or it looks queued forever and blocks new runs.
@@ -100,20 +125,22 @@ def _status(run: dict) -> dict:
     counts = {}
     errors = []
     train_seconds = {m: [] for m in MODELS}
+    # One bulk read for every job (a whole-universe run has ~5,000).
+    states = task_states([t for m in MODELS for t in run["tasks"][m].values()])
     for model in MODELS:
         c = {"total": 0, "done": 0, "failed": 0, "running": 0, "pending": 0}
         for ticker, task_id in run["tasks"][model].items():
-            res = AsyncResult(task_id, app=celery_app)
+            state, result = states[task_id]
             c["total"] += 1
-            if res.state == "SUCCESS":
+            if state == "SUCCESS":
                 c["done"] += 1
-                seconds = (res.result or {}).get("train_seconds")
+                seconds = (result if isinstance(result, dict) else {}).get("train_seconds")
                 if seconds is not None:
                     train_seconds[model].append(seconds)
-            elif res.state in ("FAILURE", "REVOKED"):
+            elif state in ("FAILURE", "REVOKED"):
                 c["failed"] += 1
-                errors.append({"ticker": ticker, "model": model, "error": str(res.info)})
-            elif res.state in ("STARTED", "PROGRESS"):
+                errors.append({"ticker": ticker, "model": model, "error": str(result)})
+            elif state in ("STARTED", "PROGRESS"):
                 c["running"] += 1
             else:
                 c["pending"] += 1
@@ -196,12 +223,8 @@ def cancel_batch(run_id: str):
     if not col.has(run_id):
         return jsonify({"error": "Forecast run not found"}), 404
     run = col.get(run_id)
-    unfinished = [
-        task_id
-        for model in MODELS
-        for task_id in run["tasks"][model].values()
-        if AsyncResult(task_id, app=celery_app).state not in DONE_STATES
-    ]
+    states = task_states([t for m in MODELS for t in run["tasks"][m].values()])
+    unfinished = [task_id for task_id, (state, _) in states.items() if state not in DONE_STATES]
     for task_id in unfinished:
         request_stop(task_id, ttl=STOP_FLAG_TTL)
     if unfinished:
