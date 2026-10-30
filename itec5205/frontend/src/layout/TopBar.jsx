@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { NavLink } from "react-router-dom";
-import { ChevronDownIcon, GearIcon, GridIcon, PowerIcon, UserIcon } from "./icons";
+import { ChevronDownIcon, GearIcon, GridIcon, PowerIcon } from "./icons";
 import { apiClient } from "../api/client";
 import { toggleDarkMode } from "../features/theme/themeSlice";
 import { USE_KEYCLOAK } from "../auth/keycloak";
@@ -42,6 +42,10 @@ function BarsIcon() {
   );
 }
 
+// "Sergiu Buhatel" -> "SB".
+const initials = (name) =>
+  String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+
 // Logged-in user; the dropdown shows username + role and Logout.
 function UserMenu() {
   const { keycloak } = useAuth();
@@ -69,7 +73,7 @@ function UserMenu() {
   return (
     <div ref={ref} className="user-menu">
       <button className="theme-toggle" onClick={() => setOpen((o) => !o)} title="Signed-in user" aria-expanded={open}>
-        <span className="theme-toggle-icon"><UserIcon width={18} height={18} /></span>
+        <span className="user-avatar" aria-hidden="true">{initials(displayName)}</span>
         {displayName}
         <ChevronDownIcon style={{ transform: open ? "rotate(180deg)" : "none" }} />
       </button>

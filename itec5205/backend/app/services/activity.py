@@ -26,6 +26,7 @@ from ..tasks.celery_app import celery_app
 log = logging.getLogger(__name__)
 
 ONLINE_SECONDS = 75  # 2 missed heartbeats (every 30 s) -> offline
+LEAVE_GRACE = timedelta(seconds=5)
 RESULT_EXPIRY = timedelta(days=1)  # Celery forgets results after a day
 
 
@@ -72,9 +73,14 @@ def logout(user: dict) -> None:
 
 
 def leave(user: dict) -> None:
-    """The tab was closed: offline now, unless another tab of theirs heartbeats."""
+    """The tab was closed: offline now, unless another tab of theirs heartbeats.
+    A reload's beacon can land just after the new page's first heartbeat, so a
+    leave within LEAVE_GRACE of a heartbeat is ignored."""
     col = get_db().collection("user_sessions")
     if col.has(user["id"]):
+        last = datetime.fromisoformat(col.get(user["id"])["last_seen"])
+        if _now() - last < LEAVE_GRACE:
+            return
         col.update({"_key": user["id"], "left_at": _now().isoformat()})
         notify_dashboard(force=True)
 

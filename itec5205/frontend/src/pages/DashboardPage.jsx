@@ -1,24 +1,26 @@
 // Home page: who is signed in, what page each user has open, and everything
 // they did -- imports, forecasts, RL, workflows... -- with the live status of
 // the jobs they started, plus totals with 14-day trends, the newest portfolio
-// against the S&P 500 and the latest workflow run.
+// against equal weights / the S&P 500 / the Dow, and the latest workflow run.
 // Data: GET /api/activity/dashboard and /api/activity/overview, refetched
 // whenever the backend pushes `dashboard_changed` over Socket.IO (room
 // "dashboard": sign-ins/outs, page changes, actions, job progress).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Area, AreaChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiClient } from "../api/client";
 import { getSocket, joinRoom, leaveRoom } from "../api/socket";
 import { PageHeader } from "../components/PageParts";
 import LoadingSpinner from "../components/LoadingSpinner";
 import RangePicker from "../components/RangePicker";
 import { tooltipProps } from "../utils/chartTheme";
-import { filterByInterval, rangeLabel } from "../utils/dateRanges";
+import { customDates, filterByInterval, intervalName } from "../utils/dateRanges";
 import {
+  CalendarIcon,
   CheckCircleIcon,
   ClockIcon,
   DatabaseIcon,
+  FilterIcon,
   GridIcon,
   LayersIcon,
   PieChartIcon,
@@ -36,8 +38,7 @@ const POLL_MS = 15000;
 const OVERVIEW_POLL_MS = 60000;
 const OVERVIEW_MIN_GAP_MS = 10000; // job progress pings come every 2 s
 const ROOM = "dashboard";
-const RECENT_JOBS = 8;
-const TREND_NOUN = { Companies: "imports", "Stock pools": "pools created", Portfolios: "portfolios created", "Jobs running": "jobs started" };
+const RECENT_JOBS = 6;
 
 // What page a user has open (heartbeat path -> sidebar name).
 const PAGES = [
@@ -82,6 +83,25 @@ const KINDS = {
 };
 const MAIN_KINDS = ["import", "forecast", "rl", "workflow"];
 
+// Recent jobs: a short name per action, its type, and the page that shows it.
+const JOB_NAMES = {
+  "Started a data import": ["Data import", "Import"],
+  "Resumed a data import": ["Resumed import", "Import"],
+  "Ran forecasts (LSTM + ARIMA)": ["Forecasts", "LSTM + ARIMA"],
+  "Trained an LSTM forecast": ["LSTM forecast", "LSTM"],
+  "Trained an ARIMA forecast": ["ARIMA forecast", "ARIMA"],
+  "Built an RL portfolio": ["RL portfolio", "RL allocation"],
+  "Ran a workflow": ["Workflow", "Workflow"],
+};
+
+function jobLink(a) {
+  if (a.kind === "import") return "/data";
+  if (a.kind === "workflow") return "/workflows";
+  if (a.kind === "rl") return "/portfolio";
+  if (a.job?.type === "task" && a.details) return `/companies/${encodeURIComponent(a.details)}`;
+  return "/prediction";
+}
+
 const STATUS = {
   running: ["info", "Running"],
   queued: ["grey", "Queued"],
@@ -114,6 +134,7 @@ function duration(seconds) {
 }
 
 const fmtTime = (iso) => new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const fmtDay = (day) => new Date(`${day}T12:00`).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
 const fmtPct = (v, signed = false) => (v == null ? "–" : `${signed && v > 0 ? "+" : ""}${(v * 100).toFixed(1)}%`);
 const fmtInt = (n) => (n == null ? "–" : Number(n).toLocaleString());
 const signColor = (v) => (v == null || v === 0 ? undefined : v > 0 ? "#16a34a" : "#dc2626");
@@ -125,11 +146,21 @@ function roleOf(roles = []) {
   return "Guest";
 }
 
+// "1Y" -> "1 Year"; a custom range -> its dates.
+function rangeTitle(range) {
+  const c = customDates(range);
+  if (c) return `${fmtDay(c.from)} – ${fmtDay(c.to)}`;
+  if (range === "ALL") return "All history";
+  return intervalName(range).replace(/ \(.*\)$/, "").replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
 function StatusPill({ status, percent }) {
   if (!status) return <span className="muted">–</span>;
   const [cls, label] = STATUS[status] || ["grey", status];
+  const Icon = cls === "good" ? CheckCircleIcon : cls === "bad" ? XCircleIcon : status === "running" ? ClockIcon : null;
   return (
-    <span className={`status-pill ${cls}`}>
+    <span className={`status-pill ${cls}`} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+      {Icon && <Icon width={12} height={12} />}
       {label}
       {status === "running" && percent != null ? ` · ${percent}%` : ""}
     </span>
@@ -146,13 +177,23 @@ function KindTag({ kind }) {
   );
 }
 
+function KindIcon({ kind }) {
+  const k = KINDS[kind] || { color: "#64748b", icon: GridIcon };
+  const Icon = k.icon;
+  return (
+    <span className="kind-icon" style={{ color: k.color, background: `${k.color}26` }}>
+      <Icon width={14} height={14} />
+    </span>
+  );
+}
+
 function Avatar({ name, online }) {
   const text = name || "?";
   const color = AVATAR_COLORS[[...text].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length];
   return (
     <span className="avatar" style={{ background: color }}>
       {text.charAt(0).toUpperCase()}
-      <span className={`presence-dot ${online ? "online" : ""}`} />
+      {online !== undefined && <span className={`presence-dot ${online ? "online" : ""}`} />}
     </span>
   );
 }
@@ -174,31 +215,30 @@ function CardHeader({ icon: Icon, color, title, subtitle, actions }) {
 
 // ------------------------------------------------------------------ KPI tiles
 
-// `trend`: [{day, n}] for the last 14 days (imports / pools / portfolios / jobs started).
-function KpiTile({ icon: Icon, color, label, value, sub, trend }) {
+// `trend`: [{day, n}] for the last 14 days; `noun` names what was counted.
+function KpiTile({ icon: Icon, color, label, value, sub, trend, noun }) {
   const total = (trend || []).reduce((a, d) => a + d.n, 0);
   return (
-    <div className="stat-card kpi-card">
-      <div className="icon-badge stat-card-icon" style={{ background: `${color}22`, color }}>
+    <div className="stat-card kpi-card" style={{ background: `linear-gradient(135deg, ${color}2e, ${color}08 70%)`, borderColor: `${color}55` }}>
+      <div className="icon-badge stat-card-icon" style={{ background: `${color}33`, color }}>
         <Icon width={24} height={24} />
       </div>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div className="stat-card-label">{label}</div>
         <div className="stat-card-value">{value}</div>
         <div className="muted stat-card-sub">{sub}</div>
+        {trend && (
+          <div className="kpi-delta" style={{ color: total ? color : undefined }}>
+            {total ? "↑" : "–"} {total} {noun} · 14 days
+          </div>
+        )}
       </div>
       {trend && (
-        <div className="kpi-spark" title={`Last ${trend.length} days: ${total} ${TREND_NOUN[label]}`}>
+        <div className="kpi-spark" title={`Last ${trend.length} days: ${total} ${noun}`}>
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={trend} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id={`spark-${label}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={color} stopOpacity={0.35} />
-                  <stop offset="100%" stopColor={color} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <Area type="monotone" dataKey="n" stroke={color} strokeWidth={2} fill={`url(#spark-${label})`} isAnimationActive={false} />
-            </AreaChart>
+            <BarChart data={trend} margin={{ top: 4, right: 0, bottom: 0, left: 0 }} barCategoryGap={2}>
+              <Bar dataKey="n" fill={color} radius={[2, 2, 0, 0]} minPointSize={2} isAnimationActive={false} />
+            </BarChart>
           </ResponsiveContainer>
         </div>
       )}
@@ -208,14 +248,15 @@ function KpiTile({ icon: Icon, color, label, value, sub, trend }) {
 
 // ------------------------------------------------------- portfolio performance
 
-// Line styles: the portfolio is the app's fixed chart blue, the baselines
-// are dashed so the portfolio stands out.
+// Line styles: the portfolio is the app's fixed chart blue (with an area),
+// the baselines are thinner and dashed so the portfolio stands out.
 const LINE_STYLE = {
   portfolio: { stroke: "#2563eb", strokeWidth: 2.5 },
-  equal: { stroke: "#a855f7", strokeWidth: 1.8, strokeDasharray: "2 3" },
-  SPY: { stroke: "#f59e0b", strokeWidth: 1.8, strokeDasharray: "6 4" },
-  DIA: { stroke: "#94a3b8", strokeWidth: 1.8, strokeDasharray: "6 4" },
+  equal: { stroke: "#a855f7", strokeWidth: 2 },
+  SPY: { stroke: "#f59e0b", strokeWidth: 2, strokeDasharray: "6 4" },
+  DIA: { stroke: "#94a3b8", strokeWidth: 2, strokeDasharray: "6 4" },
 };
+const SHORT_LABEL = { portfolio: "Portfolio", equal: "Equal wt.", SPY: "S&P 500", DIA: "Dow" };
 
 // Total return, volatility, Sharpe (no risk-free rate) and max drawdown of a
 // value series, annualized from daily values.
@@ -259,18 +300,26 @@ function PerformanceCard({ portfolio }) {
     ["Sharpe ratio", "sharpe", (v) => (v == null ? "–" : v.toFixed(2)), false],
     ["Max drawdown", "max_drawdown", (v) => fmtPct(v), true],
   ];
-  const short = { portfolio: "Portfolio", equal: "Equal wt.", SPY: "S&P 500", DIA: "Dow" };
+  const first = series[0]?.date;
+  const last = series[series.length - 1]?.date;
   return (
     <div className="card">
       <CardHeader
         icon={TrendChartIcon}
         color="#2563eb"
-        title={`Portfolio performance · ${rangeLabel(range)}`}
+        title={`Portfolio performance – ${rangeTitle(range)}`}
         subtitle={
           <>
-            Newest portfolio, <Link to={`/portfolios/${portfolio.id}`}>{portfolio.name}</Link> ({portfolio.holdings} holdings), vs the same
-            stocks equally weighted, the S&amp;P 500 (SPY) and the Dow (DIA), all rebased to 100.
+            Newest portfolio, <Link to={`/portfolios/${portfolio.id}`}>{portfolio.name}</Link> ({portfolio.holdings} holdings), vs equal
+            weight, the S&amp;P 500 (SPY) and the Dow (DIA), all rebased to 100.
           </>
+        }
+        actions={
+          first && (
+            <span className="date-chip">
+              <CalendarIcon width={14} height={14} /> {fmtDay(first)} – {fmtDay(last)}
+            </span>
+          )
         }
       />
       <div style={{ marginBottom: 8 }}>
@@ -279,7 +328,13 @@ function PerformanceCard({ portfolio }) {
       <div className="perf-body">
         <div className="perf-chart">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={series} margin={{ top: 6, right: 8, bottom: 0, left: -8 }}>
+            <ComposedChart data={series} margin={{ top: 6, right: 8, bottom: 0, left: 4 }}>
+              <defs>
+                <linearGradient id="perf-area" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#2563eb" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#2563eb" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
               <CartesianGrid stroke="var(--color-divider)" strokeDasharray="3 3" vertical={false} />
               <XAxis
                 dataKey="date"
@@ -287,37 +342,48 @@ function PerformanceCard({ portfolio }) {
                 tickFormatter={(d) => new Date(`${d}T12:00`).toLocaleDateString([], series.length > 150 ? { month: "short", year: "2-digit" } : { month: "short", day: "numeric" })}
                 minTickGap={40}
               />
-              <YAxis tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }} domain={["auto", "auto"]} width={44} />
+              <YAxis
+                tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
+                domain={["auto", "auto"]}
+                width={52}
+                label={{ value: "Value (rebased to 100)", angle: -90, position: "insideLeft", offset: 6, style: { fontSize: 11, fill: "var(--color-text-secondary)", textAnchor: "middle" } }}
+              />
               <Tooltip {...tooltipProps} formatter={(v, name) => [v == null ? "–" : Number(v).toFixed(2), name]} />
               <Legend wrapperStyle={{ fontSize: "0.78rem" }} />
-              {lines.map(({ key, label }) => (
-                <Line key={key} type="monotone" dataKey={key} name={label} dot={false} isAnimationActive={false} {...(LINE_STYLE[key] || {})} />
-              ))}
-            </LineChart>
+              {lines.map(({ key, label }) =>
+                key === "portfolio" ? (
+                  <Area key={key} type="monotone" dataKey={key} name={label} fill="url(#perf-area)" dot={false} isAnimationActive={false} {...LINE_STYLE[key]} />
+                ) : (
+                  <Line key={key} type="monotone" dataKey={key} name={label} dot={false} isAnimationActive={false} {...(LINE_STYLE[key] || {})} />
+                )
+              )}
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
-        <table className="perf-stats compact">
-          <thead>
-            <tr>
-              <th style={{ cursor: "default" }} />
-              {lines.map(({ key, label }) => (
-                <th key={key} style={{ cursor: "default", color: LINE_STYLE[key]?.stroke }} title={label}>{short[key] || key}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(([label, stat, fmt, colored]) => (
-              <tr key={stat}>
-                <td>{label}</td>
-                {lines.map(({ key }) => (
-                  <td key={key} style={{ fontWeight: key === "portfolio" ? 700 : undefined, color: colored ? signColor(stats[key]?.[stat]) : undefined }}>
-                    {fmt(stats[key]?.[stat])}
-                  </td>
+        <div className="perf-stats-box">
+          <table className="perf-stats compact">
+            <thead>
+              <tr>
+                <th style={{ cursor: "default" }}>Metric</th>
+                {lines.map(({ key, label }) => (
+                  <th key={key} style={{ cursor: "default", color: LINE_STYLE[key]?.stroke }} title={label}>{SHORT_LABEL[key] || key}</th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map(([label, stat, fmt, colored]) => (
+                <tr key={stat}>
+                  <td>{label}</td>
+                  {lines.map(({ key }) => (
+                    <td key={key} style={{ fontWeight: key === "portfolio" ? 700 : undefined, color: colored ? signColor(stats[key]?.[stat]) : undefined }}>
+                      {fmt(stats[key]?.[stat])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -332,18 +398,18 @@ const STEPS = [
   ["portfolio", "Portfolio allocation (RL)", (s) => (s.holdings != null ? `${fmtInt(s.holdings)} holdings` : null)],
 ];
 
-function StepIcon({ status, index }) {
+function StepIcon({ status }) {
   if (status === "done") return <CheckCircleIcon width={20} height={20} style={{ color: "#16a34a" }} />;
   if (status === "failed") return <XCircleIcon width={20} height={20} style={{ color: "#dc2626" }} />;
   if (status === "running") return <ClockIcon width={20} height={20} style={{ color: "#2563eb" }} />;
-  return <span className="muted" style={{ fontSize: "0.8rem" }}>{index}</span>;
+  return null;
 }
 
-function WorkflowCard({ run }) {
+function WorkflowCard({ run, companies }) {
   const navigate = useNavigate();
   const actions = (
     <button className="btn" onClick={() => navigate("/workflows")}>
-      <PlayIcon width={14} height={14} /> Run a workflow
+      <PlayIcon width={14} height={14} /> Run workflow
     </button>
   );
   if (!run) {
@@ -354,18 +420,24 @@ function WorkflowCard({ run }) {
     );
   }
   const steps = run.steps || {};
+  // How many companies made it through each stage.
+  const funnel = [
+    [DatabaseIcon, "#3b82f6", "Input companies", steps.data?.requested ?? companies],
+    [FilterIcon, "#16a34a", "Screened", steps.screen?.tickers],
+    [TrendChartIcon, "#a855f7", "Forecasted", steps.forecast?.passed],
+    [PieChartIcon, "#d97706", "Final portfolio", steps.portfolio?.holdings],
+  ];
   return (
-    <div className="card">
-      <CardHeader
-        icon={WorkflowIcon}
-        color="#6366f1"
-        title="Latest workflow run"
-        subtitle={`Screening → forecasting → RL allocation · started ${ago(run.created_at)}${run.wall_seconds ? `, took ${duration(run.wall_seconds)}` : ""}`}
-        actions={actions}
-      />
-      <div className="wf-name" title={run.workflow_name}>
-        <StatusPill status={run.status} percent={run.percent} /> {run.workflow_name}
+    <div className="card wf-card">
+      <CardHeader icon={WorkflowIcon} color="#6366f1" title="Latest workflow run" subtitle="Screening → Forecasting → RL allocation" actions={actions} />
+      <div className="wf-meta">
+        <StatusPill status={run.status} percent={run.percent} />
+        <span className="muted">
+          Started {fmtTime(run.created_at)}
+          {run.wall_seconds ? ` · Duration ${duration(run.wall_seconds)}` : ""}
+        </span>
       </div>
+      <div className="wf-name" title={run.workflow_name}>{run.workflow_name}</div>
       <ol className="wf-steps">
         {STEPS.map(([key, label, summary], i) => {
           const step = steps[key] || {};
@@ -375,16 +447,24 @@ function WorkflowCard({ run }) {
               <span className="wf-step-num">{i + 1}</span>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div className="wf-step-title">{label}</div>
-                <div className="muted wf-step-sub">
-                  {summary(step) || (status === "skipped" ? "Skipped" : status ? "" : "Not reached")}
-                </div>
+                <div className="muted wf-step-sub">{summary(step) || (status === "skipped" ? "Skipped" : status ? "" : "Not reached")}</div>
               </div>
-              <StepIcon status={status} index={i + 1} />
+              <StepIcon status={status} />
             </li>
           );
         })}
       </ol>
-      {run.message && <p className="muted" style={{ margin: "8px 0 0", fontSize: "0.8rem" }}>{run.message}</p>}
+      <div className="wf-funnel">
+        {funnel.map(([Icon, color, label, value]) => (
+          <div key={label} className="wf-funnel-item">
+            <Icon width={22} height={22} style={{ color }} />
+            <div>
+              <div className="wf-funnel-label" style={{ color }}>{label}</div>
+              <div className="wf-funnel-value">{fmtInt(value)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -399,6 +479,7 @@ export default function DashboardPage() {
   const [userFilter, setUserFilter] = useState(null);
   const [kindFilter, setKindFilter] = useState("all");
   const lastOverview = useRef(0);
+  const activityRef = useRef(null);
 
   useEffect(() => {
     let alive = true;
@@ -468,6 +549,11 @@ export default function DashboardPage() {
   const workers = overview?.workers;
   const selectedUser = users.find((u) => u.id === userFilter);
   const jobCount = (u) => MAIN_KINDS.reduce((n, k) => n + (u.counts[k] || 0), 0);
+  const showActivity = (patch) => {
+    if (patch.user !== undefined) setUserFilter(patch.user);
+    if (patch.kind !== undefined) setKindFilter(patch.kind);
+    activityRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const systemPill = workers && (
     <span className={`system-pill ${workers.online ? "ok" : "down"}`} title={workers.names.length ? `Workers: ${workers.names.join(", ")}` : "No worker answered"}>
@@ -482,7 +568,7 @@ export default function DashboardPage() {
         icon={GridIcon}
         color="#6366f1"
         title="Dashboard"
-        description="Who is signed in, what each user is doing, the jobs running and the latest results."
+        description="Overview of data, workflows and the latest results from your investment pipelines, and what every user is doing."
         actions={
           <>
             {systemPill}
@@ -494,17 +580,10 @@ export default function DashboardPage() {
       />
 
       <div className="stat-row kpi-row">
-        <KpiTile icon={DatabaseIcon} color="#2563eb" label="Companies" value={fmtInt(totals.companies)} sub="Imported" trend={trends.imports} />
-        <KpiTile icon={LayersIcon} color="#16a34a" label="Stock pools" value={fmtInt(totals.pools)} sub="Screened" trend={trends.pools} />
-        <KpiTile icon={PieChartIcon} color="#a855f7" label="Portfolios" value={fmtInt(totals.portfolios)} sub="Saved" trend={trends.portfolios} />
-        <KpiTile
-          icon={PlayIcon}
-          color="#f97316"
-          label="Jobs running"
-          value={stats.running ?? "–"}
-          sub={`${stats.online ?? 0} online`}
-          trend={trends.jobs}
-        />
+        <KpiTile icon={DatabaseIcon} color="#2563eb" label="Companies imported" value={fmtInt(totals.companies)} sub="S&P 500 + Russell 3000" trend={trends.imports} noun="imports" />
+        <KpiTile icon={LayersIcon} color="#16a34a" label="Stock pools" value={fmtInt(totals.pools)} sub="Screened" trend={trends.pools} noun="created" />
+        <KpiTile icon={PieChartIcon} color="#a855f7" label="Portfolios" value={fmtInt(totals.portfolios)} sub="Saved" trend={trends.portfolios} noun="created" />
+        <KpiTile icon={PlayIcon} color="#f97316" label="Jobs running" value={stats.running ?? "–"} sub={`${stats.online ?? 0} online`} trend={trends.jobs} noun="started" />
       </div>
 
       {error && <p className="error-text">Could not load the dashboard: {error}</p>}
@@ -513,7 +592,7 @@ export default function DashboardPage() {
       {overview && (
         <div className="dash-row">
           <PerformanceCard portfolio={overview.portfolio} />
-          <WorkflowCard run={overview.workflow_run} />
+          <WorkflowCard run={overview.workflow_run} companies={totals.companies} />
         </div>
       )}
 
@@ -521,44 +600,66 @@ export default function DashboardPage() {
         <>
           <div className="dash-row">
             <div className="card">
-              <CardHeader icon={PlayIcon} color="#2563eb" title="Recent jobs" subtitle="Imports, forecasts, RL and workflow runs, with their live status." />
+              <CardHeader
+                icon={PlayIcon}
+                color="#2563eb"
+                title="Recent jobs"
+                subtitle="Imports, forecasts, RL and workflow runs, with their live status."
+                actions={<button className="btn secondary" onClick={() => showActivity({ kind: "all" })}>View all</button>}
+              />
               {jobs.length === 0 ? (
                 <p className="muted">No jobs yet.</p>
               ) : (
-                <table className="compact" style={{ tableLayout: "fixed", width: "100%" }}>
+                <table className="compact jobs-table" style={{ tableLayout: "fixed", width: "100%" }}>
                   <colgroup>
-                    <col style={{ width: 110 }} />
                     <col />
+                    <col style={{ width: 105 }} />
                     <col style={{ width: 120 }} />
-                    <col style={{ width: 75 }} />
-                    <col style={{ width: 110 }} />
+                    <col style={{ width: 72 }} />
+                    <col style={{ width: 120 }} />
+                    <col style={{ width: 40 }} />
                   </colgroup>
                   <thead>
                     <tr>
-                      <th style={{ cursor: "default" }}>Type</th>
-                      <th style={{ cursor: "default" }}>Job</th>
-                      <th style={{ cursor: "default" }}>Status</th>
+                      <th style={{ cursor: "default" }}>Name</th>
+                      <th style={{ cursor: "default", textAlign: "left" }}>Type</th>
+                      <th style={{ cursor: "default" }}>Started</th>
                       <th style={{ cursor: "default" }}>Duration</th>
-                      <th style={{ cursor: "default" }}>User</th>
+                      <th style={{ cursor: "default" }}>Status</th>
+                      <th style={{ cursor: "default" }} />
                     </tr>
                   </thead>
                   <tbody>
-                    {jobs.map((a) => (
-                      <tr key={a._key}>
-                        <td><KindTag kind={a.kind} /></td>
-                        <td style={{ overflow: "hidden", textOverflow: "ellipsis" }} title={`${a.action}${a.details ? ` · ${a.details}` : ""} · ${new Date(a.created_at).toLocaleString()}`}>
-                          {a.details || a.action}
-                          <div className="muted" style={{ fontSize: "0.72rem" }}>{fmtTime(a.created_at)}</div>
-                        </td>
-                        <td><StatusPill status={a.status} percent={a.percent} /></td>
-                        <td>
-                          {a.status === "running" || a.status === "queued"
-                            ? duration((Date.now() - new Date(a.created_at).getTime()) / 1000)
-                            : duration(a.duration_seconds)}
-                        </td>
-                        <td style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{a.name || a.username}</td>
-                      </tr>
-                    ))}
+                    {jobs.map((a) => {
+                      const [name, type] = JOB_NAMES[a.action] || [a.action, KINDS[a.kind]?.label || a.kind];
+                      return (
+                        <tr key={a._key}>
+                          <td style={{ overflow: "hidden", textOverflow: "ellipsis" }} title={`${a.action}${a.details ? ` · ${a.details}` : ""} · ${a.name || a.username}`}>
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "100%" }}>
+                              <KindIcon kind={a.kind} />
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {name}
+                                {a.details ? ` · ${a.details}` : ""}
+                                <span className="muted"> · {a.name || a.username}</span>
+                              </span>
+                            </span>
+                          </td>
+                          <td style={{ textAlign: "left" }}>{type}</td>
+                          <td>{fmtTime(a.created_at)}</td>
+                          <td>
+                            {a.status === "running" || a.status === "queued"
+                              ? duration((Date.now() - new Date(a.created_at).getTime()) / 1000)
+                              : duration(a.duration_seconds)}
+                          </td>
+                          <td><StatusPill status={a.status} percent={a.percent} /></td>
+                          <td>
+                            <Link to={jobLink(a)} className="icon-link" title="Open the page that shows this job" aria-label="Open">
+                              ↗
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
@@ -569,7 +670,8 @@ export default function DashboardPage() {
                 icon={UserIcon}
                 color="#16a34a"
                 title="Users"
-                subtitle={`${online.length} online · the page each one has open, live. Click a user to see only their activity.`}
+                subtitle={`${online.length} online · click a user to see their activity.`}
+                actions={<button className="btn secondary" onClick={() => showActivity({ user: null })}>View all</button>}
               />
               {users.length === 0 ? (
                 <p className="muted">Nobody has signed in yet.</p>
@@ -578,7 +680,7 @@ export default function DashboardPage() {
                   <colgroup>
                     <col />
                     <col style={{ width: 72 }} />
-                    <col style={{ width: 120 }} />
+                    <col style={{ width: 150 }} />
                     <col style={{ width: 82 }} />
                     <col style={{ width: 42 }} />
                   </colgroup>
@@ -586,7 +688,7 @@ export default function DashboardPage() {
                     <tr>
                       <th style={{ cursor: "default" }}>Name</th>
                       <th style={{ cursor: "default", textAlign: "left" }}>Role</th>
-                      <th style={{ cursor: "default", textAlign: "left" }}>Current page</th>
+                      <th style={{ cursor: "default", textAlign: "left" }}>Status</th>
                       <th style={{ cursor: "default" }}>Last activity</th>
                       <th style={{ cursor: "default" }} title="Jobs started (running now in blue)">Jobs</th>
                     </tr>
@@ -596,23 +698,25 @@ export default function DashboardPage() {
                       <tr
                         key={u.id}
                         className={u.id === userFilter ? "selected" : ""}
-                        onClick={() => setUserFilter(u.id === userFilter ? null : u.id)}
+                        onClick={() => showActivity({ user: u.id === userFilter ? null : u.id })}
                         title={`${u.username}${u.online ? ` · signed in ${ago(u.signed_in_at)}` : ""}`}
                       >
                         <td style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                            <Avatar name={u.name || u.username} online={u.online} />
+                            <Avatar name={u.name || u.username} />
                             {u.name || u.username}
                           </span>
                         </td>
                         <td style={{ textAlign: "left" }}>{roleOf(u.roles)}</td>
                         <td style={{ textAlign: "left", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {u.online ? pageName(u.page) : <span className="muted">Offline</span>}
+                          <span className={`online-pill ${u.online ? "on" : ""}`}>
+                            <span className={`presence-dot ${u.online ? "online" : ""}`} />
+                            {u.online ? "Online" : "Offline"}
+                          </span>
+                          {u.online && <span className="muted" style={{ fontSize: "0.74rem" }}> {pageName(u.page)}</span>}
                         </td>
                         <td>{u.online ? "now" : ago(u.last_seen)}</td>
-                        <td>
-                          {u.running > 0 ? <span className="status-pill info">{u.running}</span> : jobCount(u)}
-                        </td>
+                        <td>{u.running > 0 ? <span className="status-pill info">{u.running}</span> : jobCount(u)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -621,7 +725,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="card">
+          <div className="card" ref={activityRef} style={{ scrollMarginTop: 16 }}>
             <CardHeader
               icon={ClockIcon}
               color="#d97706"

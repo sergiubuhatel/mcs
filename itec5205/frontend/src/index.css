@@ -692,14 +692,14 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 .kpi-card { position: relative; overflow: hidden; }
 .stat-row.kpi-row { grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
 .kpi-spark { width: 100px; height: 46px; flex-shrink: 0; align-self: flex-end; }
-.dash-row { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.dash-row { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
 .dash-row > .card { min-width: 0; }
 @media (max-width: 1200px) { .dash-row { grid-template-columns: minmax(0, 1fr); } }
 .perf-body { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; }
-.perf-chart { flex: 1 1 340px; min-width: 0; height: 250px; }
+.perf-chart { flex: 1 1 420px; min-width: 0; height: 300px; }
 .perf-stats { width: auto; flex: 0 0 auto; align-self: center; font-size: 0.85rem; }
 .perf-stats td { padding: 8px 10px; }
-.wf-name { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; margin-bottom: 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wf-name { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .wf-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .wf-step { position: relative; display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--color-divider); }
 .wf-step:last-child { border-bottom: none; }
@@ -729,3 +729,37 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 .users-table tbody tr:hover td { background: var(--color-bg-tertiary); }
 .users-table tbody tr.selected td { background: rgba(43, 108, 176, 0.14); }
 .kind-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
+.kpi-delta { font-size: 0.74rem; font-weight: 600; margin-top: 2px; white-space: nowrap; }
+.kpi-card .stat-card-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.date-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; font-size: 0.78rem; white-space: nowrap;
+  border: 1px solid var(--color-divider); background: var(--color-bg-primary); color: var(--color-text-secondary);
+}
+.perf-stats-box { flex: 0 0 auto; align-self: center; border: 1px solid var(--color-divider); border-radius: 10px; padding: 4px 6px; background: var(--color-bg-primary); }
+.perf-stats-box .perf-stats { align-self: auto; }
+.perf-stats-box tr:last-child td { border-bottom: none; }
+.wf-card { display: flex; flex-direction: column; }
+.wf-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.8rem; margin-bottom: 6px; }
+.wf-funnel {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: auto; padding: 12px; border-radius: 10px;
+  background: var(--color-bg-primary); border: 1px solid var(--color-divider);
+}
+.wf-funnel-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wf-funnel-label { font-size: 0.72rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wf-funnel-value { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wf-steps { margin-bottom: 12px; }
+.kind-icon { width: 26px; height: 26px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.icon-link { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; text-decoration: none; color: var(--color-text-secondary); font-weight: 700; }
+.icon-link:hover { background: var(--color-bg-tertiary); color: var(--btn-accent); text-decoration: none; }
+.online-pill {
+  display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 600;
+  border: 1px solid var(--color-divider); color: var(--color-text-secondary);
+}
+.online-pill .presence-dot { width: 7px; height: 7px; box-shadow: none; }
+.online-pill.on { border-color: rgba(22, 163, 74, 0.45); background: rgba(22, 163, 74, 0.1); color: #15803d; }
+.dark .online-pill.on { color: #4ade80; }
+.user-avatar {
+  width: 26px; height: 26px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #8b5cf6, #6366f1); color: #fff; font-size: 0.72rem; font-weight: 700; flex-shrink: 0;
+}
+.user-menu .theme-toggle { padding-top: 4px; padding-bottom: 4px; }
