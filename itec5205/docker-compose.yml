@@ -224,7 +224,8 @@ services:
     container_name: itec5205-cloudflared
     restart: unless-stopped
     profiles: ["tunnel"]
-    command: tunnel --no-autoupdate run
+    # http2 (TCP 443): QUIC over UDP 7844 times out on some networks.
+    command: tunnel --no-autoupdate --protocol http2 run
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
