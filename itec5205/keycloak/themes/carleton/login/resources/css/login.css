@@ -306,3 +306,34 @@ a:hover {
 ::-webkit-scrollbar-track { background: #232a36; }
 ::-webkit-scrollbar-thumb { background: #3d4a5c; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #718096; }
+
+/* ----------------------------------------------------------
+   Light mode: follows the app's choice (localStorage "darkMode",
+   same origin); resources/js/theme.js adds html.cu-light.
+   Palette = app :root tokens (frontend/src/index.css).
+   ---------------------------------------------------------- */
+html.cu-light, html.cu-light body { background-color: #edf2f7 !important; color: #2d3748 !important; color-scheme: light; }
+html.cu-light body::before { background-image: radial-gradient(circle, rgba(100,116,139,0.25) 1px, transparent 1px); }
+html.cu-light .login-pf-page::before { background-image: url(../img/logo-light.svg) !important; }
+html.cu-light .card-pf { background-color: #ffffff !important; border-color: #d3dae0 !important; box-shadow: 0 8px 30px rgba(15,23,42,0.10) !important; }
+html.cu-light #kc-page-title, html.cu-light h1, html.cu-light h2 { color: #2d3748 !important; }
+html.cu-light label, html.cu-light .login-pf label, html.cu-light .login-pf-settings label,
+html.cu-light .pf-c-form__label-text, html.cu-light .instruction, html.cu-light p { color: #4a5568 !important; }
+html.cu-light #kc-info, html.cu-light #kc-registration, html.cu-light #kc-registration span { color: #4a5568 !important; }
+html.cu-light input[type="text"], html.cu-light input[type="password"], html.cu-light input[type="email"],
+html.cu-light input:not([type]), html.cu-light select, html.cu-light textarea, html.cu-light .pf-c-form-control {
+  background-color: #ffffff !important; border-color: #cbd5e0 !important; color: #2d3748 !important; color-scheme: light;
+}
+html.cu-light input::placeholder { color: #a0aec0 !important; }
+html.cu-light .pf-c-input-group, html.cu-light .kc-input-group { background-color: #ffffff !important; border-color: #cbd5e0 !important; }
+html.cu-light .pf-c-input-group input[type="password"], html.cu-light .kc-input-group input[type="password"] { border: none !important; }
+html.cu-light .pf-c-input-group button, html.cu-light .kc-input-group button { color: #4a5568 !important; }
+html.cu-light .pf-c-input-group button:hover, html.cu-light .kc-input-group button:hover { color: #2d3748 !important; }
+html.cu-light a { color: #1450d0 !important; }
+html.cu-light a:hover { color: #1040c0 !important; }
+html.cu-light .alert-error, html.cu-light #kc-error-message, html.cu-light .kc-feedback-text { background-color: #fef2f2 !important; border-color: #fca5a5 !important; color: #b91c1c !important; }
+html.cu-light .alert-warning { background-color: #fffbeb !important; border-color: #fcd34d !important; color: #92400e !important; }
+html.cu-light .alert-success { background-color: #f0fdf4 !important; border-color: #86efac !important; color: #166534 !important; }
+html.cu-light .pf-c-alert { background-color: #f7fafc !important; color: #2d3748 !important; }
+html.cu-light ::-webkit-scrollbar-track { background: #e2e8f0; }
+html.cu-light ::-webkit-scrollbar-thumb { background: #cbd5e0; }
