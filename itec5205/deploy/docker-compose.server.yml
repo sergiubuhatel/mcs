@@ -1,0 +1,31 @@
+# Production server only (added through COMPOSE_FILE in the server's .env).
+# - ArangoDB in a Docker volume instead of the Windows folder C:/docker-data/arangodb
+# - database, Redis, API, Flower and Keycloak ports only on the server itself:
+#   the internet and the network reach the app through the frontend (8080) and the tunnel
+# - images come from the development PC (deploy\deploy.cmd), never built here
+# - the tunnel also routes listings.ganymedesoftware.ca to host.docker.internal:3000
+services:
+  arangodb:
+    ports: !override
+      - "127.0.0.1:8529:8529"
+    volumes: !override
+      - arangodb_data:/var/lib/arangodb3
+  redis:
+    ports: !override
+      - "127.0.0.1:6379:6379"
+  backend:
+    pull_policy: never
+    ports: !override
+      - "127.0.0.1:5000:5000"
+  flower:
+    ports: !override
+      - "127.0.0.1:5555:5555"
+  keycloak:
+    ports: !override
+      - "127.0.0.1:9090:8080"
+  cloudflared:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  arangodb_data:
