@@ -1,4 +1,4 @@
-# User's Guide — S&P 500 Investment Screener & RL Portfolio Builder
+# User's Guide — Alpha Pilot (S&P 500 Investment Screener & RL Portfolio Builder)
 
 This guide explains how to run the application and use it end to end from
 the browser. For how the system is built internally, see

@@ -1,22 +1,22 @@
 /* ============================================================
-   Carleton University — Keycloak Login Theme (ITEC 5205)
-   App dark palette:
-     bg-primary   #2d3748
-     bg-secondary #283141
-     bg-tertiary  #232a36
-     blue-500     #1868ff
-     blue-600     #1450d0
-     text-primary #f7fafc
-   ============================================================ */
+   Alpha Pilot — Keycloak Login Theme (ITEC 5205)
+   App dark palette = the app's "Midnight Blue" (from the listings app):
+     page         #152238
+     card         #1f3049
+     input        #182840
+     border       #354b67
+     blue-500     #3b82f6
+     text-primary #f1f5fb
+*/
 
 /* ----------------------------------------------------------
    Page background
    ---------------------------------------------------------- */
 html,
 body {
-  background-color: #2d3748 !important;
+  background-color: #152238 !important;
   background-image: none !important;
-  color: #f7fafc !important;
+  color: #f1f5fb !important;
   font-family: Inter, system-ui, Arial, sans-serif !important;
   margin: 0;
   padding: 0;
@@ -68,7 +68,7 @@ body::before {
   display: block;
   width: 240px;
   height: 64px;
-  background: url(../img/logo.svg) center / contain no-repeat;
+  background: url(../img/alpha-pilot-logo.svg) center / contain no-repeat;
   margin-bottom: 1.25rem;
   flex-shrink: 0;
   position: relative;
@@ -83,8 +83,8 @@ body::before {
   max-width: 420px !important;
   min-width: 0 !important;
   flex-shrink: 0 !important;
-  background-color: #283141 !important;
-  border: 1px solid #3d4a5c !important;
+  background-color: #1f3049 !important;
+  border: 1px solid #354b67 !important;
   border-radius: 12px !important;
   box-shadow: 0 8px 40px rgba(0,0,0,0.6) !important;
   overflow: hidden;
@@ -99,7 +99,7 @@ body::before {
   content: "";
   display: block;
   height: 3px;
-  background: linear-gradient(90deg, #1868ff, #5590ff);
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
   position: absolute;
   top: 0; left: 0; right: 0;
 }
@@ -114,7 +114,7 @@ body::before {
 }
 
 #kc-page-title {
-  color: #f7fafc !important;
+  color: #f1f5fb !important;
   font-size: 1.25rem !important;
   font-weight: 700 !important;
   letter-spacing: -0.02em;
@@ -126,7 +126,7 @@ body::before {
    ---------------------------------------------------------- */
 label,
 .login-pf label {
-  color: #a0aec0 !important;
+  color: #a5b4ca !important;
   font-size: 0.72rem !important;
   font-weight: 600 !important;
   letter-spacing: 0.06em !important;
@@ -141,11 +141,11 @@ label,
 input[type="text"],
 input[type="password"],
 input[type="email"] {
-  background-color: #232a36 !important;
-  border: 1px solid #3d4a5c !important;
+  background-color: #182840 !important;
+  border: 1px solid #354b67 !important;
   border-radius: 7px !important;
-  color: #f7fafc !important;
-  caret-color: #5590ff;
+  color: #f1f5fb !important;
+  caret-color: #60a5fa;
   color-scheme: dark;
   width: 100% !important;
   padding: 0.5rem 0.75rem !important;
@@ -158,19 +158,19 @@ input[type="email"] {
 input[type="text"]:focus,
 input[type="password"]:focus,
 input[type="email"]:focus {
-  border-color: #1868ff !important;
+  border-color: #3b82f6 !important;
   box-shadow: 0 0 0 3px rgba(24,104,255,0.25) !important;
 }
 
 input::placeholder {
-  color: #4a5568 !important;
+  color: #a5b4ca !important;
 }
 
 /* Password field + toggle wrapper */
 .pf-c-input-group,
 .kc-input-group {
-  background-color: #232a36 !important;
-  border: 1px solid #3d4a5c !important;
+  background-color: #182840 !important;
+  border: 1px solid #354b67 !important;
   border-radius: 7px !important;
   display: flex !important;
   align-items: center !important;
@@ -187,14 +187,14 @@ input::placeholder {
 .kc-input-group button {
   background: transparent !important;
   border: none !important;
-  color: #718096 !important;
+  color: #8796ad !important;
   padding: 0 0.6rem !important;
   cursor: pointer;
 }
 
 .pf-c-input-group button:hover,
 .kc-input-group button:hover {
-  color: #a0aec0 !important;
+  color: #a5b4ca !important;
 }
 
 /* Form group spacing */
@@ -209,11 +209,11 @@ input::placeholder {
   text-transform: none !important;
   letter-spacing: normal !important;
   font-size: 0.875rem !important;
-  color: #a0aec0 !important;
+  color: #a5b4ca !important;
 }
 
 input[type="checkbox"] {
-  accent-color: #1868ff;
+  accent-color: #3b82f6;
 }
 
 /* ----------------------------------------------------------
@@ -221,7 +221,7 @@ input[type="checkbox"] {
    ---------------------------------------------------------- */
 #kc-login,
 input[type="submit"]#kc-login {
-  background-color: #1868ff !important;
+  background-color: #3b82f6 !important;
   border: none !important;
   border-radius: 8px !important;
   color: #ffffff !important;
@@ -235,24 +235,24 @@ input[type="submit"]#kc-login {
 }
 
 #kc-login:hover {
-  background-color: #1450d0 !important;
+  background-color: #2563eb !important;
   box-shadow: 0 4px 14px rgba(24,104,255,0.4) !important;
 }
 
 #kc-login:active {
-  background-color: #1040c0 !important;
+  background-color: #1d4ed8 !important;
 }
 
 /* ----------------------------------------------------------
    Links
    ---------------------------------------------------------- */
 a {
-  color: #5590ff !important;
+  color: #60a5fa !important;
   text-decoration: none !important;
 }
 
 a:hover {
-  color: #1868ff !important;
+  color: #3b82f6 !important;
   text-decoration: underline !important;
 }
 
@@ -261,7 +261,7 @@ a:hover {
    ---------------------------------------------------------- */
 #kc-info,
 #kc-registration {
-  color: #718096 !important;
+  color: #8796ad !important;
   text-align: center;
   margin-top: 1rem;
   font-size: 0.875rem;
@@ -303,9 +303,9 @@ a:hover {
    Scrollbar
    ---------------------------------------------------------- */
 ::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #232a36; }
-::-webkit-scrollbar-thumb { background: #3d4a5c; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #718096; }
+::-webkit-scrollbar-track { background: #182840; }
+::-webkit-scrollbar-thumb { background: #354b67; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #8796ad; }
 
 /* ----------------------------------------------------------
    Light mode: follows the app's choice (localStorage "darkMode",
@@ -314,7 +314,7 @@ a:hover {
    ---------------------------------------------------------- */
 html.cu-light, html.cu-light body { background-color: #edf2f7 !important; color: #2d3748 !important; color-scheme: light; }
 html.cu-light body::before { background-image: radial-gradient(circle, rgba(100,116,139,0.25) 1px, transparent 1px); }
-html.cu-light .login-pf-page::before { background-image: url(../img/logo-light.svg) !important; }
+html.cu-light .login-pf-page::before { background-image: url(../img/alpha-pilot-logo-light.svg) !important; }
 html.cu-light .card-pf { background-color: #ffffff !important; border-color: #d3dae0 !important; box-shadow: 0 8px 30px rgba(15,23,42,0.10) !important; }
 html.cu-light #kc-page-title, html.cu-light h1, html.cu-light h2 { color: #2d3748 !important; }
 html.cu-light label, html.cu-light .login-pf label, html.cu-light .login-pf-settings label,
@@ -322,7 +322,7 @@ html.cu-light .pf-c-form__label-text, html.cu-light .instruction, html.cu-light 
 html.cu-light #kc-info, html.cu-light #kc-registration, html.cu-light #kc-registration span { color: #4a5568 !important; }
 html.cu-light input[type="text"], html.cu-light input[type="password"], html.cu-light input[type="email"],
 html.cu-light input:not([type]), html.cu-light select, html.cu-light textarea, html.cu-light .pf-c-form-control {
-  background-color: #ffffff !important; border-color: #cbd5e0 !important; color: #2d3748 !important; color-scheme: light;
+  background-color: #ffffff !important; border-color: #cbd5e0 !important; color: #152238 !important; color-scheme: light;
 }
 html.cu-light input::placeholder { color: #a0aec0 !important; }
 html.cu-light .pf-c-input-group, html.cu-light .kc-input-group { background-color: #ffffff !important; border-color: #cbd5e0 !important; }

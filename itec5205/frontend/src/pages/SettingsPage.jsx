@@ -17,6 +17,7 @@ import { MODEL_RULES, TRAINING_UNITS } from "../features/workflows/criteriaConfi
 import { EXISTING_MODES, UNIVERSES } from "../features/dataImport/ImportControls";
 import { DEFAULT_SETTINGS, getSavedSettings, getSettings, saveSettings } from "../features/settings/settings";
 import { parseIntervals } from "../utils/dateRanges";
+import ImportScheduleCard from "../features/settings/ImportScheduleCard";
 
 // A chart's initial range is picked from the buttons typed in the same section.
 const rangeOptions = (section) => (form) =>
@@ -332,6 +333,8 @@ export default function SettingsPage() {
       </div>
       {error && <p className="error-text" role="alert">{error}</p>}
 
+      <ImportScheduleCard />
+
       <div className="settings-grid">
         {SECTIONS.map((section) => {
           const Icon = section.icon;
@@ -365,7 +368,7 @@ export default function SettingsPage() {
               </div>
             </section>
           );
-        })}
+                })}
       </div>
     </div>
   );

@@ -125,12 +125,6 @@ export default function TopBar({ sidebarCollapsed, onToggleSidebar }) {
       >
         <BarsIcon />
       </button>
-      <div style={{ minWidth: 0 }}>
-        <div className="app-title">Investment Decision Support</div>
-        <div className="app-subtitle" title="A Data-Driven Framework for S&P 500 Stock Screening, Portfolio Allocation, and Price Prediction">
-          A Data-Driven Framework for S&amp;P 500 Stock Screening, Portfolio Allocation, and Price Prediction
-        </div>
-      </div>
       </div>
       <div className="flex shrink-0 items-center gap-3">
       <NavLink to="/" end className={({ isActive }) => `theme-toggle ${isActive ? "active" : ""}`} title="Who is signed in and what everyone is doing">

@@ -27,3 +27,7 @@ KEYCLOAK_ENABLED = os.environ.get("KEYCLOAK_ENABLED", "true").lower() != "false"
 KEYCLOAK_URL = os.environ.get("KEYCLOAK_URL", "http://keycloak:8080/auth")
 KEYCLOAK_REALM = os.environ.get("KEYCLOAK_REALM", "Carleton")
 KEYCLOAK_CLIENT = os.environ.get("KEYCLOAK_CLIENT", "carleton_client")
+
+# Database upgrade on start (app/db/migrations.py): on an EMPTY database, start
+# one import with the Settings Data Defaults. Existing data is never replaced.
+AUTO_INITIAL_IMPORT = os.environ.get("AUTO_INITIAL_IMPORT", "true").lower() != "false"

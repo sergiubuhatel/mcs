@@ -1,4 +1,4 @@
-# S&P 500 Investment Screener & RL Portfolio Builder
+# Alpha Pilot — S&P 500 Investment Screener & RL Portfolio Builder
 
 A full-stack, data-intensive application (ITEC 5205 research project) for
 screening S&P 500 companies by financial indicators, saving a candidate pool,

@@ -7,7 +7,7 @@ import { tooltipProps } from "../../utils/chartTheme";
 // card surface: first series = the app's chart blue, second = orange.
 const COLORS = {
   light: { main: "#2563eb", second: "#eb6834", grid: "#e2e8f0", tick: "#64748b" },
-  dark: { main: "#3b82f6", second: "#d95926", grid: "#1f2a44", tick: "#94a3b8" },
+  dark: { main: "#3b82f6", second: "#d95926", grid: "#354b67", tick: "#a5b4ca" },
 };
 
 function fmtMoney(v) {

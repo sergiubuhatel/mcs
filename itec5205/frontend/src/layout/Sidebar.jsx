@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { apiClient } from "../api/client";
-import CarletonLockup from "./CarletonLockup";
-import CarletonCrest from "./CarletonLogo";
+import logo from "../assets/alpha-pilot-logo.png";
 import {
   BarChartIcon,
   BookmarkPlusIcon,
@@ -161,8 +160,9 @@ export default function Sidebar({ collapsed }) {
         className="flex items-center justify-center px-3"
         style={{ height: "var(--header-height)", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}
       >
-        <NavLink to="/" className="brand-link" title="Home: Dashboard" aria-label="Carleton University — home">
-          {collapsed ? <CarletonCrest height={36} /> : <CarletonLockup height={42} />}
+        <NavLink to="/" className="brand-link" title="Home: Dashboard" aria-label="Alpha Pilot — home">
+          <img src={logo} alt="" width={collapsed ? 40 : 44} height={collapsed ? 40 : 44} className="brand-logo" />
+          {!collapsed && <span className="brand-name">Alpha Pilot</span>}
         </NavLink>
       </div>
 

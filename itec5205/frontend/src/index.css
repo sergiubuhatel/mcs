@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  --color-input: #ffffff;
   --color-bg-primary: #ffffff;
   --color-bg-secondary: #edf2f7;
   --color-bg-tertiary: #e2e8f0;
@@ -16,15 +17,19 @@
   line-height: 1.5;
 }
 
+/* Dark mode = the listings app's "Midnight Blue": layered blue-grey
+   surfaces, cards lighter than the page. */
 .dark {
-  --color-bg-primary: #141b2d;
-  --color-bg-secondary: #0b1120;
-  --color-bg-tertiary: #1b2540;
-  --color-text-primary: #f1f5f9;
-  --color-text-secondary: #94a3b8;
+  --color-bg-primary: #1f3049;    /* cards, panels, header, sidebar */
+  --color-bg-secondary: #152238;  /* the page */
+  --color-bg-tertiary: #293c57;   /* elevated panels, chips */
+  --color-text-primary: #f1f5fb;
+  --color-text-secondary: #a5b4ca;
   --color-text-accent: #60a5fa;
-  --color-divider: #253044;
-  --color-bg-hover: #1b2540;
+  --color-divider: #354b67;
+  --color-bg-hover: #293c57;      /* hovered / selected rows */
+  --color-input: #182840;         /* form fields */
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -50,10 +55,10 @@
 .close-btn:hover { background: #f3f4f6; }
 .dark .close-btn {
   border-color: #ffffff;
-  background: #111827;
+  background: #152238;
   color: #ffffff;
 }
-.dark .close-btn:hover { background: #374151; }
+.dark .close-btn:hover { background: #293c57; }
 
 html, body, #root { height: 100%; margin: 0; padding: 0; }
 
@@ -105,7 +110,7 @@ a:hover { text-decoration: underline; }
 input:not([type="checkbox"]):not([type="radio"]), select, textarea {
   padding: 6px 8px; border-radius: 5px; font-size: 0.85rem;
   border: 1px solid var(--color-divider);
-  background: var(--color-bg-primary);
+  background: var(--color-input);
   color: var(--color-text-primary);
 }
 input::placeholder, textarea::placeholder { color: var(--color-text-secondary); opacity: 0.8; }
@@ -150,11 +155,8 @@ tr:hover td { background: var(--color-bg-hover); }
 .btn.btn-danger-solid { background: #dc2626; border-color: #dc2626; color: #fff; }
 .brand-link { display: flex; align-items: center; gap: 10px; min-width: 0; text-decoration: none; color: var(--color-text-primary); }
 .brand-link:hover { text-decoration: none; }
-/* Wordmark color (the lockup draws it in currentColor): official near-black, white on dark. */
-.brand-link { color: #100f0d; }
-.dark .brand-link { color: #ffffff; }
-.app-title { font-size: 1.2rem; font-weight: 700; color: var(--color-text-primary); line-height: 1.25; }
-.app-subtitle { font-size: 0.82rem; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brand-logo { flex-shrink: 0; object-fit: contain; }
+.brand-name { font-size: 1.3rem; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; color: var(--color-text-primary); }
 .theme-toggle {
   display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 9px; flex-shrink: 0;
   border: 1px solid var(--color-divider); background: var(--color-bg-primary); color: var(--color-text-primary);
@@ -247,7 +249,7 @@ button.ticker-chip:disabled { cursor: not-allowed; opacity: 0.45; }
 .count-badge { display: inline-block; min-width: 26px; padding: 1px 7px; border-radius: 6px; font-size: 0.76rem; font-weight: 700; text-align: center; background: rgba(37, 99, 235, 0.14); color: #1d4ed8; font-variant-numeric: tabular-nums; }
 .dark .count-badge { color: #93c5fd; }
 .count-badge.green { background: rgba(22, 163, 74, 0.14); color: #15803d; }
-.dark .count-badge.green { color: #4ade80; }
+.dark .count-badge.green { color: #86efac; }
 .step-number { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: var(--btn-accent); color: #fff; font-weight: 700; flex-shrink: 0; }
 .order-details { margin-top: 12px; }
 .order-details > summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
@@ -258,7 +260,7 @@ button.ticker-chip:disabled { cursor: not-allowed; opacity: 0.45; }
 .orders-box h4 { margin: 0 0 6px; }
 .orders-box.buy h4 { color: #16a34a; }
 .orders-box.sell h4 { color: #dc2626; }
-.dark .orders-box.buy h4 { color: #4ade80; }
+.dark .orders-box.buy h4 { color: #86efac; }
 .dark .orders-box.sell h4 { color: #f87171; }
 .forecast-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; font-size: 0.8rem; }
 .forecast-chip { display: inline-flex; gap: 8px; align-items: baseline; padding: 3px 9px; border: 1px solid var(--color-divider); border-radius: 8px; background: var(--color-bg-tertiary); }
@@ -336,7 +338,7 @@ tr.selected td { background: rgba(37, 99, 235, 0.10); }
 .signal-word.bad { color: #dc2626; }
 .signal-word.warn { color: #d97706; }
 .signal-word.info { color: var(--color-text-accent); }
-.dark .signal-word.good { color: #4ade80; }
+.dark .signal-word.good { color: #86efac; }
 .dark .signal-word.bad { color: #f87171; }
 .dark .signal-word.warn { color: #fbbf24; }
 
@@ -372,7 +374,7 @@ tr.selected td { background: rgba(37, 99, 235, 0.10); }
 .status-pill.bad { background: rgba(220, 38, 38, 0.13); color: #b91c1c; }
 .status-pill.info { background: rgba(37, 99, 235, 0.13); color: #1d4ed8; }
 .status-pill.grey { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
-.dark .status-pill.good { color: #4ade80; }
+.dark .status-pill.good { color: #86efac; }
 .dark .status-pill.warn { color: #fbbf24; }
 .dark .status-pill.bad { color: #f87171; }
 .dark .status-pill.info { color: #93c5fd; }
@@ -717,7 +719,7 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; white-space: nowrap;
   border: 1px solid rgba(22, 163, 74, 0.4); background: rgba(22, 163, 74, 0.1); color: #15803d;
 }
-.dark .system-pill { color: #4ade80; }
+.dark .system-pill { color: #86efac; }
 .system-pill.down { border-color: rgba(220, 38, 38, 0.4); background: rgba(220, 38, 38, 0.1); color: #b91c1c; }
 .dark .system-pill.down { color: #f87171; }
 .avatar {
@@ -759,7 +761,7 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 }
 .online-pill .presence-dot { width: 7px; height: 7px; box-shadow: none; }
 .online-pill.on { border-color: rgba(22, 163, 74, 0.45); background: rgba(22, 163, 74, 0.1); color: #15803d; }
-.dark .online-pill.on { color: #4ade80; }
+.dark .online-pill.on { color: #86efac; }
 .user-avatar {
   width: 26px; height: 26px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
   background: linear-gradient(135deg, #8b5cf6, #6366f1); color: #fff; font-size: 0.72rem; font-weight: 700; flex-shrink: 0;
@@ -800,3 +802,23 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 .open-portfolio { text-decoration: none; white-space: nowrap; flex-shrink: 0; }
 .open-portfolio:hover { text-decoration: none; }
 .compare-open { opacity: 0.7; font-size: 0.75rem; }
+
+/* Dark mode (as in the listings app): brighter checkboxes on the dark fields,
+   darker shadows. */
+.dark input[type="checkbox"], .dark input[type="radio"] { filter: brightness(1.25); }
+
+/* Settings -> Automatic Import (features/settings/ImportScheduleCard.jsx) */
+.import-schedule-card { margin: 0 0 14px; }
+.schedule-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1100px) { .schedule-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .schedule-tiles { grid-template-columns: 1fr; } }
+.schedule-tile-value { font-weight: 700; margin-top: 2px; }
+.schedule-tile-sub { font-size: 0.78rem; margin-top: 2px; }
+.schedule-form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--color-divider); font-size: 0.85rem; }
+.schedule-field { display: inline-flex; align-items: center; gap: 8px; }
+.schedule-note { font-size: 0.8rem; margin: 10px 0 0; }
+.schedule-times { flex-wrap: wrap; }
+.schedule-time { display: inline-flex; align-items: center; gap: 2px; }
+.schedule-time-remove { border: 0; background: transparent; color: var(--color-text-secondary); font-size: 1.1rem; line-height: 1; padding: 0 4px; cursor: pointer; border-radius: 4px; }
+.schedule-time-remove:hover { color: #dc2626; background: rgba(220, 38, 38, 0.1); }
+.schedule-add { padding: 4px 10px; }

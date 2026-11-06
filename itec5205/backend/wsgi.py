@@ -21,7 +21,19 @@ from app import create_app
 
 app = create_app()
 
+
 if __name__ == "__main__":
+    import logging
+
+    from app.db import migrations
+    from app.services import import_schedule
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # Upgrade the database: missing collections/indexes now, missing data in
+    # the background (existing data is left as it is).
+    migrations.upgrade()
+    # Automatic data import (Settings -> Automatic Import); Redis-locked loop.
+    import_schedule.start()
     host = os.environ.get("WAITRESS_HOST", "0.0.0.0")
     port = int(os.environ.get("WAITRESS_PORT", "5000"))
     serve(app, host=host, port=port, threads=8, max_request_body_size=8 * 1024**3)  # Import All uploads

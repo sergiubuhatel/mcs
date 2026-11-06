@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
+from ..auth import require_admin
 from ..db.arango_client import get_db
 
 bp = Blueprint("settings", __name__, url_prefix="/api/settings")
@@ -52,3 +53,41 @@ def reset_settings():
     if collection.has(KEY):
         collection.delete(KEY)
     return jsonify({"settings": {}, "updated_at": None})
+
+
+# ------------------------------------------------------------ automatic import
+# Schedule + status of the automatic import (services/import_schedule.py).
+
+@bp.get("/import-schedule")
+def get_import_schedule():
+    from ..services import import_schedule  # noqa: PLC0415
+
+    return jsonify(import_schedule.status())
+
+
+@bp.put("/import-schedule")
+@require_admin
+def save_import_schedule():
+    from ..auth import current_user  # noqa: PLC0415
+    from ..services import import_schedule  # noqa: PLC0415
+
+    body = request.get_json(silent=True) or {}
+    try:
+        import_schedule.save_schedule(body.get("schedule"), body.get("trading_days", True), current_user(), body.get("universe"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(import_schedule.status())
+
+
+@bp.post("/import-schedule/run")
+@require_admin
+def run_import_now():
+    """Start an import with the Data Defaults now (what the schedule runs)."""
+    from ..auth import current_user  # noqa: PLC0415
+    from ..services import import_schedule  # noqa: PLC0415
+
+    user = current_user() or {}
+    result = import_schedule.start_import("manual", {"id": user.get("id"), "username": user.get("username"), "name": user.get("name")})
+    if result.get("busy"):
+        return jsonify({"error": result["message"], "busy": True}), 409
+    return jsonify(result), 202 if result.get("task_id") else 200

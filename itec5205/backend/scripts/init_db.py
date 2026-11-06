@@ -9,24 +9,15 @@ Usage:
 
 import os
 import sys
-import time
+
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.db.arango_client import COLLECTIONS, ensure_collections, get_db  # noqa: E402
-
-ATTEMPTS = 60
-DELAY_SECONDS = 2
+from app.db.arango_client import COLLECTIONS  # noqa: E402
+from app.db.migrations import upgrade  # noqa: E402
 
 if __name__ == "__main__":
-    for attempt in range(1, ATTEMPTS + 1):
-        try:
-            ensure_collections()
-            break
-        except Exception as exc:  # noqa: BLE001 - connection refused / 503 while ArangoDB boots
-            if attempt == ATTEMPTS:
-                raise
-            print(f"ArangoDB not ready ({exc.__class__.__name__}), retry {attempt}/{ATTEMPTS}...", flush=True)
-            get_db.cache_clear()
-            time.sleep(DELAY_SECONDS)
+    # Schema only (collections, indexes, renames); the backend fills missing
+    # data in the background when it starts (app/db/migrations.py).
+    upgrade(data=False)
     print(f"Ready: {', '.join(COLLECTIONS)}")

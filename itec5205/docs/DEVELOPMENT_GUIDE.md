@@ -1,4 +1,4 @@
-# Development Guide — S&P 500 Investment Screener & RL Portfolio Builder
+# Development Guide — Alpha Pilot (S&P 500 Investment Screener & RL Portfolio Builder)
 
 Everything you need to understand how this system is put together, how its
 pieces talk to each other, and how to build/run/extend it. For the

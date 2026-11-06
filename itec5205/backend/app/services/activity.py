@@ -147,6 +147,7 @@ ACTIONS = {
     "orders.save_plan": ("trading", "Saved the order plan", None, None),
     "settings.save_settings": ("settings", "Changed the settings", None, None),
     "settings.reset_settings": ("settings", "Reset the settings", None, None),
+    "settings.save_import_schedule": ("settings", "Changed the automatic import schedule", lambda b, r: str(b.get("schedule", "")), None),
     "backup.import_all": ("backup", "Imported the whole database", None, None),
     "backup.export_all": ("backup", "Exported the whole database", None, None),
     "backup.delete_all": ("backup", "Deleted all data", None, None),
