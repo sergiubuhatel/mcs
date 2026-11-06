@@ -6,11 +6,12 @@ from ..services.horizons import BAND_LEVELS, DEFAULT_BAND_LEVEL
 from ..services.portfolio_forecast import portfolio_forecast
 from ..services.portfolio_service import (
     combine_sleeves,
-    compute_performance_series,
+    analyze_portfolio,
     create_portfolio,
     delete_portfolio,
     get_portfolio,
     list_portfolios,
+    live_metrics,
     set_display,
     update_portfolio,
 )
@@ -21,7 +22,15 @@ bp = Blueprint("portfolios", __name__, url_prefix="/api/portfolios")
 
 @bp.get("")
 def list_all():
-    return jsonify({"portfolios": list_portfolios()})
+    """`?metrics=1` adds `live` to each portfolio: 1D / 1Y / volatility /
+    Sharpe as of today's data (the same calculation as the portfolio page),
+    next to the values stored when it was built."""
+    portfolios = list_portfolios()
+    if request.args.get("metrics"):
+        live = live_metrics(portfolios)
+        for p in portfolios:
+            p["live"] = live.get(p["_key"])
+    return jsonify({"portfolios": portfolios})
 
 
 @bp.get("/<portfolio_id>")
@@ -113,8 +122,9 @@ def performance(portfolio_id: str):
     if portfolio is None:
         return jsonify({"error": "Portfolio not found"}), 404
     days = int(request.args.get("days", 500))
-    series = compute_performance_series(portfolio["holdings"], lookback_days=days)
-    return jsonify({"portfolio_id": portfolio_id, "series": series})
+    # Series + every tile / grid number, all as of one date (portfolio_service.analyze_portfolio).
+    result = analyze_portfolio(portfolio["holdings"], portfolio.get("sleeves"), lookback_days=days)
+    return jsonify({"portfolio_id": portfolio_id, **result})
 
 
 @bp.get("/<portfolio_id>/forecast")

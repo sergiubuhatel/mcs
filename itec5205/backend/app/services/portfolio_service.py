@@ -122,6 +122,206 @@ def compute_performance_series(holdings: list[dict], lookback_days: int = TRADIN
     return [{"date": d, "value": round(float(v), 2)} for d, v in zip(returns.index, cumulative)]
 
 
+# --------------------------------------------------------------------------
+# One calculation for everything a portfolio page shows (2026-11-06).
+#
+# Before, the page mixed sources: the index ran to the newest close of ANY
+# holding (holdings without that day counted as 0%), each holding's 1D / 1Y /
+# volatility came from whenever that stock was last imported, a part's row in
+# a portfolio of portfolios summed its holdings' own-latest 1D (different days),
+# and expected return / Sharpe were frozen at build time. During an import the
+# parent and its parts then showed numbers from different days.
+#
+# Now every number comes from the same daily returns, cut at the same date:
+#   as_of     the latest close every CURRENT holding has (a holding more than
+#             STALE_DAYS behind the newest close -- delisted / no longer
+#             updated -- is held flat after its last close instead of freezing
+#             the whole portfolio)
+#   index     fixed weights applied to each day's returns (rebalanced daily, as
+#             before). A holding with no prices yet (listed later, e.g. SPCX)
+#             is left out and the others re-weighted until it trades -- it used
+#             to count as cash at 0%. A missing day in the middle = unchanged.
+#   1D        index at as_of vs the previous close (additive: a parent's 1D is
+#             exactly its parts' 1D x their allocations)
+#   1Y        points on/after as_of minus one calendar year, first -> last (the
+#             chart's 1Y window); volatility = annualized sample std. dev. of
+#             the daily returns inside it; expected return = their mean x 252;
+#             Sharpe = expected return / volatility (no risk-free rate).
+# --------------------------------------------------------------------------
+
+STALE_DAYS = 7
+
+
+def _daily_returns(tickers: list[str], lookback_days: int) -> pd.DataFrame:
+    """Daily fractional returns (rows = dates, columns = tickers), NaN where a
+    ticker has no close that day. Same date-bounded read as _returns_matrix."""
+    db = get_db()
+    latest = next(db.aql.execute(
+        """
+        FOR t IN @tickers
+            LET d = FIRST(FOR p IN stock_prices FILTER p.ticker == t SORT p.date DESC LIMIT 1 RETURN p.date)
+            COLLECT AGGREGATE latest = MAX(d)
+            RETURN latest
+        """,
+        bind_vars={"tickers": tickers},
+    ), None)
+    if latest is None:
+        return pd.DataFrame()
+    window_days = min(int(lookback_days * 1.6) + 14, 365 * 100)
+    since = (pd.Timestamp(latest) - pd.Timedelta(days=window_days)).strftime("%Y-%m-%d")
+    rows = list(db.aql.execute(
+        """
+        FOR p IN stock_prices
+            FILTER p.ticker IN @tickers AND p.date >= @since AND p.percentage_change != null
+            RETURN {ticker: p.ticker, date: p.date, r: p.percentage_change}
+        """,
+        bind_vars={"tickers": tickers, "since": since},
+    ))
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows).pivot_table(index="date", columns="ticker", values="r") / 100.0
+    # Markets are shut on weekends: a stray Saturday/Sunday row (e.g. AAPL and
+    # TSLA on Sunday 2026-09-20, 0%) would add a fake trading day for some holdings only.
+    df = df[pd.to_datetime(df.index).dayofweek < 5]
+    return df.sort_index().tail(lookback_days + 1)
+
+
+def _as_of(returns: pd.DataFrame, tickers: list[str]) -> str | None:
+    """Latest date every current holding has a close (see STALE_DAYS)."""
+    last = {t: returns[t].last_valid_index() for t in tickers if t in returns.columns}
+    last = {t: d for t, d in last.items() if d is not None}
+    if not last:
+        return None
+    newest = pd.Timestamp(max(last.values()))
+    current = [d for d in last.values() if newest - pd.Timestamp(d) <= pd.Timedelta(days=STALE_DAYS)]
+    return min(current)
+
+
+def _index_returns(returns: pd.DataFrame, tickers: list[str], weights: np.ndarray) -> np.ndarray:
+    """Daily returns of fixed `weights` (see the block comment): holdings not
+    listed yet are left out and the rest re-weighted; gaps after listing = 0."""
+    m = returns.reindex(columns=tickers)
+    listed = m.notna().cumsum().gt(0).to_numpy()
+    w = np.where(listed, weights, 0.0)
+    total = w.sum(axis=1, keepdims=True)
+    w = np.divide(w, total, out=np.zeros_like(w), where=total > 0)
+    return (m.fillna(0.0).to_numpy() * w).sum(axis=1)
+
+
+def _portfolio_daily(returns: pd.DataFrame, holdings: list[dict], sleeves: list[dict] | None) -> np.ndarray:
+    """Daily index returns. A portfolio of portfolios is built from its parts
+    (allocation x each part's own index), so a part that re-weights while one
+    of its stocks is not listed yet does so inside the part -- the parent's
+    1D and expected return are then exactly the parts' ones x allocations."""
+    if not sleeves:
+        return _index_returns(returns, [h["ticker"] for h in holdings], np.array([h["weight"] for h in holdings], dtype=float))
+    total = sum(float(s["allocation"]) for s in sleeves) or 1.0
+    daily = np.zeros(len(returns))
+    for s in sleeves:
+        hs = s["holdings"]
+        part = _index_returns(returns, [h["ticker"] for h in hs], np.array([h.get("weight_in_part", h["weight"]) for h in hs], dtype=float))
+        daily += float(s["allocation"]) / total * part
+    return daily
+
+
+def _own_rows(returns: pd.DataFrame, tickers: list[str]) -> pd.DataFrame:
+    """Only the dates on which at least one of `tickers` traded -- what that
+    portfolio's own page reads (days only OTHER holdings have are not its days)."""
+    cols = [t for t in tickers if t in returns.columns]
+    return returns[returns[cols].notna().any(axis=1)] if cols else returns.iloc[0:0]
+
+
+def _window_metrics(dates: list[str], daily: np.ndarray, as_of: str) -> dict:
+    """1D / 1Y / volatility / expected return / Sharpe of one daily-return series ending at as_of."""
+    out = {"day_change": None, "previous_date": None, "change_1y": None, "volatility_1y": None,
+           "expected_return_1y": None, "sharpe_1y": None, "window_start": None}
+    if len(daily) >= 2:
+        out["day_change"] = round(float(daily[-1]), 6)
+        out["previous_date"] = dates[-2]
+    cutoff = (pd.Timestamp(as_of) - pd.DateOffset(years=1)).strftime("%Y-%m-%d")
+    start = next((i for i, d in enumerate(dates) if d >= cutoff), None)
+    if start is None or len(dates) - start < 2:
+        return out
+    window = daily[start + 1:]  # the first point is the base: its own return is not in the window
+    out["window_start"] = dates[start]
+    out["change_1y"] = round(float(np.prod(1.0 + window) - 1.0), 6)
+    if len(window) >= 2:
+        vol = float(np.std(window, ddof=1) * np.sqrt(TRADING_DAYS_PER_YEAR))
+        exp = float(np.mean(window) * TRADING_DAYS_PER_YEAR)
+        out["volatility_1y"] = round(vol, 6)
+        out["expected_return_1y"] = round(exp, 6)
+        out["sharpe_1y"] = round(exp / vol, 4) if vol else None
+    return out
+
+
+def analyze_portfolio(holdings: list[dict], sleeves: list[dict] | None = None,
+                      lookback_days: int = TRADING_DAYS_PER_YEAR) -> dict:
+    """Index series + every metric of the portfolio page, all as of one date:
+    the portfolio, each holding, and (portfolio of portfolios) each part."""
+    tickers = [h["ticker"] for h in holdings]
+    returns = _daily_returns(tickers, max(lookback_days, TRADING_DAYS_PER_YEAR + 10))
+    as_of = _as_of(returns, tickers) if not returns.empty else None
+    if as_of is None:
+        return {"as_of": None, "series": [], "summary": None, "holdings": {}, "sleeves": []}
+    returns = _own_rows(returns.loc[:as_of], tickers)
+    dates = [str(d) for d in returns.index]
+
+    def metrics_of(ts, ws):
+        own = _own_rows(returns, ts)
+        return _window_metrics([str(d) for d in own.index], _index_returns(own, ts, np.array(ws, dtype=float)), as_of)
+
+    daily = _portfolio_daily(returns, holdings, sleeves)
+    shown = min(len(dates), lookback_days + 1)
+    values = 100.0 * np.cumprod(1.0 + daily[-shown:])
+    series = [{"date": d, "value": round(float(v), 2)} for d, v in zip(dates[-shown:], values)]
+
+    summary = _window_metrics(dates, daily, as_of)
+    per_holding = {}
+    for t in tickers:
+        m = metrics_of([t], [1.0])
+        first = returns[t].first_valid_index() if t in returns.columns else None
+        last = returns[t].last_valid_index() if t in returns.columns else None
+        # Trading for less than the 1Y window: its 1Y is "since listing".
+        m["listed_since"] = str(first) if first is not None and summary["window_start"] and str(first) > summary["window_start"] else None
+        m["last_close"] = str(last) if last is not None else None
+        m["stale"] = bool(last is not None and str(last) < as_of)
+        if not first:
+            m = {k: None for k in m}
+        per_holding[t] = m
+
+    parts = [
+        {"portfolio_id": s.get("portfolio_id"), "name": s.get("name"),
+         **metrics_of([h["ticker"] for h in s["holdings"]], [h.get("weight_in_part", h["weight"]) for h in s["holdings"]])}
+        for s in (sleeves or [])
+    ]
+    if parts:
+        # The index keeps the allocations every day (rebalanced daily), so its 1Y
+        # is not the parts' 1Y x allocations; that sum is what holding the parts
+        # unchanged since the start of the window would have made.
+        total = sum(float(s["allocation"]) for s in sleeves) or 1.0
+        if all(p["change_1y"] is not None for p in parts):
+            summary["change_1y_held"] = round(sum(float(s["allocation"]) / total * p["change_1y"] for s, p in zip(sleeves, parts)), 6)
+    return {"as_of": as_of, "series": series, "summary": summary, "holdings": per_holding, "sleeves": parts}
+
+
+def live_metrics(portfolios: list[dict]) -> dict:
+    """{portfolio key: summary} for many portfolios with ONE price read (Portfolios list)."""
+    tickers = list(dict.fromkeys(h["ticker"] for p in portfolios for h in p.get("holdings", [])))
+    if not tickers:
+        return {}
+    returns = _daily_returns(tickers, TRADING_DAYS_PER_YEAR + 10)
+    out = {}
+    for p in portfolios:
+        ts = [h["ticker"] for h in p.get("holdings", [])]
+        as_of = _as_of(returns, ts) if ts and not returns.empty else None
+        if as_of is None:
+            continue
+        r = _own_rows(returns.loc[:as_of], ts)
+        daily = _portfolio_daily(r, p["holdings"], p.get("sleeves"))
+        out[p["_key"]] = {"as_of": as_of, **_window_metrics([str(d) for d in r.index], daily, as_of)}
+    return out
+
+
 def _normalize_holdings(holdings: list[dict]) -> list[dict]:
     total = sum(h["weight"] for h in holdings)
     if total <= 0:

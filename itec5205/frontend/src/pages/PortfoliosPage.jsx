@@ -98,7 +98,7 @@ const PORTFOLIO_COLUMNS = [
     width: 120,
     sortable: true,
     render: (p) => (
-      <strong title="Past-year return of these weights" style={{ color: p.annual_return == null ? undefined : p.annual_return >= 0 ? "#16a34a" : "#dc2626" }}>
+      <strong title={`Past-year return of these weights, as of ${p.live?.as_of ?? "the latest close"}${p.at_build?.annual_return != null ? ` · at build ${fmtPct(p.at_build.annual_return, true)}` : ""}`} style={{ color: p.annual_return == null ? undefined : p.annual_return >= 0 ? "#16a34a" : "#dc2626" }}>
         {fmtPct(p.annual_return, true)}
       </strong>
     ),

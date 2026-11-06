@@ -16,11 +16,18 @@ import {
   updateSucceeded,
 } from "./portfoliosSlice";
 
+const withLive = (p) =>
+  p.live
+    ? { ...p, annual_return: p.live.change_1y, expected_volatility: p.live.volatility_1y, sharpe_ratio: p.live.sharpe_1y, at_build: { annual_return: p.annual_return, expected_volatility: p.expected_volatility, sharpe_ratio: p.sharpe_ratio } }
+    : p;
+
 function* handleFetch() {
   try {
     yield put(fetchStarted());
-    const { data } = yield call(apiClient.get, "/api/portfolios");
-    yield put(fetchSucceeded(data.portfolios));
+    // metrics=1: each portfolio's past-year return / volatility / Sharpe as of
+    // today's data (the portfolio page's numbers), instead of the build-time ones.
+    const { data } = yield call(apiClient.get, "/api/portfolios", { params: { metrics: 1 } });
+    yield put(fetchSucceeded(data.portfolios.map(withLive)));
   } catch (err) {
     yield put(fetchFailed(err.message));
   }

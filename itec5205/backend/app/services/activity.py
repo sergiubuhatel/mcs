@@ -393,9 +393,11 @@ def _get_portfolio(db, key: str | None) -> dict | None:
 def portfolio_performance(portfolio_id: str | None = None, compare_ids: list[str] = ()) -> dict | None:
     """A portfolio (default: the newest) against the market benchmarks
     (S&P 500 / Dow ETFs) and any other portfolios to compare, over up to HISTORY_DAYS. The page cuts the range
-    picked and rebases every line to 100 at its start. A holding without
-    prices yet on a day counts as a 0% return that day."""
-    from .portfolio_service import _returns_matrix  # noqa: PLC0415
+    picked and rebases every line to 100 at its start. Same calculation as the
+    portfolio page (portfolio_service): every line ends at the latest close all
+    current holdings have, and a holding not listed yet is left out (others
+    re-weighted) instead of counting as 0%."""
+    from .portfolio_service import _as_of, _daily_returns, _portfolio_daily  # noqa: PLC0415
     from .universes import BENCHMARKS  # noqa: PLC0415
 
     cache_key = (portfolio_id, tuple(compare_ids))
@@ -418,21 +420,23 @@ def portfolio_performance(portfolio_id: str | None = None, compare_ids: list[str
         return [h["ticker"] for h in p["holdings"]], np.array([h["weight"] for h in p["holdings"]], dtype=float)
 
     every = [h["ticker"] for p in [main, *others] for h in p["holdings"]]
-    returns = _returns_matrix(list(dict.fromkeys(every + list(BENCHMARKS))), lookback_days=HISTORY_DAYS)
+    returns = _daily_returns(list(dict.fromkeys(every + list(BENCHMARKS))), HISTORY_DAYS)
     if returns.empty:
         return None
-    returns = returns.fillna(0.0)
+    as_of = _as_of(returns, list(dict.fromkeys(every)))
+    if as_of is None:
+        return None
+    returns = returns.loc[:as_of]
 
     def daily_of(p):
-        tickers, weights = weights_of(p)
-        return returns.reindex(columns=tickers).fillna(0.0).values @ weights
+        return _portfolio_daily(returns, p["holdings"], p.get("sleeves"))
 
     tickers, _ = weights_of(main)
     daily = {"portfolio": daily_of(main)}
     labels = dict(BENCHMARK_LABELS)
     for b in BENCHMARKS:  # a benchmark not imported (yet) has no line
         if b in returns.columns and returns[b].abs().sum() > 0:
-            daily[b] = returns[b].values
+            daily[b] = returns[b].fillna(0.0).values
     for o in others:
         daily[f"p_{o['_key']}"] = daily_of(o)
         labels[f"p_{o['_key']}"] = o["name"]

@@ -130,6 +130,7 @@ const HOLDINGS_COLUMNS = [
       <span style={{ color: changeColor(h.stock_growth_1y), fontWeight: 600 }}>
         {h.stock_growth_1y != null && h.stock_growth_1y > 0 ? "+" : ""}
         {fmtPct(h.stock_growth_1y)}
+        {h.listed_since && <span className="muted" title={`Trading since ${h.listed_since}: change since then`}>*</span>}
       </span>
     ),
   },
@@ -226,10 +227,15 @@ function PartsAllocation({ sleeves }) {
 }
 
 // A part of a portfolio of portfolios as one grid row: its share of the whole
-// and the changes of its holdings, weighted by their weight inside the part.
-const PART_TOTALS = ["day_change", "stock_growth_1y"];
+// and the part's own 1D / 1Y / volatility -- computed by the server exactly as
+// that portfolio's own page does, on the same date as the parent (so the
+// parent's 1D = the parts' 1D x their allocations).
+const PART_TOTALS = ["day_change", "stock_growth_1y", "volatility"];
 function partRow(sleeve) {
   const row = { weight: sleeve.allocation / 100 };
+  if (sleeve.live) {
+    return { ...row, day_change: sleeve.live.day_change, stock_growth_1y: sleeve.live.change_1y, volatility: sleeve.live.volatility_1y };
+  }
   for (const key of PART_TOTALS) {
     const known = sleeve.holdings.filter((h) => h[key] != null);
     const w = known.reduce((n, h) => n + h.weight_in_part, 0);
@@ -250,11 +256,30 @@ function sortRows(rows, sortBy, sortDir) {
   });
 }
 
+// Every holding / part number from GET /performance: one calculation, one
+// "as of" date for the whole page (backend portfolio_service.analyze_portfolio).
+function withLiveMetrics(detail, perf) {
+  const live = (h) => {
+    const m = perf.holdings?.[h.ticker];
+    return m
+      ? { ...h, day_change: m.day_change, stock_growth_1y: m.change_1y, volatility: m.volatility_1y, listed_since: m.listed_since, last_close: m.last_close }
+      : h;
+  };
+  const parts = Object.fromEntries((perf.sleeves || []).map((p) => [p.portfolio_id, p]));
+  return {
+    ...detail,
+    holdings: detail.holdings.map(live),
+    sleeves: detail.sleeves?.map((sl) => ({ ...sl, holdings: sl.holdings.map(live), live: parts[sl.portfolio_id] })),
+  };
+}
+
 export default function PortfolioDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [portfolio, setPortfolio] = useState(null);
   const [series, setSeries] = useState(null);
+  const [summary, setSummary] = useState(null); // portfolio 1D / 1Y / volatility / expected return / Sharpe
+  const [asOf, setAsOf] = useState(null);
   const [error, setError] = useState(null);
   const [range, setRange] = useState(() => getSettings().general.chart_range);
   const [sortBy, setSortBy] = useState("weight");
@@ -288,10 +313,12 @@ export default function PortfolioDetailPage() {
       apiClient.get(`/api/portfolios/${id}/performance`, { params: { days: 3650 } }), // up to ~10 years
     ])
       .then(([detailRes, perfRes]) => {
-        setPortfolio(detailRes.data);
+        setPortfolio(withLiveMetrics(detailRes.data, perfRes.data));
         setDisplay(detailRes.data.display || "sleeves");
         setOpenParts({});
         setSeries(perfRes.data.series);
+        setSummary(perfRes.data.summary);
+        setAsOf(perfRes.data.as_of);
       })
       .catch((err) => setError(apiError(err)));
   }, [id]);
@@ -383,13 +410,9 @@ export default function PortfolioDetailPage() {
   const missingForecasts = forecast && !forecast.error ? [...new Set([...forecast.missing.lstm, ...forecast.missing.arima])] : [];
   const periodChangePct = windowChangePct(rangeSeries);
   const periodVolatility = computeVolatilityFromSeries(rangeSeries);
-  // Tiles always use the past year (same window as the 1Y chart / My Portfolios).
-  const yearSeries = filterByInterval(series, "1Y");
-  const yearChangePct = windowChangePct(yearSeries);
-  const yearVolatility = computeVolatilityFromSeries(yearSeries);
-  // Latest close vs the previous one (the same index as the chart).
-  const prevPoint = series.length > 1 ? series[series.length - 2] : null;
-  const dayChangePct = prevPoint && prevPoint.value ? (series[series.length - 1].value / prevPoint.value - 1) * 100 : null;
+  // From the server (same numbers as the chart's last points and the grid).
+  const pctOrNull = (v) => (v == null ? null : v * 100);
+  const dayChangePct = pctOrNull(summary?.day_change);
   const allocation = portfolio.holdings
     .map((h) => ({ ticker: h.ticker, name: h.name, weightPct: h.weight * 100 }))
     .sort((a, b) => b.weightPct - a.weightPct);
@@ -405,7 +428,8 @@ export default function PortfolioDetailPage() {
   const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : null);
   const created = fmtDay(portfolio.created_at);
   const lastUpdated = fmtDay(portfolio.updated_at || portfolio.created_at);
-  const asOf = series.length ? series[series.length - 1].date : null; // latest stored close
+  const sharpe = summary?.sharpe_1y;
+  const heldPct = pctOrNull(summary?.change_1y_held);
   const byPart = portfolio.sleeves?.length > 0 && display === "sleeves";
 
   const tiles = [
@@ -414,22 +438,27 @@ export default function PortfolioDetailPage() {
       color: dayChangePct != null && dayChangePct < 0 ? "#dc2626" : "#16a34a",
       label: "Change (1D)",
       value: <span style={{ color: changeColor(dayChangePct) }}>{signed(dayChangePct)}</span>,
-      sub: prevPoint ? `${asOf} vs ${prevPoint.date}` : "no previous close",
-      title: "Change of the portfolio index from the previous close to the latest close.",
+      sub: summary?.previous_date ? `${asOf} vs ${summary.previous_date}` : "no previous close",
+      title:
+        "Latest close vs the previous one, as of the latest day EVERY holding has a close (during an import some already have a newer day)" +
+        (portfolio.sleeves?.length ? "; equals the parts' Change (1D) x their allocations." : "."),
     },
     {
       icon: GrowthIcon,
       color: "#16a34a",
       label: "1Y return",
-      value: <span style={{ color: changeColor(yearChangePct) }}>{signed(yearChangePct)}</span>,
-      sub: "historical backtest",
-      title: "Change of the portfolio index over the past year (same as the 1Y chart).",
+      value: <span style={{ color: changeColor(pctOrNull(summary?.change_1y)) }}>{signed(pctOrNull(summary?.change_1y))}</span>,
+      sub: heldPct != null ? `rebalanced daily · held: ${signed(heldPct)}` : "historical backtest",
+      title:
+        heldPct != null
+          ? `Past year with the allocations kept every day (rebalanced daily), as on the chart. Buying the parts a year ago and holding them unchanged: ${signed(heldPct)} (= the parts' 1Y x allocations).`
+          : "Change of the portfolio index over the past year (same as the 1Y chart).",
     },
     {
       icon: DatabaseIcon,
       color: "#6366f1",
       label: "Annual volatility (1Y)",
-      value: fmtPct(yearVolatility),
+      value: fmtPct(summary?.volatility_1y),
       sub: `std. dev. · at build ${fmtPct(portfolio.expected_volatility)}`,
       title: "Annualized standard deviation of the portfolio's daily returns over the past year.",
     },
@@ -437,9 +466,9 @@ export default function PortfolioDetailPage() {
       icon: StarIcon,
       color: "#06b6d4",
       label: "Expected return (ann.)",
-      value: <span style={{ color: changeColor(portfolio.expected_return) }}>{fmtPct(portfolio.expected_return)}</span>,
-      sub: "estimate at build",
-      title: "Annualized mean return of the holdings' history at the time the portfolio was built (not a forecast).",
+      value: <span style={{ color: changeColor(summary?.expected_return_1y) }}>{fmtPct(summary?.expected_return_1y)}</span>,
+      sub: `past-year mean · at build ${fmtPct(portfolio.expected_return)}`,
+      title: "Mean daily return over the past year x 252 (not a forecast); at build = the same, measured when the portfolio was built.",
     },
     {
       icon: LayersIcon,
@@ -472,7 +501,7 @@ export default function PortfolioDetailPage() {
               {built}
               {portfolio.notes ? ` · ${portfolio.notes}` : ""}
               {created ? ` · created ${created}` : ""}
-              {portfolio.sharpe_ratio != null ? ` · Sharpe ${portfolio.sharpe_ratio}` : ""}
+              {sharpe != null ? ` · Sharpe ${sharpe.toFixed(2)}` : ""}
             </p>
           </div>
           <div className="page-header-actions">
@@ -630,11 +659,11 @@ export default function PortfolioDetailPage() {
             {periodVolatility !== null && (
               <span className="muted">Volatility ({rangeLabel(range)}): <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(periodVolatility)}</strong></span>
             )}
-            {portfolio.sharpe_ratio != null && (
-              <span className="muted">| Sharpe: <strong style={{ color: "var(--color-text-primary)" }}>{portfolio.sharpe_ratio}</strong></span>
+            {sharpe != null && (
+              <span className="muted" title="Past year: expected return / volatility (no risk-free rate)">| Sharpe (1Y): <strong style={{ color: "var(--color-text-primary)" }}>{sharpe.toFixed(2)}</strong></span>
             )}
-            {portfolio.expected_return != null && (
-              <span className="muted">| Expected annual return: <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(portfolio.expected_return)}</strong></span>
+            {summary?.expected_return_1y != null && (
+              <span className="muted" title="Mean daily return over the past year x 252">| Expected annual return: <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(summary.expected_return_1y)}</strong></span>
             )}
           </div>
           <div style={{ display: "flex", gap: 4, alignItems: "center", marginLeft: "auto" }}>
