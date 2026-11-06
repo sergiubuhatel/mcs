@@ -23,7 +23,7 @@ import logging
 import threading
 import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from yfinance.exceptions import YFRateLimitError
 
@@ -76,6 +76,31 @@ def _is_rate_limited(exc: Exception) -> bool:
         return True
     text = str(exc)
     return "Too Many Requests" in text or "Invalid Crumb" in text or "429" in text
+
+
+# Yahoo also throttles WITHOUT a 429: under a burst (typically the first
+# minutes of an import, right after a worker start) it answers with an empty
+# result, which yfinance reports as "No data returned ... possibly delisted".
+# On 2026-11-06 that failed 362 real companies in 64 s (ACGL, ACN, ACI ...),
+# and earlier imports 789 / 1,026 in alphabetical blocks. A company with a
+# stored close in the last RECENT_DAYS days was trading a few days ago: treat
+# "no data" for it as throttling (pause + retry), never as delisted.
+RECENT_DAYS = 10
+
+
+def _recently_priced(ticker: str) -> bool:
+    since = (datetime.now(timezone.utc) - timedelta(days=RECENT_DAYS)).strftime("%Y-%m-%d")
+    try:
+        return bool(list(get_db().aql.execute(
+            "FOR p IN stock_prices FILTER p.ticker == @t AND p.date >= @since LIMIT 1 RETURN 1",
+            bind_vars={"t": ticker, "since": since},
+        )))
+    except Exception:  # noqa: BLE001 - can't tell: treat as known (safer than purging)
+        return True
+
+
+def _throttled_empty(exc: Exception, ticker: str) -> bool:
+    return is_delisted_error(str(exc)) and _recently_priced(ticker)
 
 
 class _YahooThrottle:
@@ -138,7 +163,7 @@ def _import_with_retry(throttle: _YahooThrottle, ticker: str, **options) -> dict
         try:
             result = import_ticker(ticker, **options)
         except Exception as exc:  # noqa: BLE001
-            if not _is_rate_limited(exc) or attempt == RATE_LIMIT_RETRIES:
+            if not (_is_rate_limited(exc) or _throttled_empty(exc, ticker)) or attempt == RATE_LIMIT_RETRIES:
                 raise
             throttle.hit(ticker)
             continue
@@ -290,7 +315,7 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
                     remaining.append(ticker)  # was paused when Stop came in -- resume picks it up
                     continue
                 except Exception as exc:  # noqa: BLE001 - keep going for the rest of the universe
-                    if is_delisted_error(str(exc)) and confirm_delisted(ticker):
+                    if is_delisted_error(str(exc)) and not _recently_priced(ticker) and confirm_delisted(ticker):
                         purge_ticker(ticker, str(exc))
                         delisted.append({"ticker": ticker, "error": str(exc)})
                     else:

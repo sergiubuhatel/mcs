@@ -99,8 +99,10 @@ def _initial_import(db):
         return "database already has companies"
     if not config.AUTO_INITIAL_IMPORT:
         return "skipped (AUTO_INITIAL_IMPORT=false)"
-    from ..services.import_schedule import start_import  # noqa: PLC0415
+    from ..services.import_schedule import STARTUP_GRACE_SECONDS, start_import  # noqa: PLC0415
 
+    # Wait until a deploy has finished restarting the workers (see import_schedule).
+    time.sleep(STARTUP_GRACE_SECONDS)
     result = start_import("initial")
     if result.get("busy"):
         raise RuntimeError("an import is already running; retry on the next start")

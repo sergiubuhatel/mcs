@@ -44,6 +44,11 @@ OTTAWA = ZoneInfo("America/Toronto")
 COLLECTION = "settings"
 KEY = "import_schedule"
 TICK_SECONDS = 30
+# No automatic import in the first minutes after the backend starts: a deploy
+# (deploy/install.sh) starts the new backend, THEN restarts the workers -- an
+# import queued in between was killed at once and looked hung.
+STARTUP_GRACE_SECONDS = 180
+_STARTED_AT = time.monotonic()
 LOCK_KEY = "import_scheduler:leader"
 EVERY_HOURS = (1, 2, 3, 4, 6, 8, 12, 24)
 DEFAULT = {"schedule": "daily@04:00,16:30,18:00", "trading_days": True, "universe": "russell3000"}
@@ -305,6 +310,8 @@ def _alive() -> bool:
 
 def _tick():
     reap_interrupted()
+    if time.monotonic() - _STARTED_AT < STARTUP_GRACE_SECONDS:
+        return
     now = datetime.now(timezone.utc)
     sched = get_schedule()
     if sched["schedule"] == "off" or not _due(sched, now):
