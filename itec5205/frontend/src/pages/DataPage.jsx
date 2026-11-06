@@ -26,6 +26,7 @@ const RECENT = 8;
 
 const STATUS = {
   running: { label: "Running", tone: "info" },
+  interrupted: { label: "Interrupted", tone: "warn" },
   completed: { label: "Completed", tone: "good" },
   completed_with_failures: { label: "Completed*", tone: "warn" },
   stopped: { label: "Stopped", tone: "warn" },

@@ -218,7 +218,8 @@ def _task_status(task_id: str, created_at: datetime) -> tuple[str, int | None]:
     return ("unknown" if _now() - created_at > RESULT_EXPIRY else "queued"), None
 
 
-_IMPORT_STATUS = {"completed": "done", "completed_with_failures": "done", "stopped": "stopped", "failed": "failed"}
+_IMPORT_STATUS = {"completed": "done", "completed_with_failures": "done", "stopped": "stopped", "failed": "failed",
+                  "interrupted": "failed"}
 
 
 def _job_status(job: dict, created_at: datetime) -> tuple[str, int | None]:

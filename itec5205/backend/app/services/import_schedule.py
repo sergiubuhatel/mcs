@@ -107,6 +107,39 @@ def import_options() -> dict:
 
 # ------------------------------------------------------------------ timing
 
+def reap_interrupted() -> list[str]:
+    """Mark imports whose task died (worker restarted by a redeploy, crash) as
+    "interrupted": status "running" but no heartbeat for HEARTBEAT_STALE_SECONDS
+    (a run from before heartbeats existed: none since it was created). Returns
+    their keys. Without this they looked running forever and blocked the
+    one-import-at-a-time lock, the bottom bar and Stop."""
+    from ..tasks.import_tasks import HEARTBEAT_STALE_SECONDS  # noqa: PLC0415
+
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(seconds=HEARTBEAT_STALE_SECONDS)).isoformat()
+    stale = list(get_db().aql.execute(
+        """
+        FOR r IN import_runs
+            FILTER r.status == 'running' AND (r.heartbeat_at != null ? r.heartbeat_at : r.created_at) < @cutoff
+            UPDATE r WITH {
+                status: 'interrupted', finished_at: @now,
+                error: 'The import stopped running (its worker was restarted, e.g. by a deploy). Companies not reached are caught up by the next import.'
+            } IN import_runs
+            RETURN NEW._key
+        """,
+        bind_vars={"cutoff": cutoff, "now": now.isoformat()},
+    ))
+    if stale:
+        log.warning("Imports interrupted (no heartbeat): %s", ", ".join(stale))
+        try:
+            from ..extensions import notify_dashboard  # noqa: PLC0415
+
+            notify_dashboard(force=True)
+        except Exception:  # noqa: BLE001
+            pass
+    return stale
+
+
 def _last_import(source: str | None = None) -> dict | None:
     flt = "FILTER r.source == @source" if source else ""
     rows = list(get_db().aql.execute(
@@ -117,7 +150,13 @@ def _last_import(source: str | None = None) -> dict | None:
 
 
 def _last_start() -> datetime | None:
-    last = _last_import()
+    """When the last import that really ran started. An interrupted one does
+    not count, so an automatic import killed by a deploy runs again at once
+    (skip / catch-up: only what is still missing is fetched)."""
+    rows = list(get_db().aql.execute(
+        "FOR r IN import_runs FILTER r.status != 'interrupted' SORT r.created_at DESC LIMIT 1 RETURN r"
+    ))
+    last = rows[0] if rows else None
     return datetime.fromisoformat(last["created_at"]) if last and last.get("created_at") else None
 
 
@@ -154,8 +193,11 @@ def next_run(sched: dict | None = None, now: datetime | None = None) -> datetime
         # one that just ran covers the slot) and after the schedule was saved
         # (saving "daily at 01:00" at noon waits for tomorrow 01:00). A slot
         # missed while the backend was down runs once on start-up.
-        marks = [t for t in (_last_start(), sched.get("updated_at") and datetime.fromisoformat(sched["updated_at"])) if t]
-        last = max(marks) if marks else now
+        # No saved schedule yet (first start, before the upgrade seeds it):
+        # count from now, so nothing "missed" runs at start-up.
+        saved = datetime.fromisoformat(sched["updated_at"]) if sched.get("updated_at") else now
+        marks = [t for t in (_last_start(), saved) if t]
+        last = max(marks)
         upcoming = [at for at in _daily_slots(sched, now) if at.astimezone(timezone.utc) > last]
         return upcoming[0].astimezone(timezone.utc) if upcoming else None
     if schedule.startswith("every:"):
@@ -262,6 +304,7 @@ def _alive() -> bool:
 # ------------------------------------------------------------------ the loop
 
 def _tick():
+    reap_interrupted()
     now = datetime.now(timezone.utc)
     sched = get_schedule()
     if sched["schedule"] == "off" or not _due(sched, now):

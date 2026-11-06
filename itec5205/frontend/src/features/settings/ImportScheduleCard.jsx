@@ -43,7 +43,7 @@ function runSummary(run) {
   return parts.join(" · ");
 }
 
-const STATUS_TEXT = { running: "Running", completed: "Completed", completed_with_failures: "Completed with failures", stopped: "Stopped", failed: "Failed" };
+const STATUS_TEXT = { running: "Running", interrupted: "Interrupted (worker restarted)", completed: "Completed", completed_with_failures: "Completed with failures", stopped: "Stopped", failed: "Failed" };
 
 export default function ImportScheduleCard() {
   const [info, setInfo] = useState(null);

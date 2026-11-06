@@ -228,6 +228,17 @@ def stop_import(task_id: str):
 
     runs = db.collection("import_runs")
     run = runs.get(task_id) if runs.has(task_id) else None
+    if run and run.get("status") == "running":
+        # Its task already died (worker restarted)? Then nothing is left to
+        # stop: end the record now instead of waiting for the reaper.
+        from ..services.import_schedule import reap_interrupted  # noqa: PLC0415
+        from ..tasks.import_tasks import HEARTBEAT_STALE_SECONDS  # noqa: PLC0415
+
+        beat = run.get("heartbeat_at") or run.get("created_at")
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(beat)).total_seconds()
+        if age > HEARTBEAT_STALE_SECONDS:
+            reap_interrupted()
+            return jsonify({"task_id": task_id, "stopping": False, "interrupted": True})
     if run and run.get("status") != "running":
         return jsonify({"error": "This import has already finished", "status": run.get("status")}), 409
 

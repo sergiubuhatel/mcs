@@ -36,6 +36,19 @@ from .celery_app import celery_app
 from .stop_flags import clear_stop, is_stop_requested
 
 MAX_WORKERS = 6
+# Liveness (2026-11-06): a redeploy restarts the worker and kills a running
+# import without anyone updating its import_runs record -- it then looked
+# "running" forever and Stop could not end it. The task now writes a heartbeat;
+# services/import_schedule.reap_interrupted() marks a run whose heartbeat is
+# older than HEARTBEAT_STALE_SECONDS as "interrupted".
+HEARTBEAT_SECONDS = 20
+HEARTBEAT_STALE_SECONDS = 5 * 60
+# A Yahoo request can hang for good (no timeout in yfinance's info / calendar
+# calls). After Stop, in-flight tickers get STOP_GRACE_SECONDS to finish, then
+# they are left behind (listed as remaining). With no ticker finished for
+# NO_PROGRESS_SECONDS outside a rate-limit pause, the run ends as stopped.
+STOP_GRACE_SECONDS = 60
+NO_PROGRESS_SECONDS = 15 * 60
 # Yahoo answers bursts with HTTP 429 (and then 401 "Invalid Crumb", since the
 # crumb fetch is rate-limited too). A whole-universe run used to fail every
 # ticker after the first ~550; now a 429 pauses ALL threads and the ticker is
@@ -199,6 +212,22 @@ def import_sp500_data(
     return result
 
 
+_last_beat: dict[str, float] = {}
+
+
+def _heartbeat(task_id: str, completed: int, force: bool = False) -> None:
+    now = time.monotonic()
+    if not force and now - _last_beat.get(task_id, 0.0) < HEARTBEAT_SECONDS:
+        return
+    _last_beat[task_id] = now
+    try:
+        get_db().collection("import_runs").update({
+            "_key": task_id, "heartbeat_at": datetime.now(timezone.utc).isoformat(), "completed": completed,
+        })
+    except Exception:  # noqa: BLE001 - a missed beat must never break the import
+        logging.getLogger(__name__).warning("import heartbeat failed", exc_info=True)
+
+
 def _report(self, room, ticker, completed, total, succeeded, failed, pause, delisted):
     progress = {"ticker": ticker, "completed": completed, "total": total,
                 "succeeded": len(succeeded), "failed": len(failed), "delisted": len(delisted),
@@ -221,7 +250,13 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
     stop_event = threading.Event()
     throttle = _YahooThrottle(stop_event)
 
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+    # Not a `with` block: leaving it waits for every running thread, and a hung
+    # Yahoo request would then keep the import (and Stop) waiting forever.
+    pool = ThreadPoolExecutor(max_workers=MAX_WORKERS)
+    stop_at = None
+    last_progress = time.monotonic()
+    _heartbeat(room, 0, force=True)
+    try:
         future_to_ticker = {
             pool.submit(
                 _import_with_retry, throttle, t, years=years, interval=interval,
@@ -238,6 +273,9 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
             # Timed wait instead of as_completed: during a rate-limit pause no
             # ticker finishes for minutes, and Stop must still be noticed.
             done, pending = wait(pending, timeout=1.0, return_when=FIRST_COMPLETED)
+            _heartbeat(room, completed)
+            if done:
+                last_progress = time.monotonic()
             for future in done:
                 ticker = future_to_ticker[future]
 
@@ -271,10 +309,33 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
 
             if not stopping and is_stop_requested(room):
                 stopping = True
+                stop_at = time.monotonic()
                 clear_stop(room)
                 stop_event.set()
                 for other_future in pending:
                     other_future.cancel()  # not yet started -- surfaces as .cancelled() above, added to `remaining`
+
+            # No ticker finished for a long time outside a rate-limit pause:
+            # Yahoo stopped answering. End as stopped; the rest can be resumed.
+            if (not stopping and not pause.get("paused_until")
+                    and time.monotonic() - last_progress > NO_PROGRESS_SECONDS):
+                logging.getLogger(__name__).warning("import %s: no progress for %s s, stopping", room, NO_PROGRESS_SECONDS)
+                stopping = True
+                stop_at = time.monotonic() - STOP_GRACE_SECONDS  # don't wait for the hung ones
+                stop_event.set()
+                for other_future in pending:
+                    other_future.cancel()
+
+            # Stopping and some tickers are still in flight after the grace
+            # time: leave them (a hung request) and finish now.
+            if stopping and pending and time.monotonic() - stop_at >= STOP_GRACE_SECONDS:
+                for future in pending:
+                    future.cancel()
+                    remaining.append(future_to_ticker[future])
+                pending = set()
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+        _last_beat.pop(room, None)
 
     records = sum((s.get("history_rows") or 0) for s in succeeded)  # price rows written
     earnings_records = sum((s.get("earnings_rows") or 0) for s in succeeded)  # earnings releases written
