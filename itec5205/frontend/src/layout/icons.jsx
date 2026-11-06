@@ -459,6 +459,15 @@ export function UserIcon(props) {
   );
 }
 
+export function KeyIcon(props) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <circle cx="8" cy="15" r="4.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M11.2 11.8 20 3M16.5 6.5l2.5 2.5M14 9l2 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function PowerIcon(props) {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>

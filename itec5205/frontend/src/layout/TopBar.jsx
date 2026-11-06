@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { NavLink } from "react-router-dom";
-import { ChevronDownIcon, GearIcon, GridIcon, PowerIcon } from "./icons";
+import { ChevronDownIcon, GearIcon, GridIcon, KeyIcon, PowerIcon } from "./icons";
 import { apiClient } from "../api/client";
 import { toggleDarkMode } from "../features/theme/themeSlice";
 import { USE_KEYCLOAK } from "../auth/keycloak";
@@ -61,13 +61,24 @@ function UserMenu() {
     keycloak.logout({ redirectUri: window.location.origin });
   };
 
+  // Keycloak's own (Carleton-themed) Update password page; comes back here afterwards.
+  const changePassword = () => {
+    setOpen(false);
+    keycloak.login({ action: "UPDATE_PASSWORD", redirectUri: window.location.href });
+  };
+
   useEffect(() => {
     if (!open) return undefined;
     const onClickOutside = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
+    const onEscape = (e) => { if (e.key === "Escape") setOpen(false); };
     document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.removeEventListener("mousedown", onClickOutside);
+      document.removeEventListener("keydown", onEscape);
+    };
   }, [open]);
 
   return (
@@ -83,6 +94,9 @@ function UserMenu() {
             <div>Username: <span>{username}</span></div>
             <div>Role: <span>{roleLabel(keycloak)}</span></div>
           </div>
+          <button className="user-menu-item" onClick={changePassword}>
+            <KeyIcon /> Change password
+          </button>
           <button className="user-menu-logout" onClick={logout}>
             <PowerIcon /> Logout
           </button>
