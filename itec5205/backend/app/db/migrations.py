@@ -82,7 +82,7 @@ def _import_runs_source(db):
 
 
 def _seed_import_schedule(db):
-    """Automatic import default: the Russell 3000 every day at 1:00 AM, 5:00 PM and 6:00 PM (Ottawa).
+    """Automatic import default: the Russell 3000 every day at 4:00 AM, 4:30 PM and 6:00 PM (Ottawa).
     A schedule someone already saved is left as it is."""
     from ..services.import_schedule import DEFAULT  # noqa: PLC0415
 
@@ -107,12 +107,29 @@ def _initial_import(db):
     return result.get("message", "")
 
 
+def _default_import_times_2(db):
+    """Default times changed to 4:00 AM, 4:30 PM and 6:00 PM. Only a schedule
+    the upgrade itself seeded with the old default is moved; one saved on the
+    Settings page is left as it is."""
+    from ..services.import_schedule import DEFAULT  # noqa: PLC0415
+
+    col = db.collection("settings")
+    doc = col.get("import_schedule")
+    if not doc:
+        return "no schedule yet (seeded with the new default)"
+    if doc.get("updated_by") != "upgrade" or doc.get("schedule") != "daily@01:00,17:00,18:00":
+        return f"kept the saved schedule ({doc.get('schedule')})"
+    col.update({"_key": "import_schedule", "schedule": DEFAULT["schedule"], "updated_at": _now()})
+    return f"moved to {DEFAULT['schedule']}"
+
+
 # (id, description, function). Append only.
 DATA_STEPS = [
     ("2026-11-06-calculated-stats-trend", "Trend Quality metrics for every company", _backfill_calculated_stats),
     ("2026-11-06-import-runs-source", "Source on old import runs", _import_runs_source),
     ("2026-11-06-import-schedule", "Automatic import schedule", _seed_import_schedule),
     ("2026-11-06-initial-import", "First import on an empty database", _initial_import),
+    ("2026-11-07-default-import-times", "Default import times 04:00, 16:30, 18:00", _default_import_times_2),
 ]
 
 

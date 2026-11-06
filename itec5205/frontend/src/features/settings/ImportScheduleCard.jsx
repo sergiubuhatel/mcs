@@ -10,7 +10,7 @@ import { UNIVERSES } from "../dataImport/ImportControls";
 const EVERY_HOURS = ["1", "2", "3", "4", "6", "8", "12", "24"];
 const REFRESH_MS = 30000;
 // Built-in default (backend services/import_schedule.py DEFAULT).
-const DEFAULT_TIMES = ["01:00", "17:00", "18:00"];
+const DEFAULT_TIMES = ["04:00", "16:30", "18:00"];
 const DEFAULT_UNIVERSE = "russell3000";
 const clock = (hhmm) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -212,7 +212,7 @@ export default function ImportScheduleCard() {
           </label>
         )}
         <button className="btn secondary" onClick={useDefaults} disabled={isDefault || busy != null}
-          title="Russell 3000 every day at 1:00 AM, 5:00 PM and 6:00 PM, trading days only (Save to keep it)">
+          title="Russell 3000 every day at 4:00 AM, 4:30 PM and 6:00 PM, trading days only (Save to keep it)">
           Use defaults
         </button>
         <button className="btn" onClick={save} disabled={!dirty || busy != null} title={dirty ? "Save the schedule" : "No changes"}>

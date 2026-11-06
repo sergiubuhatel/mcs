@@ -40,7 +40,7 @@ ssh $Server "rm -rf $remote && mkdir -p $remote $Dir"; Check "ssh"
 scp -q "$work\images.tar" "$work\config.tgz" "${Server}:$remote/"; Check "scp"
 
 Step "Installing and restarting on the server"
-ssh $Server "tar -xzf $remote/config.tgz -C $Dir && sed -i 's/\r$//' $Dir/deploy/*.sh && bash $Dir/deploy/install.sh $Dir $remote"; Check "install"
+ssh $Server "rm -rf $Dir/keycloak/themes && tar -xzf $remote/config.tgz -C $Dir && sed -i 's/\r$//' $Dir/deploy/*.sh && bash $Dir/deploy/install.sh $Dir $remote"; Check "install"
 
 Remove-Item -Recurse -Force $work
 Write-Host "`nDeployed: https://itec5205.ganymedesoftware.ca" -ForegroundColor Green

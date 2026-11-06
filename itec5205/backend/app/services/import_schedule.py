@@ -6,10 +6,10 @@ The schedule is one document, `settings/import_schedule`:
                    the last import started)
     trading_days   daily only: run only when there is a new close to fetch
                    (a run before noon fetches the previous day's close, so
-                   1:00 AM runs Tuesday-Saturday)
+                   4:00 AM runs Tuesday-Saturday)
     universe       companies to import: "russell3000" (default) | "sp500" | "all"
 
-Default: every day at 1:00 AM, 5:00 PM and 6:00 PM, the whole Russell 3000. The other options
+Default: every day at 4:00 AM, 4:30 PM and 6:00 PM, the whole Russell 3000. The other options
 (already-imported mode, history years, the four import options) are the
 Settings page's Data Defaults (`settings/app` -> values.data), the same values
 the Market Data form opens with.
@@ -46,7 +46,7 @@ KEY = "import_schedule"
 TICK_SECONDS = 30
 LOCK_KEY = "import_scheduler:leader"
 EVERY_HOURS = (1, 2, 3, 4, 6, 8, 12, 24)
-DEFAULT = {"schedule": "daily@01:00,17:00,18:00", "trading_days": True, "universe": "russell3000"}
+DEFAULT = {"schedule": "daily@04:00,16:30,18:00", "trading_days": True, "universe": "russell3000"}
 # Same built-in Data Defaults as frontend/src/features/settings/settings.js.
 DATA_DEFAULTS = {"universe": "all", "years": 10, "existing": "skip", "import_history": True,
                  "import_statistics": True, "import_calculated_stats": True, "import_earnings": True}
