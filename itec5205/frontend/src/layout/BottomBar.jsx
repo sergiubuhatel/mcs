@@ -3,7 +3,8 @@ import { toast } from "react-toastify";
 import { apiClient, authHeaders } from "../api/client";
 import Modal from "../components/Modal";
 import { isAdminUser, useAuth } from "../auth/Authorization";
-import { DatabaseIcon, DownloadIcon, PieChartIcon, TrashIcon, TrendChartIcon, UploadIcon, WorkflowIcon } from "./icons";
+import { DatabaseIcon, DownloadIcon, PieChartIcon, StopIcon, TrashIcon, TrendChartIcon, UploadIcon, WorkflowIcon } from "./icons";
+import { canStopJob, stopImport } from "../features/dataImport/stopImport";
 import { useRunningJobs } from "../features/activity/runningJobs";
 
 const fmtInt = (n) => (n == null ? "–" : Number(n).toLocaleString());
@@ -212,7 +213,13 @@ const MAX_SHOWN = 3;
 // who started each one and how far it is, live.
 function RunningJobs() {
   const jobs = useRunningJobs();
+  const { keycloak } = useAuth();
+  const [stopping, setStopping] = useState({});
   if (jobs.length === 0) return null;
+  const stop = async (taskId) => {
+    setStopping((s) => ({ ...s, [taskId]: true }));
+    if (!(await stopImport(taskId))) setStopping((s) => ({ ...s, [taskId]: false }));
+  };
   const shown = jobs.slice(0, MAX_SHOWN);
   const more = jobs.slice(MAX_SHOWN);
   return (
@@ -222,6 +229,7 @@ function RunningJobs() {
         const Icon = k.icon;
         const label = JOB_LABELS[j.action] || k.label;
         const user = j.name || j.username;
+        const taskId = j.kind === "import" && j.job?.type === "import" ? j.job.id : null;
         return (
           <div key={j._key} className="running-chip" title={`${user}: ${j.action}${j.details ? ` · ${j.details}` : ""}`}>
             <Icon width={15} height={15} style={{ color: k.color, flexShrink: 0 }} />
@@ -241,6 +249,16 @@ function RunningJobs() {
                 </span>
                 <span className="running-chip-pct">{j.percent == null ? "…" : `${j.percent}%`}</span>
               </>
+            )}
+            {taskId && canStopJob(keycloak, j.user_id) && (
+              stopping[taskId] ? (
+                <span className="muted running-chip-stopping">Stopping…</span>
+              ) : (
+                <button type="button" className="running-chip-stop" title="Stop this import (the rest can be resumed on Market Data)"
+                  aria-label="Stop this import" onClick={() => stop(taskId)}>
+                  <StopIcon width={13} height={13} />
+                </button>
+              )
             )}
           </div>
         );

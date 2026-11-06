@@ -207,10 +207,41 @@ def import_status(task_id: str):
 
 @bp.post("/import/stop/<task_id>")
 def stop_import(task_id: str):
-    """Cooperative stop: flags the task; it exits (with a resumable result)
-    the next time it checks in, between tickers -- not instantly."""
-    request_stop(task_id)
-    return jsonify({"task_id": task_id, "stopping": True})
+    """Stop an import -- any kind: Market Data, automatic, workflow step.
+
+    Allowed for whoever started it and for admins (an automatic import can
+    only be stopped by an admin). Running: cooperative stop -- the task
+    finishes the companies in flight, then ends as "stopped" with the rest
+    listed for Resume. Queued (not started yet): cancelled before it runs."""
+    from ..auth import current_user, is_admin  # noqa: PLC0415
+    from ..config import KEYCLOAK_ENABLED  # noqa: PLC0415
+
+    db = get_db()
+    user = current_user()
+    started = list(db.aql.execute(
+        "FOR a IN user_activity FILTER a.job.id == @id LIMIT 1 RETURN a", bind_vars={"id": task_id}
+    ))
+    starter = started[0] if started else None
+    if KEYCLOAK_ENABLED and not is_admin(user) and not (starter and user and starter.get("user_id") == user["id"]):
+        who = (starter or {}).get("name") or "someone else"
+        return jsonify({"error": f"Only {who} or an admin can stop this import"}), 403
+
+    runs = db.collection("import_runs")
+    run = runs.get(task_id) if runs.has(task_id) else None
+    if run and run.get("status") != "running":
+        return jsonify({"error": "This import has already finished", "status": run.get("status")}), 409
+
+    request_stop(task_id, ttl=24 * 3600)  # also covers a queued task that starts later
+    by = (user or {}).get("name") or (user or {}).get("username") or "unknown"
+    now = datetime.now(timezone.utc).isoformat()
+    if run:
+        runs.update({"_key": task_id, "stop_requested_at": now, "stop_requested_by": by})
+        return jsonify({"task_id": task_id, "stopping": True, "queued": False})
+    # Not started yet: drop it from the queue.
+    celery_app.control.revoke(task_id)
+    if starter:
+        db.collection("user_activity").update({"_key": starter["_key"], "final_status": "cancelled"})
+    return jsonify({"task_id": task_id, "stopping": True, "queued": True})
 
 
 @bp.post("/import/resume/<task_id>")

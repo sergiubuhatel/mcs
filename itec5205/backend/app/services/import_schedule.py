@@ -236,7 +236,8 @@ def status() -> dict:
     nxt = next_run(sched)
     last_auto = _last_import("scheduled")
     last_any = _last_import()
-    keep = ("_key", "created_at", "finished_at", "status", "total", "succeeded", "failed", "records", "error", "source")
+    keep = ("_key", "created_at", "finished_at", "status", "total", "succeeded", "failed", "records", "error", "source",
+            "stop_requested_at", "stop_requested_by")
     return {
         **sched,
         "next": nxt.isoformat() if nxt else None,

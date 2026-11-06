@@ -4,7 +4,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { apiClient } from "../../api/client";
-import { ClockIcon, PlayIcon, PlusIcon, SaveIcon } from "../../layout/icons";
+import { ClockIcon, PlayIcon, PlusIcon, SaveIcon, StopIcon } from "../../layout/icons";
+import { stopImport } from "../dataImport/stopImport";
 import { UNIVERSES } from "../dataImport/ImportControls";
 
 const EVERY_HOURS = ["1", "2", "3", "4", "6", "8", "12", "24"];
@@ -123,6 +124,15 @@ export default function ImportScheduleCard() {
     }
   };
 
+  const current = info?.last_import?.status === "running" ? info.last_import : null;
+  const stopNow = async () => {
+    if (!window.confirm("Stop the running import? The companies in progress finish first; the rest can be resumed on Market Data.")) return;
+    setBusy("stop");
+    await stopImport(current._key);
+    setBusy(null);
+    load(false);
+  };
+
   const last = info?.last_auto;
   const tiles = [
     ["Next automatic import", info ? (info.next ? when(info.next) : "Off") : "…", info ? describe(info.schedule) : null],
@@ -149,9 +159,16 @@ export default function ImportScheduleCard() {
           <h3 style={{ margin: 0 }}>Automatic Import</h3>
           <p className="muted" style={{ margin: 0 }}>The backend imports market data from Yahoo Finance on its own, on this schedule. How often and when the data is imported. Saved with its own button, separately from the defaults below.</p>
         </div>
-        <button className="btn secondary" onClick={runNow} disabled={busy != null || !!info?.running} title={info?.running ? info.running : "Start this import now"}>
-          <PlayIcon width={15} height={15} /> {busy === "run" ? "Starting…" : "Import now"}
-        </button>
+        {current ? (
+          <button className="btn danger" onClick={stopNow} disabled={busy != null || !!current.stop_requested_at}
+            title="Stop the running import (the rest can be resumed on Market Data)">
+            <StopIcon width={15} height={15} /> {current.stop_requested_at || busy === "stop" ? "Stopping…" : "Stop import"}
+          </button>
+        ) : (
+          <button className="btn secondary" onClick={runNow} disabled={busy != null || !!info?.running} title={info?.running ? info.running : "Start this import now"}>
+            <PlayIcon width={15} height={15} /> {busy === "run" ? "Starting…" : "Import now"}
+          </button>
+        )}
       </div>
       {error && <p className="error-text" role="alert">{error}</p>}
 

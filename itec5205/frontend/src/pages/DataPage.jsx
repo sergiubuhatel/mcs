@@ -16,8 +16,10 @@ import {
   LightbulbIcon,
   SlidersIcon,
   TrendChartIcon,
+  StopIcon,
   WorkflowIcon,
 } from "../layout/icons";
+import { stopImport } from "../features/dataImport/stopImport";
 import BackButton from "../layout/BackButton";
 
 const RECENT = 8;
@@ -29,7 +31,7 @@ const STATUS = {
   stopped: { label: "Stopped", tone: "warn" },
   failed: { label: "Failed", tone: "bad" },
 };
-const SOURCE = { manual: "Manual", resume: "Resumed", workflow: "Workflow" };
+const SOURCE = { manual: "Manual", resume: "Resumed", workflow: "Workflow", scheduled: "Automatic", initial: "First import" };
 
 const fmtInt = (n) => (n == null ? "–" : Number(n).toLocaleString());
 const fmtWhen = (iso) =>
@@ -199,6 +201,19 @@ function RecentImports({ refreshKey }) {
     apiClient.get("/api/data/imports", { params: { limit: showAll ? 200 : RECENT } }).then((r) => setData(r.data)).catch(() => {});
   }, [refreshKey, showAll, reload]);
 
+  // Keep running rows live (an automatic or another user's import too).
+  const anyRunning = data.runs.some((r) => r.status === "running");
+  useEffect(() => {
+    if (!anyRunning) return undefined;
+    const id = setInterval(() => setReload((n) => n + 1), 10000);
+    return () => clearInterval(id);
+  }, [anyRunning]);
+
+  const stopRun = async (run) => {
+    if (!window.confirm("Stop this import? The companies in progress finish first; the rest can be resumed.")) return;
+    if (await stopImport(run._key)) setReload((n) => n + 1);
+  };
+
   const confirmDelete = async () => {
     const run = deleteTarget;
     setDeleteTarget(null);
@@ -259,13 +274,19 @@ function RecentImports({ refreshKey }) {
                         {run.failed ? ` · ${run.failed} failed` : ""}
                         {delistedCount ? ` · ${delistedCount} delisted` : ""}
                         {run.status === "stopped" && run.remaining ? ` · ${run.remaining} left` : ""}
+                        {run.status === "running" && run.stop_requested_at ? " · stopping…" : ""}
                       </span>
                     </td>
                     <td>{run.status === "running" ? "…" : fmtInt(run.records)}</td>
                     <td>{run.wall_seconds != null ? `${Math.round(run.wall_seconds)} s` : "–"}</td>
                     <td style={{ textAlign: "center" }}>
                       <ActionMenu
-                        extraItems={[{ label: "View", icon: EyeIcon, onClick: () => setViewKey(run._key) }]}
+                        extraItems={[
+                          { label: "View", icon: EyeIcon, onClick: () => setViewKey(run._key) },
+                          ...(run.status === "running"
+                            ? [{ label: run.stop_requested_at ? "Stopping…" : "Stop", icon: StopIcon, disabled: !!run.stop_requested_at, onClick: () => stopRun(run) }]
+                            : []),
+                        ]}
                         onDelete={run.status === "running" ? undefined : () => setDeleteTarget(run)}
                       />
                     </td>

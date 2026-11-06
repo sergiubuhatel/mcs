@@ -822,3 +822,7 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 .schedule-time-remove { border: 0; background: transparent; color: var(--color-text-secondary); font-size: 1.1rem; line-height: 1; padding: 0 4px; cursor: pointer; border-radius: 4px; }
 .schedule-time-remove:hover { color: #dc2626; background: rgba(220, 38, 38, 0.1); }
 .schedule-add { padding: 4px 10px; }
+.running-chip-stop { display: inline-grid; place-items: center; width: 22px; height: 22px; flex-shrink: 0; border-radius: 6px; border: 1px solid #dc2626; background: transparent; color: #dc2626; cursor: pointer; }
+.running-chip-stop:hover { background: rgba(220, 38, 38, 0.12); }
+.dark .running-chip-stop { border-color: #f87171; color: #f87171; }
+.running-chip-stopping { font-size: 0.75rem; flex-shrink: 0; }

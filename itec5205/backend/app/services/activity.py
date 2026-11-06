@@ -205,7 +205,9 @@ def _task_status(task_id: str, created_at: datetime) -> tuple[str, int | None]:
     if state == "SUCCESS":
         result = res.result if isinstance(res.result, dict) else {}
         return ("stopped" if result.get("remaining_tickers") else "done"), 100
-    if state in ("FAILURE", "REVOKED"):
+    if state == "REVOKED":
+        return "cancelled", None
+    if state == "FAILURE":
         return "failed", None
     if state in ("STARTED", "PROGRESS"):
         info = res.info if isinstance(res.info, dict) else {}
@@ -520,7 +522,7 @@ def overview() -> dict:
 _RUNNING_TTL = 3  # seconds; every open page refetches on each progress ping
 _running_lock = threading.Lock()
 _running_cache: dict = {"at": 0.0, "data": None}
-_RUNNING_FIELDS = ("_key", "kind", "action", "details", "user_id", "username", "name", "created_at", "status", "percent")
+_RUNNING_FIELDS = ("_key", "kind", "action", "details", "user_id", "username", "name", "created_at", "status", "percent", "job")
 VERBS = {"import": "importing data", "forecast": "running forecasts", "rl": "building an RL portfolio", "workflow": "running a workflow"}
 
 
