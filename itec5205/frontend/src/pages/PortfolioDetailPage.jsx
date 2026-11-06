@@ -374,6 +374,20 @@ export default function PortfolioDetailPage() {
       })
       .catch((err) => toast.error(apiError(err)));
 
+  // The chart shows the portfolio bought at the first close of the picked
+  // range and held (same as the 1Y tile and the holdings' changes), so each
+  // range needs its own series from the server; ALL = the full history.
+  const rangeStart = series?.length ? filterByInterval(series, range)[0]?.date : null;
+  const [heldSeries, setHeldSeries] = useState({}); // start date -> series bought then
+  useEffect(() => {
+    if (!rangeStart || !series?.length || rangeStart === series[0].date || heldSeries[rangeStart]) return;
+    apiClient
+      .get(`/api/portfolios/${id}/performance`, { params: { days: 3650, start: rangeStart } })
+      .then((r) => setHeldSeries((m) => ({ ...m, [rangeStart]: r.data.series })))
+      .catch(() => {});
+  }, [id, rangeStart, series, heldSeries]);
+  useEffect(() => setHeldSeries({}), [id]);
+
   if (error)
     return (
       <div className="card error-text" style={{ position: "relative" }}>
@@ -389,9 +403,10 @@ export default function PortfolioDetailPage() {
       </div>
     );
 
-  const rangeSeries = filterByInterval(series, range);
+  const heldForRange = rangeStart && rangeStart !== series[0]?.date ? heldSeries[rangeStart] : series;
+  const rangeSeries = heldForRange ? filterByInterval(heldForRange, range) : [];
   // Forecast growth factors (1 = today) -> index values from the last point.
-  const lastIndex = series?.length ? series[series.length - 1].value : null;
+  const lastIndex = heldForRange?.length ? heldForRange[heldForRange.length - 1].value : null;
   const forecastIndex =
     forecast && !forecast.error && lastIndex != null
       ? {
@@ -429,7 +444,6 @@ export default function PortfolioDetailPage() {
   const created = fmtDay(portfolio.created_at);
   const lastUpdated = fmtDay(portfolio.updated_at || portfolio.created_at);
   const sharpe = summary?.sharpe_1y;
-  const heldPct = pctOrNull(summary?.change_1y_held);
   const byPart = portfolio.sleeves?.length > 0 && display === "sleeves";
 
   const tiles = [
@@ -440,7 +454,7 @@ export default function PortfolioDetailPage() {
       value: <span style={{ color: changeColor(dayChangePct) }}>{signed(dayChangePct)}</span>,
       sub: summary?.previous_date ? `${asOf} vs ${summary.previous_date}` : "no previous close",
       title:
-        "Latest close vs the previous one, as of the latest day EVERY holding has a close (during an import some already have a newer day)" +
+        "Latest close vs the previous one, at the portfolio's weights. As of the latest day the data is complete for (during an import every page stays on the previous day)" +
         (portfolio.sleeves?.length ? "; equals the parts' Change (1D) x their allocations." : "."),
     },
     {
@@ -448,11 +462,10 @@ export default function PortfolioDetailPage() {
       color: "#16a34a",
       label: "1Y return",
       value: <span style={{ color: changeColor(pctOrNull(summary?.change_1y)) }}>{signed(pctOrNull(summary?.change_1y))}</span>,
-      sub: heldPct != null ? `rebalanced daily · held: ${signed(heldPct)}` : "historical backtest",
+      sub: summary?.window_start ? `bought ${summary.window_start} and held` : "bought a year ago and held",
       title:
-        heldPct != null
-          ? `Past year with the allocations kept every day (rebalanced daily), as on the chart. Buying the parts a year ago and holding them unchanged: ${signed(heldPct)} (= the parts' 1Y x allocations).`
-          : "Change of the portfolio index over the past year (same as the 1Y chart).",
+        "The weights bought at the first close of the past year and held (a stock that started trading later is bought at its first close)" +
+        (portfolio.sleeves?.length ? ". Equals the parts' 1Y x their allocations, and the holdings' 1Y x their weights." : ". Equals the holdings' 1Y x their weights."),
     },
     {
       icon: DatabaseIcon,
@@ -676,7 +689,9 @@ export default function PortfolioDetailPage() {
             <RangePicker section="general" value={range} onChange={setRange} />
           </div>
         </div>
-        {rangeSeries.length === 0 ? (
+        {!heldForRange ? (
+          <p className="muted">Loading this range…</p>
+        ) : rangeSeries.length === 0 ? (
           <p className="muted">Not enough price history to chart this portfolio yet.</p>
         ) : (
           <ForecastChart

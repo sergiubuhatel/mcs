@@ -123,7 +123,8 @@ def performance(portfolio_id: str):
         return jsonify({"error": "Portfolio not found"}), 404
     days = int(request.args.get("days", 500))
     # Series + every tile / grid number, all as of one date (portfolio_service.analyze_portfolio).
-    result = analyze_portfolio(portfolio["holdings"], portfolio.get("sleeves"), lookback_days=days)
+    result = analyze_portfolio(portfolio["holdings"], portfolio.get("sleeves"), lookback_days=days,
+                               start=request.args.get("start"))
     return jsonify({"portfolio_id": portfolio_id, **result})
 
 
