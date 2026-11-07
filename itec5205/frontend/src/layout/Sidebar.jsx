@@ -165,7 +165,6 @@ export default function Sidebar({ collapsed }) {
           {!collapsed && (
             <span className="brand-text">
               <span className="brand-name">Alpha Pilot</span>
-              <span className="brand-company">Ganymede Software Inc.</span>
             </span>
           )}
         </NavLink>
