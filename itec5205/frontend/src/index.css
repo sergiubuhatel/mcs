@@ -704,7 +704,11 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 .dash-row > .card { min-width: 0; }
 @media (max-width: 1200px) { .dash-row { grid-template-columns: minmax(0, 1fr); } }
 .perf-body { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; }
-.perf-chart { flex: 1 1 420px; min-width: 0; height: 300px; }
+/* The chart keeps at least ~560px: with several compared portfolios the
+   metrics table gets wide and moves BELOW the chart instead of squeezing it,
+   then spans the card's full width (grow 1 vs the chart's 1000: side by side
+   the chart takes the free space, alone on its row the table does). */
+.perf-chart { flex: 1000 1 560px; min-width: 0; height: 300px; }
 .perf-stats { width: auto; flex: 0 0 auto; align-self: center; font-size: 0.85rem; }
 .perf-stats td { padding: 8px 10px; }
 .wf-name { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -743,8 +747,8 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
   display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; font-size: 0.78rem; white-space: nowrap;
   border: 1px solid var(--color-divider); background: var(--color-bg-primary); color: var(--color-text-secondary);
 }
-.perf-stats-box { flex: 0 0 auto; align-self: center; border: 1px solid var(--color-divider); border-radius: 10px; padding: 4px 6px; background: var(--color-bg-primary); }
-.perf-stats-box .perf-stats { align-self: auto; }
+.perf-stats-box { flex: 1 1 auto; align-self: center; max-width: 100%; overflow-x: auto; border: 1px solid var(--color-divider); border-radius: 10px; padding: 4px 6px; background: var(--color-bg-primary); }
+.perf-stats-box .perf-stats { align-self: auto; width: 100%; }
 .perf-stats-box tr:last-child td { border-bottom: none; }
 .wf-card { display: flex; flex-direction: column; }
 .wf-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.8rem; margin-bottom: 6px; }
