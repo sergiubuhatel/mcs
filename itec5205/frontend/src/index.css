@@ -153,10 +153,16 @@ tr:hover td { background: var(--color-bg-hover); }
 .bottom-bar { height: var(--bottom-bar-height); flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 0 16px; border-top: 1px solid var(--color-divider); background: var(--color-bg-primary); }
 .danger-box { display: flex; gap: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(220, 38, 38, 0.45); background: rgba(220, 38, 38, 0.08); color: var(--color-text-primary); font-size: 0.85rem; }
 .btn.btn-danger-solid { background: #dc2626; border-color: #dc2626; color: #fff; }
-.brand-link { display: flex; align-items: center; gap: 10px; min-width: 0; text-decoration: none; color: var(--color-text-primary); }
+/* Brand: same lettering as Ontario Homes (C:/development/listings BrandLogo):
+   Inter 800, 23px, tight tracking, the brand blue; a small uppercase
+   company line under it. */
+.brand-link { display: flex; align-items: center; gap: 8px; min-width: 0; text-decoration: none; color: #0a58ca; }
+.dark .brand-link { color: #60a5fa; }
 .brand-link:hover { text-decoration: none; }
 .brand-logo { flex-shrink: 0; object-fit: contain; }
-.brand-name { font-size: 1.3rem; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; color: var(--color-text-primary); }
+.brand-text { display: block; white-space: nowrap; line-height: 1; font-family: Inter, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+.brand-name { display: block; font-size: 23px; font-weight: 800; letter-spacing: -0.025em; color: inherit; }
+.brand-company { display: block; margin-top: 4px; font-size: 9px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--color-text-secondary); }
 .theme-toggle {
   display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 9px; flex-shrink: 0;
   border: 1px solid var(--color-divider); background: var(--color-bg-primary); color: var(--color-text-primary);

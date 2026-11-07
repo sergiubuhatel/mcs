@@ -162,7 +162,12 @@ export default function Sidebar({ collapsed }) {
       >
         <NavLink to="/" className="brand-link" title="Home: Dashboard" aria-label="Alpha Pilot — home">
           <img src={logo} alt="" width={collapsed ? 40 : 44} height={collapsed ? 40 : 44} className="brand-logo" />
-          {!collapsed && <span className="brand-name">Alpha Pilot</span>}
+          {!collapsed && (
+            <span className="brand-text">
+              <span className="brand-name">Alpha Pilot</span>
+              <span className="brand-company">Ganymede Software Inc.</span>
+            </span>
+          )}
         </NavLink>
       </div>
 
