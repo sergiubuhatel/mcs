@@ -91,7 +91,7 @@ export const CRITERIA_PAGES = {
       title: "About portfolio criteria",
       text: "A portfolio criteria is the RL panel's options, saved. It builds the final portfolio from the companies that passed the prediction criteria.",
       features: [
-        { icon: BarChartIcon, color: "#22c55e", title: "Risk and return limits", text: "Max annual volatility and min annual return, measured over the past year." },
+        { icon: BarChartIcon, color: "#22c55e", title: "Risk and return limits", text: "Max annual volatility, min annual return and max drawdown (worst fall from a peak), measured over the past year." },
         { icon: SlidersIcon, color: "#3b82f6", title: "Weight range", text: "How much bigger the largest holding may be than the smallest: in % of the smallest or largest, or in points." },
         { icon: ListIcon, color: "#8b5cf6", title: "Company count", text: "Min and max companies; blank lets the optimizer decide." },
         { icon: StarIcon, color: "#f59e0b", title: "Training", text: "Risk aversion and PPO timesteps; more timesteps train longer." },

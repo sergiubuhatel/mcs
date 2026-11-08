@@ -103,6 +103,17 @@ const PORTFOLIO_COLUMNS = [
       </strong>
     ),
   },
+  {
+    key: "max_drawdown",
+    label: "Max DD (1Y)",
+    width: 105,
+    sortable: true,
+    render: (p) => (
+      <span title={`Worst past-year fall from a peak of these weights${p.at_build?.max_drawdown != null ? ` · at build ${fmtPct(p.at_build.max_drawdown)}` : ""}`}>
+        {p.max_drawdown == null ? "–" : fmtPct(p.max_drawdown)}
+      </span>
+    ),
+  },
   { key: "sharpe_ratio", label: "Sharpe", width: 90, sortable: true, hiddenByDefault: true, render: (p) => (p.sharpe_ratio == null ? "–" : p.sharpe_ratio.toFixed(2)) },
   { key: "created_at", label: "Created", width: 120, sortable: true, render: (p) => fmtDate(p.created_at) },
 ];
@@ -152,6 +163,7 @@ export default function PortfoliosPage() {
       risk: (p) => p.expected_volatility,
       annual_return: (p) => p.annual_return,
       sharpe_ratio: (p) => p.sharpe_ratio,
+      max_drawdown: (p) => p.max_drawdown,
       created_at: (p) => p.created_at,
     },
     { key: "created_at", dir: "desc" }

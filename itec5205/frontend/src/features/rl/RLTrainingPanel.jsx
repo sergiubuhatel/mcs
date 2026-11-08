@@ -50,6 +50,7 @@ export default function RLTrainingPanel({ pool }) {
   const [maxCompanies, setMaxCompanies] = useState(defaults.max_companies); // blank = no upper bound (auto)
   const [maxVolatility, setMaxVolatility] = useState(defaults.max_volatility_pct); // annual %, blank = no ceiling
   const [minReturn, setMinReturn] = useState(defaults.min_return_pct); // realized past-year return %, blank = no floor
+  const [maxDrawdown, setMaxDrawdown] = useState(defaults.max_drawdown_pct ?? ""); // past-year worst fall from a peak %, blank = no limit
   const [maxWeightRange, setMaxWeightRange] = useState(defaults.max_weight_range_pct); // see WeightRangeField, blank = no cap
   const [weightRangeBasis, setWeightRangeBasis] = useState(defaults.weight_range_basis || "smallest");
   const [lookbackDays, setLookbackDays] = useState(defaults.trend_window_days); // trading days the trend line is fit over
@@ -67,6 +68,7 @@ export default function RLTrainingPanel({ pool }) {
         lookback_days: Number(lookbackDays),
         max_volatility: pctOrNull(maxVolatility),
         min_return: pctOrNull(minReturn),
+        max_drawdown: pctOrNull(maxDrawdown),
         max_weight_range: pctOrNull(maxWeightRange),
         weight_range_basis: weightRangeBasis,
       })
@@ -133,6 +135,19 @@ export default function RLTrainingPanel({ pool }) {
             placeholder="no minimum (e.g. 20)"
             value={minReturn}
             onChange={(e) => setMinReturn(e.target.value)}
+            disabled={training}
+          />
+        </div>
+        <div>
+          <label title="Worst fall from a peak over the past year, e.g. 15 = the portfolio never dropped more than 15% below an earlier high">Max drawdown %</label>
+          <input
+            type="number"
+            step="1"
+            min="0"
+            max="100"
+            placeholder="no limit (e.g. 15)"
+            value={maxDrawdown}
+            onChange={(e) => setMaxDrawdown(e.target.value)}
             disabled={training}
           />
         </div>
@@ -219,10 +234,10 @@ export default function RLTrainingPanel({ pool }) {
           "Candidates: companies whose price over the trend window tracks a straight line upward (K-ratio). "}
         {mode === "strong" &&
           "Candidates: only the companies the signal board above currently rates Strong (every available star lit). "}
-        {mode !== "subset" && minCompanies === "" && maxCompanies === "" && maxVolatility === "" && minReturn === ""
+        {mode !== "subset" && minCompanies === "" && maxCompanies === "" && maxVolatility === "" && minReturn === "" && maxDrawdown === ""
           ? `No limits or company count set: the agent trains on every ${mode === "strong" ? "Strong" : ""} ticker in the pool.`.replace("  ", " ")
-          : `A mean-variance optimizer picks ${describeCount(minCompanies, maxCompanies)} from the past year of returns — the highest return under the volatility limit, or the lowest volatility above the annual return floor${
-              maxVolatility === "" && minReturn === "" ? " (here: the highest Sharpe ratio, since no limits are set)" : ""
+          : `A mean-variance optimizer picks ${describeCount(minCompanies, maxCompanies)} from the past year of returns — the highest return under the volatility and drawdown limits, or the lowest volatility above the annual return floor${
+              maxVolatility === "" && minReturn === "" && maxDrawdown === "" ? " (here: the highest Sharpe ratio, since no limits are set)" : ""
             }. The PPO agent then trains on just those, and if its weights miss a limit they are blended toward the optimizer's allocation.`}
       </p>
 
@@ -281,7 +296,8 @@ export default function RLTrainingPanel({ pool }) {
           <p className="muted">
             Annual return (past 1Y): <strong>{fmtPct(result.metrics?.annual_return)}</strong> · Volatility:{" "}
             <strong>{fmtPct(result.metrics?.expected_volatility)}</strong> · Sharpe:{" "}
-            <strong>{result.metrics?.sharpe_ratio ?? "-"}</strong>
+            <strong>{result.metrics?.sharpe_ratio ?? "-"}</strong> · Max drawdown:{" "}
+            <strong>{fmtPct(result.metrics?.max_drawdown)}</strong>
           </p>
           {result.excluded?.length > 0 && (
             <p className="error-text">
@@ -310,6 +326,7 @@ export default function RLTrainingPanel({ pool }) {
               Constraints ({[
                 result.constraints.max_volatility != null && `volatility ≤ ${fmtPct(result.constraints.max_volatility)}`,
                 result.constraints.min_return != null && `annual return ≥ ${fmtPct(result.constraints.min_return)}`,
+                result.constraints.max_drawdown != null && `max drawdown ≤ ${fmtPct(result.constraints.max_drawdown)}`,
                 result.constraints.max_weight_range != null &&
                   `${describeWeightRange(result.constraints.max_weight_range * 100, result.constraints.weight_range_basis)} (now ${describeWeightRange(result.constraints.weight_range * 100, result.constraints.weight_range_basis)})`,
               ]
@@ -324,7 +341,9 @@ export default function RLTrainingPanel({ pool }) {
               {result.constraints.feasible === false &&
                 ` — no long-only mix of this pool reached them over the past year; best achievable: ${fmtPct(
                   result.constraints.best_achievable?.annual_return
-                )} annual return at ${fmtPct(result.constraints.best_achievable?.expected_volatility)} volatility`}
+                )} annual return at ${fmtPct(result.constraints.best_achievable?.expected_volatility)} volatility, ${fmtPct(
+                  result.constraints.best_achievable?.max_drawdown
+                )} max drawdown`}
             </p>
           )}
           <table className="holdings-table">

@@ -42,17 +42,35 @@ def save_settings():
         return jsonify({"error": "settings must be an object of sections"}), 400
     if len(json.dumps(values)) > MAX_BYTES:
         return jsonify({"error": "settings are too large"}), 400
+    from ..services.indicator_window import window_from_settings  # noqa: PLC0415
+
+    previous = (_collection().get(KEY) or {}).get("values")
     doc = {"_key": KEY, "values": values, "updated_at": datetime.now(timezone.utc).isoformat()}
     _collection().insert(doc, overwrite=True)
-    return jsonify({"settings": values, "updated_at": doc["updated_at"]})
+    # A new indicator time horizon: recompute the stored screening indicators
+    # (calculated_stats) for every company in the background.
+    recalculating = window_from_settings(previous) != window_from_settings(values)
+    if recalculating:
+        from ..tasks.import_tasks import recalculate_indicators  # noqa: PLC0415
+
+        recalculate_indicators.delay()
+    return jsonify({"settings": values, "updated_at": doc["updated_at"], "recalculating": recalculating})
 
 
 @bp.delete("")
 def reset_settings():
+    from ..services.indicator_window import DEFAULT_WINDOW_DAYS, window_from_settings  # noqa: PLC0415
+
     collection = _collection()
+    previous = (collection.get(KEY) or {}).get("values")
     if collection.has(KEY):
         collection.delete(KEY)
-    return jsonify({"settings": {}, "updated_at": None})
+    recalculating = window_from_settings(previous) != DEFAULT_WINDOW_DAYS  # back to 1 year
+    if recalculating:
+        from ..tasks.import_tasks import recalculate_indicators  # noqa: PLC0415
+
+        recalculate_indicators.delay()
+    return jsonify({"settings": {}, "updated_at": None, "recalculating": recalculating})
 
 
 # ------------------------------------------------------------ automatic import

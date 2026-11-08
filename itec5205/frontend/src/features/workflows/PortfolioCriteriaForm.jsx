@@ -30,6 +30,10 @@ export default function PortfolioCriteriaForm({ value, onChange }) {
           <label>Min annual return %</label>
           <input type="number" placeholder="no minimum (e.g. 20)" value={value.min_return_pct} onChange={(e) => set({ min_return_pct: e.target.value })} />
         </div>
+        <div>
+          <label title="Worst fall from a peak over the past year, e.g. 15 = the portfolio never dropped more than 15% below an earlier high">Max drawdown %</label>
+          <input type="number" min="0" max="100" placeholder="no limit (e.g. 15)" value={value.max_drawdown_pct ?? ""} onChange={(e) => set({ max_drawdown_pct: e.target.value })} />
+        </div>
         <WeightRangeField
           value={value.max_weight_range_pct}
           basis={value.weight_range_basis}

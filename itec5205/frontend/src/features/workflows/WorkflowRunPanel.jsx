@@ -105,7 +105,7 @@ function StepCard({ step, data, run }) {
     if (data.passed != null) body += ` → ${data.passed} passed`;
   }
   if (step.key === "portfolio" && data?.portfolio_id) {
-    body = `${data.holdings} companies · return ${fmtPct(data.metrics?.annual_return)} · volatility ${fmtPct(data.metrics?.expected_volatility)}`;
+    body = `${data.holdings} companies · return ${fmtPct(data.metrics?.annual_return)} · volatility ${fmtPct(data.metrics?.expected_volatility)}${data.metrics?.max_drawdown != null ? ` · max drawdown ${fmtPct(data.metrics.max_drawdown)}` : ""}`;
   } else if (current && step.key !== "data") body = run.message;
   const StateIcon = state.icon;
   return (

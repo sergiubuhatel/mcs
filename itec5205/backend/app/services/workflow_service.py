@@ -175,6 +175,8 @@ def _normalize_portfolio(body: dict) -> dict:
         "timesteps": _num(body.get("timesteps"), int, 1000, field="timesteps") or 20_000,
         "max_volatility_pct": _num(body.get("max_volatility_pct"), float, 0, field="max volatility"),
         "min_return_pct": _num(body.get("min_return_pct"), field="min annual return"),
+        # Optional ceiling on the past-year max drawdown (worst fall from a peak), in %; blank = no limit.
+        "max_drawdown_pct": _num(body.get("max_drawdown_pct"), float, 0, 100, field="max drawdown"),
         # Optional cap on max(weight) - min(weight), in % of the smallest /
         # largest holding or in percentage points (`weight_range_basis`).
         "max_weight_range_pct": _num(

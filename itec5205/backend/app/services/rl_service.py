@@ -193,32 +193,40 @@ def rank_by_trend_consistency(tickers: list[str], lookback_days: int = 252) -> l
     return scored
 
 
-def constraint_violation(metrics: dict, max_volatility: float | None, min_return: float | None) -> float:
-    """Total shortfall (in annualized fraction units) of `metrics` against
-    the optional volatility ceiling / annual (compounded, past-year) return
-    floor; 0 means both are met."""
+def constraint_violation(
+    metrics: dict, max_volatility: float | None, min_return: float | None, max_drawdown: float | None = None
+) -> float:
+    """Total shortfall (in fraction units) of `metrics` against the optional
+    volatility ceiling / annual (compounded, past-year) return floor / max
+    drawdown ceiling (worst past-year fall from a peak); 0 means all are met."""
     violation = 0.0
     if max_volatility is not None and metrics.get("expected_volatility") is not None:
         violation += max(0.0, metrics["expected_volatility"] - max_volatility)
     if min_return is not None and metrics.get("annual_return") is not None:
         violation += max(0.0, min_return - metrics["annual_return"])
+    if max_drawdown is not None and metrics.get("max_drawdown") is not None:
+        violation += max(0.0, metrics["max_drawdown"] - max_drawdown)
     return violation
 
 
-def _candidate_rank(metrics: dict, max_volatility: float | None, min_return: float | None) -> tuple:
+def _candidate_rank(
+    metrics: dict, max_volatility: float | None, min_return: float | None, max_drawdown: float | None = None
+) -> tuple:
     """Sort key, best first: feasible before infeasible, then smaller
     violation, then the objective the limits imply -- highest return under a
-    volatility cap (with or without a return floor), lowest volatility above
-    a return floor alone, highest Sharpe when there are no limits."""
-    violation = constraint_violation(metrics, max_volatility, min_return)
+    volatility or drawdown cap (with or without a return floor), lowest
+    volatility above a return floor alone, highest Sharpe when there are no
+    limits. Ties go to the smaller drawdown."""
+    violation = constraint_violation(metrics, max_volatility, min_return, max_drawdown)
     ret, vol, sharpe = metrics.get("annual_return"), metrics.get("expected_volatility"), metrics.get("sharpe_ratio")
-    if max_volatility is not None:
+    if max_volatility is not None or max_drawdown is not None:
         objective = -ret if ret is not None else float("inf")
     elif min_return is not None:
         objective = vol if vol is not None else float("inf")
     else:
         objective = -sharpe if sharpe is not None else float("inf")
-    return (violation > 0, round(violation, 6), objective)
+    dd = metrics.get("max_drawdown")
+    return (violation > 0, round(violation, 6), objective, dd if dd is not None else float("inf"))
 
 
 def _project_to_simplex(v: np.ndarray, total: float = 1.0) -> np.ndarray:
@@ -299,6 +307,7 @@ def optimize_selection(
     min_count: int | None = None,
     max_count: int | None = None,
     required: list[str] | None = None,
+    max_drawdown: float | None = None,
 ) -> dict:
     """Choose which companies (and a baseline weighting of them) best meet
     the volatility ceiling / return floor over the past year, by walking the
@@ -320,7 +329,7 @@ def optimize_selection(
         returns_df = returns_df.dropna(axis=1, thresh=int(len(returns_df) * 0.9)).fillna(0.0)
     if returns_df.shape[1] < 2:
         raise ValueError("Not enough tickers with a year of price history to optimize over")
-    return _optimize(returns_df, max_volatility, min_return, min_count, max_count, required)
+    return _optimize(returns_df, max_volatility, min_return, min_count, max_count, required, max_drawdown)
 
 
 def _optimize(
@@ -330,6 +339,7 @@ def _optimize(
     min_count: int | None,
     max_count: int | None,
     required: list[str] | None = None,
+    max_drawdown: float | None = None,
 ) -> dict:
     """`optimize_selection` over an already-fetched returns DataFrame."""
     columns = list(returns_df.columns)
@@ -343,7 +353,7 @@ def _optimize(
     # hair doesn't slip past it once those slivers are removed.
     best = min(
         (_drop_small_positions(w, floor) for w in _interpolate_frontier(frontier)),
-        key=lambda w: _candidate_rank(metrics_from_returns(returns, w), max_volatility, min_return),
+        key=lambda w: _candidate_rank(metrics_from_returns(returns, w), max_volatility, min_return, max_drawdown),
     )
 
     # Mandatory companies first, then by optimal weight, breaking ties (e.g.
@@ -363,10 +373,10 @@ def _optimize(
         }
         # Re-solve over each set; min == max == size keeps all of its companies.
         results = [
-            _optimize(returns_df.iloc[:, list(subset)], max_volatility, min_return, size, size, required)
+            _optimize(returns_df.iloc[:, list(subset)], max_volatility, min_return, size, size, required, max_drawdown)
             for subset in candidate_sets
         ]
-        return min(results, key=lambda r: _candidate_rank(r["metrics"], max_volatility, min_return))
+        return min(results, key=lambda r: _candidate_rank(r["metrics"], max_volatility, min_return, max_drawdown))
 
     # Floor at MIN_SELECTED_WEIGHT so a company kept to reach `min_count`
     # still gets a (small) position rather than a zero weight.
@@ -377,7 +387,7 @@ def _optimize(
         "tickers": [columns[i] for i in keep],
         "weights": {columns[i]: float(w) for i, w in zip(keep, weights)},
         "metrics": metrics,
-        "feasible": constraint_violation(metrics, max_volatility, min_return) == 0,
+        "feasible": constraint_violation(metrics, max_volatility, min_return, max_drawdown) == 0,
     }
 
 
@@ -390,13 +400,14 @@ def select_universe(
     max_volatility: float | None = None,
     min_return: float | None = None,
     required: list[str] | None = None,
+    max_drawdown: float | None = None,
 ) -> dict:
     """Decide which companies the agent trains on.
 
     - "subset" mode first narrows `tickers` to those with an upward trend,
       ranked by K-ratio. With an exact count (min == max) and no limits, it
       keeps the top that-many by K-ratio, as it always has.
-    - Otherwise any volatility/return limit or company-count bound (and
+    - Otherwise any volatility/return/drawdown limit or company-count bound (and
       always in subset mode) runs `optimize_selection` over the candidates --
       that is what drops companies and sizes the portfolio, within
       [min_count, max_count].
@@ -408,7 +419,7 @@ def select_universe(
     (optimize_selection's result, or None)}."""
     if min_count is not None and max_count is not None and min_count > max_count:
         raise ValueError(f"Min companies ({min_count}) is greater than max companies ({max_count})")
-    constrained = max_volatility is not None or min_return is not None
+    constrained = max_volatility is not None or min_return is not None or max_drawdown is not None
     bounded = min_count is not None or max_count is not None
     required = [t for t in dict.fromkeys(required or []) if t in set(tickers)]
     candidates, ranked = tickers, None
@@ -425,7 +436,7 @@ def select_universe(
     elif not constrained and not bounded:
         return {"tickers": tickers, "selection": None, "optimizer": None}
 
-    optimizer = optimize_selection(candidates, max_volatility, min_return, min_count, max_count, required)
+    optimizer = optimize_selection(candidates, max_volatility, min_return, min_count, max_count, required, max_drawdown)
     chosen = set(optimizer["tickers"])
     selection = [r for r in ranked if r["ticker"] in chosen] if ranked is not None else None
     return {"tickers": optimizer["tickers"], "selection": selection, "optimizer": optimizer}
@@ -484,6 +495,7 @@ def _enforce_constraints(
     anchor: dict[str, float] | None = None,
     max_weight_range: float | None = None,
     weight_range_basis: str = "smallest",
+    max_drawdown: float | None = None,
 ) -> tuple[np.ndarray, float]:
     """The env's constraint penalty is soft, so the learned weights can
     still miss the target. If they do, blend them toward an anchor
@@ -512,13 +524,13 @@ def _enforce_constraints(
             anchors.insert(0, optimal / optimal.sum())
 
     best_weights, best_blend = cap(weights), 0.0
-    best_key = _candidate_rank(metrics_from_returns(returns, best_weights), max_volatility, min_return)
+    best_key = _candidate_rank(metrics_from_returns(returns, best_weights), max_volatility, min_return, max_drawdown)
     for blend in BLEND_STEPS[1:]:
         if not best_key[0]:
             break  # smallest feasible blend found
         for candidate_anchor in anchors:
             candidate = cap((1 - blend) * weights + blend * candidate_anchor)
-            key = _candidate_rank(metrics_from_returns(returns, candidate), max_volatility, min_return)
+            key = _candidate_rank(metrics_from_returns(returns, candidate), max_volatility, min_return, max_drawdown)
             if key < best_key:
                 best_weights, best_blend, best_key = candidate, blend, key
     return best_weights, best_blend
@@ -537,8 +549,12 @@ def train_and_recommend(
     max_weight_range: float | None = None,
     weight_range_basis: str = "smallest",
     transaction_cost: float = TRANSACTION_COST,
+    max_drawdown: float | None = None,
 ) -> dict:
-    """`max_weight_range` (optional, fraction): cap on max(w) - min(w) across
+    """`max_drawdown` (optional, fraction): ceiling on the past-year max
+    drawdown of the final weights, enforced like the volatility / return
+    limits (blend toward the optimizer's weights).
+    `max_weight_range` (optional, fraction): cap on max(w) - min(w) across
     the holdings, measured against `weight_range_basis` (see `weight_range`;
     "smallest": 0.5 = the largest at most 1.5x the smallest), applied to the
     learned weights (see `_cap_weight_range`)."""
@@ -575,13 +591,13 @@ def train_and_recommend(
     action, _ = model.predict(final_obs, deterministic=True)
     weights = PortfolioEnv.softmax(np.asarray(action, dtype=np.float64))
 
-    constrained = max_volatility is not None or min_return is not None
+    constrained = max_volatility is not None or min_return is not None or max_drawdown is not None
     blend = 0.0
     learned_range = weight_range(weights, weight_range_basis)
     if constrained:
         weights, blend = _enforce_constraints(
             used_tickers, weights, max_volatility, min_return, anchor,
-            max_weight_range=max_weight_range, weight_range_basis=weight_range_basis,
+            max_weight_range=max_weight_range, weight_range_basis=weight_range_basis, max_drawdown=max_drawdown,
         )
     weights, _ = _cap_weight_range(weights, max_weight_range, weight_range_basis)  # no-op when already within the range
 
@@ -594,11 +610,12 @@ def train_and_recommend(
         constraints = {
             "max_volatility": max_volatility,
             "min_return": min_return,
+            "max_drawdown": max_drawdown,
             "max_weight_range": max_weight_range,
             "weight_range_basis": weight_range_basis,
             "weight_range": round(final_range, 4),
             "learned_weight_range": round(learned_range, 4),
-            "satisfied": constraint_violation(metrics, max_volatility, min_return) == 0 and range_ok,
+            "satisfied": constraint_violation(metrics, max_volatility, min_return, max_drawdown) == 0 and range_ok,
             "blend": round(blend, 2),
         }
 
@@ -622,6 +639,7 @@ def train_and_recommend(
             "transaction_cost": transaction_cost,
             "max_volatility": max_volatility,
             "min_return": min_return,
+            "max_drawdown": max_drawdown,
             "max_weight_range": max_weight_range,
             "weight_range_basis": weight_range_basis,
         },

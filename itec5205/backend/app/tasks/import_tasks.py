@@ -404,3 +404,15 @@ def _run_import(self, tickers, years, interval, import_history, import_statistic
     }
     socketio.emit("import_progress", {"stage": "done", **{k: v for k, v in result.items() if k not in ("records", "earnings_records")}}, room=room)
     return result
+
+
+@celery_app.task(name="recalculate_indicators")
+def recalculate_indicators() -> int:
+    """Recompute every company's price-based screening indicators
+    (`calculated_stats`) from stored prices -- run when the Settings page's
+    indicator time horizon changes. No Yahoo calls."""
+    from ..services.yahoo_import import recalculate_all_calculated_stats  # noqa: PLC0415
+
+    done = recalculate_all_calculated_stats()
+    logger.info("Recalculated screening indicators for %s companies", done)
+    return done

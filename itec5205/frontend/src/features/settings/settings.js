@@ -31,6 +31,9 @@ export const DEFAULT_SETTINGS = {
     sort_dir: "desc",
     market_cap_unit: "B",
     fcf_unit: "B",
+    // Trading days every price-based screening indicator covers (Change,
+    // Volatility, Trend R², Line Deviation, Max Drawdown, ...): 1 year.
+    indicator_window_days: 252,
   },
   forecast: {
     training_days: 2515,
@@ -61,6 +64,7 @@ export const DEFAULT_SETTINGS = {
     trend_window_days: 252,
     max_volatility_pct: "",
     min_return_pct: "",
+    max_drawdown_pct: "", // past-year worst fall from a peak, % (blank = no limit)
     max_weight_range_pct: "",
     weight_range_basis: "smallest", // what the range is measured against: smallest / largest holding, or points
     // Order Calculator (first open only; afterwards it keeps its saved plan).
@@ -153,6 +157,22 @@ export async function saveSettings(dispatch, values) {
   setCurrent(data.settings);
   await applyScreening(dispatch, current.screening);
   return current;
+}
+
+// The indicator time horizon choices (Settings > Screening Defaults).
+export const INDICATOR_WINDOWS = [
+  { value: 63, label: "3 months", short: "3M", text: "3 months" },
+  { value: 126, label: "6 months", short: "6M", text: "6 months" },
+  { value: 252, label: "1 year", short: "1Y", text: "year" },
+  { value: 504, label: "2 years", short: "2Y", text: "2 years" },
+  { value: 756, label: "3 years", short: "3Y", text: "3 years" },
+  { value: 1260, label: "5 years", short: "5Y", text: "5 years" },
+];
+
+/** The current indicator time horizon: {value (trading days), label, short ("1Y"), text ("year")}. */
+export function indicatorWindow() {
+  const days = Number(current.screening?.indicator_window_days) || 252;
+  return INDICATOR_WINDOWS.find((w) => w.value === days) || INDICATOR_WINDOWS[2];
 }
 
 /** Range buttons of a chart: "general" (company + portfolio detail) or "forecast". */

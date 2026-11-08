@@ -31,10 +31,12 @@ def train_rl_portfolio(
     weight_range_basis: str = "smallest",
     required_tickers: list[str] | None = None,
     excluded_tickers: list[str] | None = None,
+    max_drawdown: float | None = None,
 ):
     """The optimizer decides how many companies to keep, within the optional
     [min_companies, max_companies] bounds (see `rl_service.select_universe`). `max_volatility` / `min_return`
-    are annualized fractions (0.25 = 25%); `max_weight_range` caps
+    are annualized fractions (0.25 = 25%); `max_drawdown` (fraction, 0.15 = 15%) caps the
+    past-year worst fall from a peak; `max_weight_range` caps
     max(weight) - min(weight) across the holdings, measured against
     `weight_range_basis` ("smallest" / "largest" holding, or "points").
     `required_tickers` must end up in the portfolio -- those that are in the
@@ -54,7 +56,7 @@ def train_rl_portfolio(
     socketio.emit("rl_progress", {"stage": "selecting"}, room=room)
     chosen = select_universe(
         requested, mode=mode, min_count=min_companies, max_count=max_companies, lookback_days=lookback_days,
-        max_volatility=max_volatility, min_return=min_return, required=required,
+        max_volatility=max_volatility, min_return=min_return, required=required, max_drawdown=max_drawdown,
     )
     universe, selection, optimizer = chosen["tickers"], chosen["selection"], chosen["optimizer"]
     auto_sized = optimizer is not None and (min_companies is None or min_companies != max_companies)
@@ -66,7 +68,7 @@ def train_rl_portfolio(
         universe=universe, risk_aversion=risk_aversion, timesteps=timesteps, window=window,
         progress_room=room, progress_task=self, max_volatility=max_volatility, min_return=min_return,
         anchor=optimizer["weights"] if optimizer else None, max_weight_range=max_weight_range,
-        weight_range_basis=weight_range_basis,
+        weight_range_basis=weight_range_basis, max_drawdown=max_drawdown,
     )
     constraints = result["constraints"]
     excluded = excluded_for_history(requested, result["tickers"], mode, optimizer is not None, lookback_days)
@@ -97,6 +99,8 @@ def train_rl_portfolio(
         notes += f", max volatility={max_volatility:.0%}"
     if min_return is not None:
         notes += f", min annual return={min_return:.0%}"
+    if max_drawdown is not None:
+        notes += f", max drawdown={max_drawdown:.0%}"
     if max_weight_range is not None:
         notes += ", max weight range=" + (
             f"{max_weight_range * 100:g} points" if weight_range_basis == "points"

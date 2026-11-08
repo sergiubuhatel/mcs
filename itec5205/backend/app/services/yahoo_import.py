@@ -251,6 +251,7 @@ def store_calculated_stats(tickers: list[str]) -> int:
             "up_months_1y": m["up_months_1y"],
             "worst_month_1y": m["worst_month_1y"],
             "trend_return_1y": m["trend_return_1y"],
+            "window_days": m["window_days"],  # the indicator time horizon they cover
             "updated_at": now,
         })
     if docs:

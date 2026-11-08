@@ -68,6 +68,7 @@ def train():
         lookback_days=int(body.get("lookback_days", 252)),
         max_volatility=_optional(body.get("max_volatility"), float),
         min_return=_optional(body.get("min_return"), float),
+        max_drawdown=_optional(body.get("max_drawdown"), float),
         max_weight_range=_optional(body.get("max_weight_range"), float),
         weight_range_basis=basis,
         required_tickers=required,

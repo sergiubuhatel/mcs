@@ -1,4 +1,11 @@
 import { BarChartIcon, ClockIcon, DatabaseIcon, GridIcon, GrowthIcon, TrendChartIcon } from "../../layout/icons";
+import { indicatorWindow } from "../settings/settings";
+
+// The indicator time horizon (Settings > Screening Defaults), read when a
+// label is shown -- these labels are getters, so they follow the setting.
+const W = () => indicatorWindow().short; // "1Y"
+const WT = () => indicatorWindow().text; // "year", "6 months"
+const MONTHS = () => Math.round(indicatorWindow().value / 21);
 
 // How many stored units (market_cap is stored in $M, free_cash_flow in raw
 // $) one typed unit is worth -- lets the user type "500" and pick Billion
@@ -69,8 +76,8 @@ export const FILTER_GROUPS = [
     color: "#0ea5e9",
     fields: [
       { key: "day_change", label: "Change (1D) %", short: "Change (1D)", percent: true, hint: "Latest close vs the previous close", tip: "Mostly for spotting today's movers; leave empty for long-term screens." },
-      { key: "stock_growth_1y", label: "Change (1Y) %", short: "Change (1Y)", percent: true, hint: "Price change over the last 252 trading days", tip: "Min 15–20 for strong past-year performers." },
-      { key: "volatility", label: "Volatility (1Y) %", short: "Volatility", percent: true, hint: "Annualized standard deviation of the past year's daily returns", tip: "Max 25–30 for steadier stocks; the S&P 500 itself runs about 15–20." },
+      { key: "stock_growth_1y", get label() { return `Change (${W()}) %`; }, get short() { return `Change (${W()})`; }, percent: true, get hint() { return `Price change over the last ${indicatorWindow().value} trading days (the indicator time horizon in Settings)`; }, tip: "Min 15–20 for strong past-year performers." },
+      { key: "volatility", get label() { return `Volatility (${W()}) %`; }, short: "Volatility", percent: true, get hint() { return `Annualized standard deviation of the daily returns over the past ${WT()}`; }, tip: "Max 25–30 for steadier stocks; the S&P 500 itself runs about 15–20." },
     ],
   },
   {
@@ -80,12 +87,12 @@ export const FILTER_GROUPS = [
     icon: GrowthIcon,
     color: "#14b8a6",
     fields: [
-      { key: "trend_r2", label: "Trend R² (1Y, -1 to 1)", short: "Trend R²", hint: "How close the price is to a straight line: 1 = perfectly straight climb, negative = downtrend", tip: "Min 0.85 for a clear line, 0.9 for a very straight one. Above 0.95 matches very few." },
-      { key: "line_deviation", label: "Line Deviation (1Y) %", short: "Line Deviation", percent: true, hint: "The furthest the price strayed from its straight trend line; small = close to a straight line", tip: "Max 10 for near-straight, 8 for the straightest. Below 7 matched nothing in the past year." },
-      { key: "max_drawdown", label: "Max Drawdown (1Y) %", short: "Max Drawdown", percent: true, hint: "Largest drop from a past-year peak", tip: "Max 12–15; max 10 for very smooth climbs." },
-      { key: "up_months", label: "Up Months (1Y, of ~12)", short: "Up Months", hint: "Months that closed higher than the month before", tip: "Min 9; min 10 for very steady climbs." },
-      { key: "worst_month", label: "Worst Month (1Y) %", short: "Worst Month", percent: true, hint: "The smallest monthly change over the past year: min 0 = rose every month, min 1 = rose at least 1% every month", tip: "Min -3 to -5 together with the trend filters. No stock rose every month in the past year, so min 0 matches nothing." },
-      { key: "trend_return", label: "Trend-Adjusted Return (1Y) %", short: "Trend Return", percent: true, hint: "Change (1Y) × Trend R²", tip: "Best as a sort column. As a filter, min 15 keeps meaningful climbs." },
+      { key: "trend_r2", get label() { return `Trend R² (${W()}, -1 to 1)`; }, short: "Trend R²", hint: "How close the price is to a straight line: 1 = perfectly straight climb, negative = downtrend", tip: "Min 0.85 for a clear line, 0.9 for a very straight one. Above 0.95 matches very few." },
+      { key: "line_deviation", get label() { return `Line Deviation (${W()}) %`; }, short: "Line Deviation", percent: true, hint: "The furthest the price strayed from its straight trend line; small = close to a straight line", tip: "Max 10 for near-straight, 8 for the straightest. Below 7 matched nothing in the past year." },
+      { key: "max_drawdown", get label() { return `Max Drawdown (${W()}) %`; }, short: "Max Drawdown", percent: true, get hint() { return `Largest fall from a peak over the past ${WT()} (15 = the price once dropped 15% below an earlier high)`; }, tip: "Max 12–15; max 10 for very smooth climbs." },
+      { key: "up_months", get label() { return `Up Months (${W()}, of ~${MONTHS()})`; }, short: "Up Months", hint: "Months that closed higher than the month before", tip: "Min 9; min 10 for very steady climbs." },
+      { key: "worst_month", get label() { return `Worst Month (${W()}) %`; }, short: "Worst Month", percent: true, get hint() { return `The smallest monthly change over the past ${WT()}: min 0 = rose every month, min 1 = rose at least 1% every month`; }, tip: "Min -3 to -5 together with the trend filters. No stock rose every month in the past year, so min 0 matches nothing." },
+      { key: "trend_return", get label() { return `Trend-Adjusted Return (${W()}) %`; }, short: "Trend Return", percent: true, get hint() { return `Change (${W()}) × Trend R²`; }, tip: "Best as a sort column. As a filter, min 15 keeps meaningful climbs." },
     ],
   },
   {
@@ -107,7 +114,7 @@ export const FILTER_TABS = [
   { id: "fundamentals", title: "Fundamentals", icon: BarChartIcon, color: "#3b82f6", heading: "Fundamental Metrics", subtitle: "Filter by key valuation, profitability, and growth metrics", groups: ["Market Metrics", "Profitability", "Growth"] },
   { id: "health", title: "Financial Health", icon: DatabaseIcon, color: "#7c3aed", heading: "Financial Health", subtitle: "Filter by debt, liquidity, and cash generation", groups: ["Financial Health"] },
   { id: "performance", title: "Performance", icon: TrendChartIcon, color: "#0ea5e9", heading: "Price Performance", subtitle: "Filter by recent price moves and volatility, calculated from stored prices", groups: ["Price Performance"] },
-  { id: "trend", title: "Trend Quality", icon: GrowthIcon, color: "#14b8a6", heading: "Trend Quality", subtitle: "Filter by how straight and steady the past year's climb was", groups: ["Trend Quality"] },
+  { id: "trend", title: "Trend Quality", icon: GrowthIcon, color: "#14b8a6", heading: "Trend Quality", get subtitle() { return `Filter by how straight and steady the climb was over the past ${WT()}`; }, groups: ["Trend Quality"] },
   { id: "results", title: "Financial Results", icon: ClockIcon, color: "#7c3aed", heading: "Financial Results", subtitle: "Filter by when companies last reported earnings and when they report next", groups: ["Financial Results"] },
 ];
 export const tabGroups = (tab) => FILTER_GROUPS.filter((g) => tab.groups.includes(g.title));

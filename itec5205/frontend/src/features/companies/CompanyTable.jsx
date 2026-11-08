@@ -12,6 +12,7 @@ import { useColumnConfig } from "../../utils/useColumnConfig";
 import ColumnPicker from "../../components/ColumnPicker";
 import { SignalBadge } from "../signals/SignalBoard";
 import { fmtDay, nextReportLabel, relativeDays } from "../earnings/FinancialResultsCard";
+import { indicatorWindow } from "../settings/settings";
 
 function fmtNum(v) {
   return v === null || v === undefined ? "-" : Number(v).toFixed(2);
@@ -100,6 +101,7 @@ function SignalFilter({ value, onChange }) {
 }
 
 export default function CompanyTable() {
+  const win = indicatorWindow().short; // the indicator time horizon (Settings), e.g. "1Y"
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { results, total, filters, selected, signals, loading, error } = useSelector((s) => s.companies);
@@ -177,16 +179,16 @@ export default function CompanyTable() {
     },
     {
       key: "stock_growth_1y",
-      label: "Change (1Y)",
+      label: `Change (${win})`,
       csv: (row) => row.stock_growth_1y,
       sortable: true,
       width: 95,
       render: (row) => <span style={{ color: changeColor(row.stock_growth_1y), fontWeight: 600 }}>{fmtSignedPct(row.stock_growth_1y)}</span>,
     },
-    { key: "volatility", csv: (row) => row.volatility, label: "Volatility (1Y)", sortable: true, width: 95, render: (row) => fmtPct(row.volatility) },
+    { key: "volatility", csv: (row) => row.volatility, label: `Volatility (${win})`, sortable: true, width: 95, render: (row) => fmtPct(row.volatility) },
     { key: "trend_r2", csv: (row) => row.trend_r2, label: "Trend R²", sortable: true, width: 80, render: (row) => (row.trend_r2 == null ? "-" : row.trend_r2.toFixed(2)) },
-    { key: "line_deviation", csv: (row) => row.line_deviation, label: "Line Dev (1Y)", sortable: true, width: 95, render: (row) => fmtPct(row.line_deviation) },
-    { key: "max_drawdown", csv: (row) => row.max_drawdown, label: "Max DD (1Y)", sortable: true, width: 90, render: (row) => fmtPct(row.max_drawdown) },
+    { key: "line_deviation", csv: (row) => row.line_deviation, label: `Line Dev (${win})`, sortable: true, width: 95, render: (row) => fmtPct(row.line_deviation) },
+    { key: "max_drawdown", csv: (row) => row.max_drawdown, label: `Max DD (${win})`, sortable: true, width: 90, render: (row) => fmtPct(row.max_drawdown) },
     { key: "up_months", csv: (row) => row.up_months, label: "Up Months", sortable: true, width: 85, hiddenByDefault: true, render: (row) => (row.up_months == null ? "-" : row.up_months) },
     { key: "worst_month", csv: (row) => row.worst_month, label: "Worst Month", sortable: true, width: 95, hiddenByDefault: true, render: (row) => <span style={{ color: changeColor(row.worst_month) }}>{fmtSignedPct(row.worst_month)}</span> },
     { key: "trend_return", csv: (row) => row.trend_return, label: "Trend Return", sortable: true, width: 95, render: (row) => <span style={{ color: changeColor(row.trend_return), fontWeight: 600 }}>{fmtSignedPct(row.trend_return)}</span> },

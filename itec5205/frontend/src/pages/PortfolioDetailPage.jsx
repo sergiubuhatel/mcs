@@ -476,6 +476,15 @@ export default function PortfolioDetailPage() {
       title: "Annualized standard deviation of the portfolio's daily returns over the past year.",
     },
     {
+      icon: TrendDownIcon,
+      color: "#dc2626",
+      label: "Max drawdown (1Y)",
+      value: fmtPct(summary?.max_drawdown_1y),
+      sub: `worst fall from a peak · at build ${fmtPct(portfolio.max_drawdown)}`,
+      title:
+        "The largest drop of the held portfolio below an earlier high over the past year (e.g. 12% = at worst it was 12% under its previous peak); at build = the same, measured when the portfolio was built.",
+    },
+    {
       icon: StarIcon,
       color: "#06b6d4",
       label: "Expected return (ann.)",
@@ -674,6 +683,9 @@ export default function PortfolioDetailPage() {
             )}
             {sharpe != null && (
               <span className="muted" title="Past year: expected return / volatility (no risk-free rate)">| Sharpe (1Y): <strong style={{ color: "var(--color-text-primary)" }}>{sharpe.toFixed(2)}</strong></span>
+            )}
+            {summary?.max_drawdown_1y != null && (
+              <span className="muted" title="Largest fall below an earlier high over the past year">| Max drawdown (1Y): <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(summary.max_drawdown_1y)}</strong></span>
             )}
             {summary?.expected_return_1y != null && (
               <span className="muted" title="Mean daily return over the past year x 252">| Expected annual return: <strong style={{ color: "var(--color-text-primary)" }}>{fmtPct(summary.expected_return_1y)}</strong></span>

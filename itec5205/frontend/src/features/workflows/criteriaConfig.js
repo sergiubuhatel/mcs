@@ -71,6 +71,7 @@ export function criteriaDefaults() {
       timesteps: p.timesteps,
       max_volatility_pct: p.max_volatility_pct,
       min_return_pct: p.min_return_pct,
+      max_drawdown_pct: p.max_drawdown_pct ?? "",
       max_weight_range_pct: p.max_weight_range_pct,
       weight_range_basis: p.weight_range_basis || "smallest",
       min_companies: p.min_companies,
@@ -142,6 +143,7 @@ export function autoCriteriaName(kind, c) {
   const parts = [];
   if (isSet(c.max_volatility_pct)) parts.push(`Vol ≤ ${c.max_volatility_pct}%`);
   if (isSet(c.min_return_pct)) parts.push(`Return ≥ ${c.min_return_pct}%`);
+  if (isSet(c.max_drawdown_pct)) parts.push(`Drawdown ≤ ${c.max_drawdown_pct}%`);
   if (isSet(c.max_weight_range_pct)) {
     const d = describeWeightRange(c.max_weight_range_pct, c.weight_range_basis);
     parts.push(d.charAt(0).toUpperCase() + d.slice(1));
@@ -205,6 +207,7 @@ export function describeCriteria(kind, c) {
   const parts = [c.mode === "subset" ? "Steady upward trend only" : "Whole pool"];
   if (c.max_volatility_pct != null && c.max_volatility_pct !== "") parts.push(`volatility ≤ ${c.max_volatility_pct}%`);
   if (c.min_return_pct != null && c.min_return_pct !== "") parts.push(`annual return ≥ ${c.min_return_pct}%`);
+  if (isSet(c.max_drawdown_pct)) parts.push(`max drawdown ≤ ${c.max_drawdown_pct}%`);
   if (isSet(c.max_weight_range_pct)) parts.push(describeWeightRange(c.max_weight_range_pct, c.weight_range_basis));
   const min = c.min_companies ?? "";
   const max = c.max_companies ?? "";

@@ -5,8 +5,9 @@ import numpy as np
 import pandas as pd
 
 from ..db.arango_client import get_db
+from .indicator_window import window_days as current_window_days
 
-TRADING_DAYS_PER_YEAR = 252
+TRADING_DAYS_PER_YEAR = 252  # annualizes volatility, whatever the window
 
 
 def _trend(closes: pd.Series) -> tuple[float | None, float | None]:
@@ -41,14 +42,18 @@ def _monthly_changes(recent: pd.DataFrame) -> pd.Series | None:
     return path.pct_change().dropna()
 
 
-def price_history_metrics(tickers: list[str]) -> dict[str, dict]:
-    """Per-ticker past-year {growth_1y, volatility_1y, trend_r2_1y,
-    line_deviation_1y, max_drawdown_1y, up_months_1y, worst_month_1y, trend_return_1y}, computed in one pass
-    over price history. Callers should scope `tickers` to what's actually on
-    screen (e.g. one page of the grid, or one portfolio's holdings) --
-    this pulls full price history for every ticker in the list."""
+def price_history_metrics(tickers: list[str], window_days: int | None = None) -> dict[str, dict]:
+    """Per-ticker {growth_1y, volatility_1y, trend_r2_1y, line_deviation_1y,
+    max_drawdown_1y, up_months_1y, worst_month_1y, trend_return_1y,
+    window_days}, computed in one pass over price history. They cover the last
+    `window_days` trading days -- by default the Settings page's indicator time
+    horizon (services/indicator_window.py, 1 year unless changed); the `_1y`
+    suffixes are historical names. Callers should scope `tickers` to what's
+    actually on screen (e.g. one page of the grid, or one portfolio's
+    holdings) -- this pulls full price history for every ticker in the list."""
     if not tickers:
         return {}
+    window = window_days or current_window_days()
     db = get_db()
     cursor = db.aql.execute(
         """
@@ -66,7 +71,7 @@ def price_history_metrics(tickers: list[str]) -> dict[str, dict]:
     df = pd.DataFrame(rows)
     metrics: dict[str, dict] = {}
     for ticker, g in df.groupby("ticker"):
-        recent = g.tail(TRADING_DAYS_PER_YEAR + 1)
+        recent = g.tail(window + 1)
         closes = recent["close"]
 
         first, last = closes.iloc[0], closes.iloc[-1]
@@ -92,5 +97,6 @@ def price_history_metrics(tickers: list[str]) -> dict[str, dict]:
             # Return discounted by how far the path strays from a straight
             # line: 30% at R² 0.98 (29.4%) outranks 40% at R² 0.50 (20%).
             "trend_return_1y": None if growth is None or r2 is None else round(growth * abs(r2), 4),
+            "window_days": window,
         }
     return metrics

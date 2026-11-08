@@ -18,7 +18,7 @@ import {
 
 const withLive = (p) =>
   p.live
-    ? { ...p, annual_return: p.live.change_1y, expected_volatility: p.live.volatility_1y, sharpe_ratio: p.live.sharpe_1y, at_build: { annual_return: p.annual_return, expected_volatility: p.expected_volatility, sharpe_ratio: p.sharpe_ratio } }
+    ? { ...p, annual_return: p.live.change_1y, expected_volatility: p.live.volatility_1y, sharpe_ratio: p.live.sharpe_1y, max_drawdown: p.live.max_drawdown_1y, at_build: { annual_return: p.annual_return, expected_volatility: p.expected_volatility, sharpe_ratio: p.sharpe_ratio, max_drawdown: p.max_drawdown } }
     : p;
 
 function* handleFetch() {

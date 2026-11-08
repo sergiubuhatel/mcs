@@ -21,7 +21,7 @@ import { ImportOptionsFields, existingMode, importOptionsInvalid, parseTickers, 
 
 const apiError = (err) => err.response?.data?.error || err.message;
 // Portfolio criteria fields where blank = no limit / auto.
-const PORTFOLIO_OPTIONAL = ["max_volatility_pct", "min_return_pct", "max_weight_range_pct", "min_companies", "max_companies"];
+const PORTFOLIO_OPTIONAL = ["max_volatility_pct", "min_return_pct", "max_drawdown_pct", "max_weight_range_pct", "min_companies", "max_companies"];
 
 // Stored document -> editor state (blank strings for "not set").
 function toForm(kind, doc) {

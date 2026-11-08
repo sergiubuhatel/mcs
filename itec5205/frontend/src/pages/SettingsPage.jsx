@@ -15,7 +15,7 @@ import {
 } from "../layout/icons";
 import { MODEL_RULES, TRAINING_UNITS } from "../features/workflows/criteriaConfig";
 import { EXISTING_MODES, UNIVERSES } from "../features/dataImport/ImportControls";
-import { DEFAULT_SETTINGS, getSavedSettings, getSettings, saveSettings } from "../features/settings/settings";
+import { DEFAULT_SETTINGS, INDICATOR_WINDOWS, getSavedSettings, getSettings, indicatorWindow, saveSettings } from "../features/settings/settings";
 import { parseIntervals } from "../utils/dateRanges";
 import ImportScheduleCard from "../features/settings/ImportScheduleCard";
 
@@ -40,8 +40,9 @@ const SORT_COLUMNS = opts([
   { value: "signal", label: "Signal" },
   { value: "current_price", label: "Price" },
   { value: "day_change", label: "Change (1D)" },
-  { value: "stock_growth_1y", label: "Change (1Y)" },
-  { value: "volatility", label: "Volatility (1Y)" },
+  { value: "stock_growth_1y", get label() { return `Change (${indicatorWindow().short})`; } },
+  { value: "volatility", get label() { return `Volatility (${indicatorWindow().short})`; } },
+  { value: "max_drawdown", get label() { return `Max drawdown (${indicatorWindow().short})`; } },
   { value: "trailing_pe", label: "P/E" },
   { value: "revenue_growth_yoy", label: "Revenue growth" },
   { value: "earnings_growth_yoy_q", label: "EPS growth" },
@@ -79,7 +80,7 @@ const SECTIONS = [
       { key: "years", label: "History since", type: "select", options: opts([1, 2, 5, 10, 15, 20].map((y) => ({ value: y, label: `${y} year${y === 1 ? "" : "s"} ago` }))), number: true, help: "How far back price history starts (same choices as the import form)." },
       { key: "import_history", label: "Import price history", type: "toggle", help: "Daily prices from Yahoo Finance." },
       { key: "import_statistics", label: "Import statistics", type: "toggle", help: "Fundamentals: valuation, profitability, debt, growth." },
-      { key: "import_calculated_stats", label: "Calculated statistics", type: "toggle", help: "1-year change and volatility computed from the stored prices." },
+      { key: "import_calculated_stats", label: "Calculated statistics", type: "toggle", help: "Price-based screening indicators (change, volatility, trend, max drawdown, ...) computed from the stored prices over the indicator time horizon (Screening Defaults)." },
       { key: "import_earnings", label: "Financial results", type: "toggle", help: "Earnings release dates and EPS: the whole history the first time, then the latest releases." },
     ],
   },
@@ -94,6 +95,14 @@ const SECTIONS = [
       { key: "page_size", label: "Rows per page", type: "select", options: opts([25, 50, 100, 250, 600, 1000, { value: 5000, label: "All" }]), number: true, help: "Results grid page size (All = every result on one page)." },
       { key: "sort_by", label: "Sort by", type: "select", options: SORT_COLUMNS, help: "Results grid sort column." },
       { key: "sort_dir", label: "Sort direction", type: "select", options: opts([{ value: "desc", label: "Descending ↓" }, { value: "asc", label: "Ascending ↑" }]), help: "Results grid sort direction." },
+      {
+        key: "indicator_window_days",
+        label: "Indicator time horizon",
+        type: "select",
+        options: opts(INDICATOR_WINDOWS.map(({ value, label }) => ({ value, label }))),
+        number: true,
+        help: "Period every price-based screening indicator is measured over: Change, Volatility, Trend R², Line Deviation, Max Drawdown, Up Months, Worst Month and Trend-Adjusted Return. Saving a new horizon recalculates them for every company in the background (a few minutes). Fundamentals stay as Yahoo reports them (trailing 12 months / latest quarter).",
+      },
       { key: "market_cap_unit", label: "Market cap unit", type: "select", options: UNITS, help: "Unit the market cap min / max are typed in." },
       { key: "fcf_unit", label: "Free cash flow unit", type: "select", options: UNITS, help: "Unit the free cash flow min / max are typed in." },
     ],
@@ -132,6 +141,7 @@ const SECTIONS = [
       { key: "timesteps", label: "Training timesteps", type: "number", min: 1000, step: 1000, help: "PPO training steps; more train longer." },
       { key: "max_volatility_pct", label: "Max volatility", type: "number", blank: "no limit", suffix: "%", help: "Annual volatility ceiling (blank = none)." },
       { key: "min_return_pct", label: "Min annual return", type: "number", blank: "no minimum", suffix: "%", help: "Past-year return floor (blank = none)." },
+      { key: "max_drawdown_pct", label: "Max drawdown", type: "number", blank: "no limit", min: 0, max: 100, suffix: "%", help: "Ceiling on the portfolio's worst past-year fall from a peak, e.g. 15 (blank = no preference). The optimizer picks companies and weights that stay within it." },
       { key: "max_weight_range_pct", label: "Max weight range", type: "number", blank: "no cap", help: "How much bigger the largest holding may be than the smallest (blank = none)." },
       {
         key: "weight_range_basis",
@@ -246,10 +256,14 @@ export default function SettingsPage() {
     if (problem) return;
     setSaving(true);
     try {
+      const previousWindow = indicatorWindow().value;
       const next = await saveSettings(dispatch, toPayload(form));
       setForm(structuredClone(next));
       setBaseline(JSON.stringify(next));
       toast.success("Settings saved — pages open with these values from now on");
+      if (indicatorWindow().value !== previousWindow) {
+        toast.info(`Recalculating the screening indicators over ${indicatorWindow().label} for every company — the screener shows the new values in a few minutes`);
+      }
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     } finally {

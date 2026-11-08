@@ -256,6 +256,7 @@ def run_workflow(self, run_id: str):
             lookback_days=port_c["trend_window_days"],
             max_volatility=pct(port_c["max_volatility_pct"]),
             min_return=pct(port_c["min_return_pct"]),
+            max_drawdown=pct(port_c.get("max_drawdown_pct")),
             max_weight_range=pct(port_c.get("max_weight_range_pct")),
             weight_range_basis=port_c.get("weight_range_basis") or "smallest",
             required_tickers=port_c.get("required_tickers") or [],

@@ -75,15 +75,26 @@ def compute_metrics(holdings: list[dict]) -> dict:
 
     returns = returns_past_year(tickers)
     if returns.empty:
-        return {"expected_return": None, "annual_return": None, "expected_volatility": None, "sharpe_ratio": None}
+        return {"expected_return": None, "annual_return": None, "expected_volatility": None, "sharpe_ratio": None,
+                "max_drawdown": None}
 
     return metrics_from_returns(returns.reindex(columns=tickers).fillna(0.0).values, weights)
 
 
+def max_drawdown(value: np.ndarray) -> float | None:
+    """Largest fall from a running peak of a value path, as a positive
+    fraction (0.12 = the value dropped 12% below its earlier high at worst)."""
+    v = np.asarray(value, dtype=float)
+    if len(v) < 2 or not np.all(np.isfinite(v)) or np.any(v <= 0):
+        return None
+    return float(max(0.0, -(v / np.maximum.accumulate(v) - 1.0).min()))
+
+
 def metrics_from_returns(returns: np.ndarray, weights: np.ndarray) -> dict:
-    """Annualized return/volatility/Sharpe of fixed `weights` applied to a
-    (days, assets) matrix of fractional daily returns -- `compute_metrics`
-    without the DB fetch, for scoring many candidate weightings at once."""
+    """Annualized return/volatility/Sharpe and the max drawdown of fixed
+    `weights` applied to a (days, assets) matrix of fractional daily returns
+    -- `compute_metrics` without the DB fetch, for scoring many candidate
+    weightings at once."""
     portfolio_daily = returns @ weights
 
     mean_daily = portfolio_daily.mean()
@@ -95,12 +106,16 @@ def metrics_from_returns(returns: np.ndarray, weights: np.ndarray) -> dict:
     # at the start - 1) -- what the portfolio actually grew by, the same idea
     # as a stock's Change (1Y), unlike the mean-based expected_return.
     annual_return = float(np.prod(1.0 + portfolio_daily) - 1.0)
+    # Worst peak-to-trough fall of the held value over the same window (the
+    # path starts at 1 before the first day's return).
+    drawdown = max_drawdown(np.concatenate([[1.0], np.cumprod(1.0 + portfolio_daily)]))
 
     return {
         "expected_return": round(float(expected_return), 4),
         "annual_return": round(annual_return, 4),
         "expected_volatility": round(float(expected_volatility), 4),
         "sharpe_ratio": round(sharpe_ratio, 4) if sharpe_ratio is not None else None,
+        "max_drawdown": None if drawdown is None else round(drawdown, 4),
     }
 
 
@@ -290,12 +305,14 @@ def _growth(returns: pd.DataFrame, tickers: list[str], base: int) -> np.ndarray:
 
 
 def _held_metrics(dates: list[str], value: np.ndarray, base: int) -> dict:
-    """Change / volatility / expected return / Sharpe of a held value path from row `base` to the end."""
+    """Change / volatility / expected return / Sharpe / max drawdown of a held value path from row `base` to the end."""
     v = value[base:]
-    out = {"change": None, "volatility": None, "expected_return": None, "sharpe": None}
+    out = {"change": None, "volatility": None, "expected_return": None, "sharpe": None, "max_drawdown": None}
     if len(v) < 2 or not v[0]:
         return out
     out["change"] = round(float(v[-1] / v[0] - 1.0), 6)
+    drawdown = max_drawdown(v)
+    out["max_drawdown"] = None if drawdown is None else round(drawdown, 6)
     daily = v[1:] / v[:-1] - 1.0
     if len(daily) >= 2:
         vol = float(np.std(daily, ddof=1) * np.sqrt(TRADING_DAYS_PER_YEAR))
@@ -316,7 +333,7 @@ def _metrics(returns: pd.DataFrame, tickers: list[str], weights: list[float], as
     w = np.array(weights, dtype=float)
     w = w / w.sum() if w.sum() else w
     out = {"day_change": None, "previous_date": None, "change_1y": None, "volatility_1y": None,
-           "expected_return_1y": None, "sharpe_1y": None, "window_start": None}
+           "expected_return_1y": None, "sharpe_1y": None, "max_drawdown_1y": None, "window_start": None}
     if len(dates) >= 2:
         out["day_change"] = round(float(_index_returns(own.iloc[-1:], tickers, w)[0]), 6)
         out["previous_date"] = dates[-2]
@@ -324,7 +341,8 @@ def _metrics(returns: pd.DataFrame, tickers: list[str], weights: list[float], as
     if base is not None:
         held = _held_metrics(dates, _growth(own, tickers, base) @ w, base)
         out.update(window_start=dates[base], change_1y=held["change"], volatility_1y=held["volatility"],
-                   expected_return_1y=held["expected_return"], sharpe_1y=held["sharpe"])
+                   expected_return_1y=held["expected_return"], sharpe_1y=held["sharpe"],
+                   max_drawdown_1y=held["max_drawdown"])
     return out
 
 

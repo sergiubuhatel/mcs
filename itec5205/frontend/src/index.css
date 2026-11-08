@@ -591,6 +591,7 @@ a.theme-toggle.active .theme-toggle-icon { color: var(--btn-accent); }
 .last-updated { display: inline-flex; align-items: center; gap: 8px; font-size: 0.8rem; line-height: 1.3; color: var(--color-text-primary); margin-right: 6px; }
 .last-updated svg { color: var(--color-text-secondary); }
 .stat-row:has(> .stat-card:nth-child(5)) { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.stat-row:has(> .stat-card:nth-child(7)) { grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
 .alloc-card { display: grid; grid-template-columns: minmax(220px, 1fr) 2.4fr; gap: 24px; align-items: start; }
 @media (max-width: 1000px) { .alloc-card { grid-template-columns: 1fr; } }
 .alloc-rows { display: grid; gap: 4px; }
