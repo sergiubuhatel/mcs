@@ -43,6 +43,9 @@ echo "Starting the app"
 docker compose up -d --no-build --remove-orphans
 
 echo "Restarting the API, workers, frontend and Keycloak (it caches its theme until restarted)"
+# Keycloak keeps gzip copies of theme files in data/tmp/kc-gzip-cache, and they
+# survive a restart: browsers would keep getting the old CSS. Drop them first.
+docker exec itec5205-keycloak rm -rf /opt/keycloak/data/tmp/kc-gzip-cache 2>/dev/null || true
 docker compose restart backend worker-import worker-rl worker-lstm worker-arima worker-workflow flower frontend keycloak
 
 echo "Checking"
