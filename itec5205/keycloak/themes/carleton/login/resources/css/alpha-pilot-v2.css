@@ -15,7 +15,12 @@
 html,
 body {
   background-color: #152238 !important;
-  background-image: none !important;
+  /* NYSE / Nasdaq market-district photo behind every Keycloak page */
+  background-image: url(../img/login-bg.jpg) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
   color: #f1f5fb !important;
   font-family: Inter, system-ui, Arial, sans-serif !important;
   margin: 0;
@@ -23,13 +28,12 @@ body {
   min-height: 100vh;
 }
 
-/* Dot-grid texture */
+/* Midnight-blue scrim over the photo so the wordmark and card stay legible */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
-  background-image: radial-gradient(circle, rgba(100,116,139,0.4) 1px, transparent 1px);
-  background-size: 26px 26px;
+  background: linear-gradient(180deg, rgba(21,34,56,0.80) 0%, rgba(21,34,56,0.55) 45%, rgba(21,34,56,0.80) 100%);
   pointer-events: none;
   z-index: 0;
 }
@@ -315,7 +319,7 @@ a:hover {
    Palette = app :root tokens (frontend/src/index.css).
    ---------------------------------------------------------- */
 html.cu-light, html.cu-light body { background-color: #edf2f7 !important; color: #2d3748 !important; color-scheme: light; }
-html.cu-light body::before { background-image: radial-gradient(circle, rgba(100,116,139,0.25) 1px, transparent 1px); }
+html.cu-light body::before { background: linear-gradient(180deg, rgba(237,242,247,0.85) 0%, rgba(237,242,247,0.55) 45%, rgba(237,242,247,0.85) 100%); }
 html.cu-light .login-pf-page::before { background-image: url(../img/alpha-pilot-wordmark-light.svg) !important; }
 html.cu-light .card-pf { background-color: #ffffff !important; border-color: #d3dae0 !important; box-shadow: 0 8px 30px rgba(15,23,42,0.10) !important; }
 html.cu-light #kc-page-title, html.cu-light h1, html.cu-light h2 { color: #2d3748 !important; }
