@@ -70,11 +70,11 @@ body::before {
 .login-pf-page::before {
   content: "";
   display: block;
-  /* Same lettering as the app's sidebar brand (Inter 800, brand blue, company line) */
-  width: 317px;
+  /* Same lettering as the app's sidebar brand (Inter 800, brand blue) */
+  width: 249px;
   max-width: 90vw;
   height: 64px;
-  background: url(../img/alpha-pilot-wordmark.svg) center / contain no-repeat;
+  background: url(../img/alpha-pilot-logo-v2.svg) center / contain no-repeat;
   margin-bottom: 1.25rem;
   flex-shrink: 0;
   position: relative;
@@ -320,7 +320,7 @@ a:hover {
    ---------------------------------------------------------- */
 html.cu-light, html.cu-light body { background-color: #edf2f7 !important; color: #2d3748 !important; color-scheme: light; }
 html.cu-light body::before { background: linear-gradient(180deg, rgba(237,242,247,0.85) 0%, rgba(237,242,247,0.55) 45%, rgba(237,242,247,0.85) 100%); }
-html.cu-light .login-pf-page::before { background-image: url(../img/alpha-pilot-wordmark-light.svg) !important; }
+html.cu-light .login-pf-page::before { background-image: url(../img/alpha-pilot-logo-v2-light.svg) !important; }
 html.cu-light .card-pf { background-color: #ffffff !important; border-color: #d3dae0 !important; box-shadow: 0 8px 30px rgba(15,23,42,0.10) !important; }
 html.cu-light #kc-page-title, html.cu-light h1, html.cu-light h2 { color: #2d3748 !important; }
 html.cu-light label, html.cu-light .login-pf label, html.cu-light .login-pf-settings label,
