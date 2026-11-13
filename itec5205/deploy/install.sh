@@ -65,6 +65,23 @@ if [ -n "$KC_BEFORE" ]; then
     exit 1
   fi
 fi
+# ---- Start on boot ---------------------------------------------------------
+# Docker itself is enabled at boot and the containers use restart: unless-stopped,
+# but the systemd unit also brings back containers that were stopped by hand
+# and runs the one-shot init jobs, in order, after docker + network are up.
+UNIT=/etc/systemd/system/alpha-pilot.service
+if ! cmp -s deploy/alpha-pilot.service "$UNIT" || ! systemctl is-enabled --quiet alpha-pilot 2>/dev/null; then
+  if sudo -n true 2>/dev/null; then
+    echo "Installing $UNIT (start on boot)"
+    sed "s#^WorkingDirectory=.*#WorkingDirectory=$DIR#" deploy/alpha-pilot.service | sudo tee "$UNIT" >/dev/null
+    sudo systemctl daemon-reload
+    sudo systemctl enable docker.service containerd.service alpha-pilot.service
+  else
+    echo "NOTE: alpha-pilot.service is not installed (needs sudo). Run once on the server:" >&2
+    echo "  sudo cp $DIR/deploy/alpha-pilot.service $UNIT && sudo systemctl daemon-reload && sudo systemctl enable docker alpha-pilot" >&2
+  fi
+fi
+
 rm -rf "$UPLOAD"
 docker image prune -f >/dev/null
 if [ -z "$ok" ]; then echo "The app did not answer /api/health; see: docker compose logs backend" >&2; exit 1; fi
