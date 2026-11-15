@@ -15,8 +15,8 @@
 html,
 body {
   background-color: #152238 !important;
-  /* NYSE / Nasdaq market-district photo behind every Keycloak page */
-  background-image: url(../img/login-bg.jpg) !important;
+  /* NYSE / Nasdaq night scene with bull and bear behind every Keycloak page */
+  background-image: url(../img/login-bg-v2.jpg) !important;
   background-size: cover !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
@@ -33,7 +33,7 @@ body::before {
   content: "";
   position: fixed;
   inset: 0;
-  background: linear-gradient(180deg, rgba(21,34,56,0.80) 0%, rgba(21,34,56,0.55) 45%, rgba(21,34,56,0.80) 100%);
+  background: linear-gradient(180deg, rgba(21,34,56,0.45) 0%, rgba(21,34,56,0.10) 45%, rgba(21,34,56,0.30) 100%);
   pointer-events: none;
   z-index: 0;
 }
