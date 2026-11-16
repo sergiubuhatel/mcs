@@ -11,12 +11,11 @@ import ColumnPicker from "../components/ColumnPicker";
 import AllocationDonut, { SLOT_COLORS } from "../components/AllocationDonut";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import ForecastChart, { BandLevelSelect, FORECAST_COLORS } from "../components/ForecastChart";
-import Modal from "../components/Modal";
-import Req from "../components/Req";
 import { StatTiles } from "../components/PageParts";
 import SignalBoard, { SignalBadge } from "../features/signals/SignalBoard";
+import EditPortfolioModal from "../features/portfolios/EditPortfolioModal";
 import BackButton from "../layout/BackButton";
-import { ChevronDownIcon, ChevronRightIcon, ClockIcon, CopyIcon, DatabaseIcon, EditIcon, GrowthIcon, LayersIcon, ListIcon, PieChartIcon, SaveIcon, StarIcon, TrendChartIcon, TrendDownIcon, TrendUpIcon } from "../layout/icons";
+import { ChevronDownIcon, ChevronRightIcon, ClockIcon, CopyIcon, DatabaseIcon, EditIcon, GrowthIcon, LayersIcon, ListIcon, PieChartIcon, StarIcon, TrendChartIcon, TrendDownIcon, TrendUpIcon } from "../layout/icons";
 import { getSettings } from "../features/settings/settings";
 import { fmtDay, nextReportLabel, relativeDays } from "../features/earnings/FinancialResultsCard";
 
@@ -288,7 +287,8 @@ export default function PortfolioDetailPage() {
   const [forecast, setForecast] = useState(null); // growth factors from /forecast, or {error}
   const [showForecast, setShowForecast] = useState(true);
   const [bandLevel, setBandLevel] = useState(() => Number(getSettings().forecast.band_level) || 95);
-  const [renaming, setRenaming] = useState(null); // name being edited, or null
+  const [editing, setEditing] = useState(false); // the Edit Portfolio dialog
+  const [reloadKey, setReloadKey] = useState(0); // bumped after an edit: reload everything
   const [confirmDelete, setConfirmDelete] = useState(false);
   // Portfolio of portfolios: shown by part (default) or as one combined list.
   const [display, setDisplay] = useState("sleeves");
@@ -321,7 +321,7 @@ export default function PortfolioDetailPage() {
         setAsOf(perfRes.data.as_of);
       })
       .catch((err) => setError(apiError(err)));
-  }, [id]);
+  }, [id, reloadKey]);
 
   // Where the portfolio is heading: reloaded whenever the signal board
   // changes (e.g. after its Forecast all run trained new forecasts).
@@ -330,20 +330,13 @@ export default function PortfolioDetailPage() {
       .get(`/api/portfolios/${id}/forecast`, { params: { level: bandLevel } })
       .then((r) => setForecast(r.data))
       .catch((err) => setForecast({ error: apiError(err) }));
-  }, [id, board, bandLevel]);
+  }, [id, board, bandLevel, reloadKey]);
 
-  const rename = (e) => {
-    e.preventDefault();
-    const name = renaming.trim();
-    if (!name) return;
-    apiClient
-      .put(`/api/portfolios/${id}`, { name })
-      .then((r) => {
-        setPortfolio((p) => ({ ...p, name: r.data.name ?? name }));
-        setRenaming(null);
-        toast.success("Portfolio renamed");
-      })
-      .catch((err) => toast.error(apiError(err)));
+  // Saved from the Edit Portfolio dialog: name / notes / holdings changed, so
+  // reload the page's data, chart, forecast and signal board.
+  const onEdited = () => {
+    setEditing(false);
+    setReloadKey((k) => k + 1);
   };
 
   const changeDisplay = (value) => {
@@ -386,7 +379,7 @@ export default function PortfolioDetailPage() {
       .then((r) => setHeldSeries((m) => ({ ...m, [rangeStart]: r.data.series })))
       .catch(() => {});
   }, [id, rangeStart, series, heldSeries]);
-  useEffect(() => setHeldSeries({}), [id]);
+  useEffect(() => setHeldSeries({}), [id, reloadKey]);
 
   if (error)
     return (
@@ -528,7 +521,7 @@ export default function PortfolioDetailPage() {
           </div>
           <div className="page-header-actions">
             {lastUpdated && (
-              <span className="last-updated" title="Created, or last renamed">
+              <span className="last-updated" title="Created, or last edited">
                 <ClockIcon width={16} height={16} />
                 <span>
                   <span className="muted">Last updated</span>
@@ -539,8 +532,8 @@ export default function PortfolioDetailPage() {
             )}
             <button
               className="btn"
-              onClick={() => (portfolio.sleeves ? navigate(`/combine-portfolios?id=${portfolio._key}`) : setRenaming(portfolio.name))}
-              title={portfolio.sleeves ? "Change its portfolios, their shares and the name" : "Edit this portfolio's name"}
+              onClick={() => (portfolio.sleeves ? navigate(`/combine-portfolios?id=${portfolio._key}`) : setEditing(true))}
+              title={portfolio.sleeves ? "Change its portfolios, their shares and the name" : "Change the name, notes and holdings: remove, add or replace companies and change their weights"}
             >
               <EditIcon width={15} height={15} /> Edit Portfolio
             </button>
@@ -784,23 +777,11 @@ export default function PortfolioDetailPage() {
         )}
       </div>
 
-      <SignalBoard portfolioId={id} onBoard={setBoard} />
+      <SignalBoard key={reloadKey} portfolioId={id} onBoard={setBoard} />
 
-      <Modal
-        isOpen={renaming !== null}
-        onClose={() => setRenaming(null)}
-        title="Edit portfolio"
-        headerActions={
-          <button className="close-btn" style={{ position: "static" }} type="submit" form="rename-portfolio" title="Save" aria-label="Save">
-            <SaveIcon width={18} height={18} />
-          </button>
-        }
-      >
-        <form id="rename-portfolio" onSubmit={rename}>
-          <label>Name<Req /></label>
-          <input value={renaming ?? ""} onChange={(e) => setRenaming(e.target.value)} autoFocus />
-        </form>
-      </Modal>
+      {!portfolio.sleeves && (
+        <EditPortfolioModal portfolio={portfolio} isOpen={editing} onClose={() => setEditing(false)} onSaved={onEdited} />
+      )}
       <ConfirmDeleteModal
         isOpen={confirmDelete}
         onClose={() => setConfirmDelete(false)}

@@ -7,6 +7,7 @@ from ..services.portfolio_forecast import portfolio_forecast
 from ..services.portfolio_service import (
     combine_sleeves,
     analyze_portfolio,
+    check_edited_holdings,
     create_portfolio,
     delete_portfolio,
     get_portfolio,
@@ -146,11 +147,23 @@ def forecast(portfolio_id: str):
 
 @bp.put("/<portfolio_id>")
 def update(portfolio_id: str):
+    """Rename; optionally also `notes` and new `holdings` ([{ticker, weight}],
+    weights in any scale -- they are rescaled to add up to 1)."""
     body = request.get_json(force=True) or {}
-    name = body.get("name")
+    name = (body.get("name") or "").strip()
     if not name:
         return jsonify({"error": "'name' is required"}), 400
-    portfolio = update_portfolio(portfolio_id, name=name)
+    changes = {}
+    if "notes" in body:
+        changes["notes"] = (body.get("notes") or "").strip() or None
+    if "holdings" in body:
+        try:
+            changes["holdings"] = check_edited_holdings(portfolio_id, body["holdings"])
+        except LookupError:
+            return jsonify({"error": "Portfolio not found"}), 404
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+    portfolio = update_portfolio(portfolio_id, name=name, **changes)
     if portfolio is None:
         return jsonify({"error": "Portfolio not found"}), 404
     return jsonify(portfolio)

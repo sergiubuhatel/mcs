@@ -590,9 +590,54 @@ def set_display(portfolio_id: str, display: str) -> bool:
     return True
 
 
+def check_edited_holdings(portfolio_id: str, holdings) -> list[dict]:
+    """Holdings typed on the Edit Portfolio dialog -> [{ticker, weight}].
+
+    Raises LookupError when the portfolio doesn't exist and ValueError with a
+    message for the user otherwise. A ticker that is new to the portfolio (added
+    or renamed) must have market data; one it already held is kept as is, so a
+    portfolio imported with a ticker not loaded yet can still be edited."""
+    col = get_db().collection("portfolios")
+    doc = col.get(portfolio_id) if col.has(portfolio_id) else None
+    if doc is None:
+        raise LookupError(portfolio_id)
+    if doc.get("sleeves"):
+        raise ValueError("A portfolio of portfolios is changed through its portfolios (Edit Portfolio opens them)")
+    if not isinstance(holdings, list) or not holdings:
+        raise ValueError("Keep at least one holding")
+
+    clean, seen = [], set()
+    for h in holdings:
+        ticker = str((h or {}).get("ticker") or "").strip().upper()
+        if not ticker:
+            raise ValueError("Every holding needs a ticker")
+        try:
+            weight = float(h.get("weight"))
+        except (TypeError, ValueError):
+            raise ValueError(f"{ticker}: the weight must be a number") from None
+        if not np.isfinite(weight) or weight <= 0:
+            raise ValueError(f"{ticker}: the weight must be above 0")
+        if ticker in seen:
+            raise ValueError(f"{ticker} is in the list twice")
+        seen.add(ticker)
+        clean.append({"ticker": ticker, "weight": weight})
+
+    held = {h["ticker"] for h in doc.get("holdings", [])}
+    new = sorted(seen - held)
+    if new:
+        known = set(get_db().aql.execute("FOR c IN companies FILTER c._key IN @t RETURN c._key", bind_vars={"t": new}))
+        unknown = [t for t in new if t not in known]
+        if unknown:
+            raise ValueError(
+                f"No market data for {', '.join(unknown)}: check the ticker, or import it on Market Data first"
+            )
+    return clean
+
+
 def update_portfolio(portfolio_id: str, name: str, **changes) -> dict | None:
-    """Rename; a combined portfolio can also get new `holdings`, `sleeves`
-    and `notes` (its metrics are then recomputed)."""
+    """Rename; can also set new `holdings` (any portfolio, see
+    check_edited_holdings; the metrics are then recomputed), `sleeves` (a
+    combined portfolio) and `notes`."""
     db = get_db()
     col = db.collection("portfolios")
     if not col.has(portfolio_id):
