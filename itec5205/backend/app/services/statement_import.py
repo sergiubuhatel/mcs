@@ -105,6 +105,35 @@ def _market_value(nums: list[float]) -> tuple[float | None, bool]:
     return (nums[0], False) if nums else (None, False)
 
 
+def _adds_up_abs(value: float, book: float, change: float | None) -> bool:
+    """value - book = change, ignoring the sign: OCR often drops the minus
+    (or reads the ▼ icon instead of it)."""
+    return change is not None and abs(abs(value - book) - abs(change)) <= 0.02 + abs(value) * 0.0005
+
+
+def _usd_columns(texts: list[str], found: list[tuple[int, float]]) -> dict | None:
+    """Rows like `TICKER name  qty  avg-cost USD  book  price USD  value  change ▲  %`:
+    the two "USD" words anchor the columns, so junk read from the ▲/▼ icons
+    after the change column can't shift them. None for any other layout."""
+    usd = [i for i, t in enumerate(texts) if t == "USD"]
+    if len(usd) < 2:
+        return None
+    u1, u2 = usd[0], usd[1]
+    before1 = [(i, n) for i, n in found if 0 < i < u1]
+    between = [(i, n) for i, n in found if u1 < i < u2]
+    after2 = [(i, n) for i, n in found if i > u2]
+    if len(before1) < 2 or len(between) < 2 or not after2:
+        return None
+    return {
+        "quantity_at": before1[-2][0],
+        "quantity": before1[-2][1],
+        "price": between[-1][1],
+        "book": between[0][1],
+        "value": after2[0][1],
+        "change": after2[1][1] if len(after2) > 1 else None,
+    }
+
+
 def parse_lines(lines: list[list[dict]]) -> dict:
     positions, total, currency, cash, account_total = [], None, None, None, None
     after_total_label = False
@@ -152,19 +181,26 @@ def parse_lines(lines: list[list[dict]]) -> dict:
         if not (TICKER_RE.match(ticker) and ticker not in NOT_TICKERS and percent and len(nums) >= 2):
             continue
 
-        value, checked = _market_value(nums)
+        if cols := _usd_columns(texts, found):
+            value, quantity, price = cols["value"], cols["quantity"], cols["price"]
+            checked = _adds_up_abs(value, cols["book"], cols["change"])
+            name_end = cols["quantity_at"]
+        else:
+            value, checked = _market_value(nums)
+            # quantity, avg cost, book, price, value, change: the quantity is six
+            # from the end, so a number in the name ("PHILLIPS 66") is skipped.
+            quantity_at = len(found) - 6 if len(found) >= 6 else None
+            name_end = found[quantity_at][0] if quantity_at is not None else next((i for i, _ in found if i > 0), len(texts))
+            quantity = found[quantity_at][1] if quantity_at is not None else None
+            # Market price (USD), just before the market value.
+            price = nums[-3] if quantity_at is not None and checked else None
         if value is None or value <= 0:
             continue
-        # quantity, avg cost, book, price, value, change: the quantity is six
-        # from the end, so a number in the name ("PHILLIPS 66") is skipped.
-        quantity_at = len(found) - 6 if len(found) >= 6 else None
-        name_end = found[quantity_at][0] if quantity_at is not None else next((i for i, _ in found if i > 0), len(texts))
         positions.append({
             "ticker": ticker,
             "security": " ".join(texts[1:name_end]).replace("…", "").strip(" .") or None,
-            "quantity": found[quantity_at][1] if quantity_at is not None else None,
-            # Market price (USD), just before the market value.
-            "price": nums[-3] if quantity_at is not None and checked else None,
+            "quantity": quantity,
+            "price": price,
             "market_value": round(value, 2),
             "checked": checked,
             # Positions priced in USD are the NYSE/NASDAQ listings; a row with
@@ -175,9 +211,15 @@ def parse_lines(lines: list[list[dict]]) -> dict:
         })
     # The statement's own USD/CAD rate: CAD market value / (units x USD
     # price), so the Order Calculator can value the account exactly as here.
+    # Median of the per-row rates, so one misread row can't skew it (a single
+    # bad quantity once gave 0.0168 and the search below then "fixed" good
+    # rows to fit it).
     priced = [p for p in positions if p["usd"] and p["checked"] and p["quantity"] and p["price"]]
-    usd_value = sum(p["quantity"] * p["price"] for p in priced)
-    usd_cad = round(sum(p["market_value"] for p in priced) / usd_value, 6) if usd_value else None
+    rates = [p["market_value"] / (p["quantity"] * p["price"]) for p in priced]
+    rate = statistics.median(rates) if rates else None
+    agree = [p for p, r in zip(priced, rates) if abs(r - rate) <= rate * RATE_TOLERANCE] if rate else []
+    usd_value = sum(p["quantity"] * p["price"] for p in agree)
+    usd_cad = round(sum(p["market_value"] for p in agree) / usd_value, 6) if usd_value else None
     for p in positions:
         _verify(p, usd_cad)
     if cash is None and account_total and total and account_total >= total:
@@ -198,8 +240,22 @@ def _verify(position: dict, rate: float | None) -> None:
     if not position["usd"] or not rate:
         position["verified"] = False
         return
-    if position["quantity"] and position["price"] and _fits(position["quantity"], position["price"], position["market_value"], rate):
-        position["verified"] = True
+    q, pr, value = position["quantity"], position["price"], position["market_value"]
+    if q and pr:
+        # A dropped decimal point ("187.11" read "18711") -> scale it back.
+        for scale in (1, 10, 100, 1000):
+            if _fits(q, pr / scale, value, rate):
+                position.update(price=round(pr / scale, 4), verified=True, checked=True)
+                return
+    if position["checked"]:
+        # The market value adds up: never replace it, only look for the
+        # units/price that fit it.
+        for qi, cand_q in enumerate(nums):
+            for pi, cand_p in enumerate(nums):
+                if qi != pi and float(cand_q).is_integer() and _fits(cand_q, cand_p, value, rate):
+                    position.update(quantity=cand_q, price=cand_p, verified=True)
+                    return
+        position.update(quantity=None, price=None, verified=False)
         return
     for vi in sorted(range(len(nums)), key=lambda i: -nums[i]):
         for qi, q in enumerate(nums):
