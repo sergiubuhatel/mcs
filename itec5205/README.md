@@ -137,7 +137,7 @@ fetch_stock_history.py, fetch_stock_stats.py   original standalone CSV scripts
 
 ## Production (Ubuntu server) — Alpha Pilot
 
-The app is served as **Alpha Pilot** at https://itec5205.ganymedesoftware.ca from the Ubuntu server
+The app is served as **Alpha Pilot** at https://alphapilot.ca (also https://itec5205.ganymedesoftware.ca) from the Ubuntu server
 `sergiu@192.168.2.202`, folder `/opt/ganymede/alpha-pilot` (images and configuration only: no source code,
 no Git). This Windows PC is for development only (http://localhost:8080, empty `CLOUDFLARE_TUNNEL_TOKEN` in
 `.env`). Never start the `tunnel` profile here.
