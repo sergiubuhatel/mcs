@@ -161,6 +161,10 @@ tr:hover td { background: var(--color-bg-hover); }
 .brand-logo { flex-shrink: 0; object-fit: contain; }
 .brand-text { display: block; white-space: nowrap; line-height: 1; font-family: Inter, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
 .brand-name { display: block; font-size: 23px; font-weight: 800; letter-spacing: -0.025em; color: inherit; }
+/* Wordmark colours from the gradient logo: navy "Alpha" (near-white in dark mode), sky-to-royal blue "Pilot". */
+.brand-alpha { color: #0b1e46; }
+.dark .brand-alpha { color: #f1f5fb; }
+.brand-pilot { background: linear-gradient(180deg, #19c3fb 0%, #0a7ef0 55%, #1d5fe0 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .theme-toggle {
   display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 9px; flex-shrink: 0;
   border: 1px solid var(--color-divider); background: var(--color-bg-primary); color: var(--color-text-primary);

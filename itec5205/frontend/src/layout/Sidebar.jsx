@@ -164,7 +164,7 @@ export default function Sidebar({ collapsed }) {
           <img src={logo} alt="" width={collapsed ? 40 : 44} height={collapsed ? 40 : 44} className="brand-logo" />
           {!collapsed && (
             <span className="brand-text">
-              <span className="brand-name">Alpha Pilot</span>
+              <span className="brand-name"><span className="brand-alpha">Alpha</span> <span className="brand-pilot">Pilot</span></span>
             </span>
           )}
         </NavLink>
