@@ -3,9 +3,9 @@ import { createSlice } from "@reduxjs/toolkit";
 function loadInitialDarkMode() {
   try {
     const stored = localStorage.getItem("darkMode");
-    return stored === null ? true : stored === "true"; // dark mode by default
+    return stored === "true"; // light mode by default
   } catch {
-    return true;
+    return false;
   }
 }
 
