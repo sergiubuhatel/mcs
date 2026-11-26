@@ -25,7 +25,7 @@ from ..config import RL_MODELS_DIR
 from ..db.arango_client import get_db
 from ..extensions import socketio
 from ..rl.portfolio_env import PortfolioEnv
-from .lstm_service import split_points, training_days_setting
+from .lstm_service import expanding_folds, split_points, training_days_setting
 from .portfolio_service import compute_metrics, metrics_from_returns, returns_past_year
 from .portfolio_service import _returns_matrix as returns_matrix
 
@@ -122,21 +122,80 @@ def _held_test(returns: np.ndarray, start: int, end: int, target_at, cost: float
     return _series_metrics(np.array(daily))
 
 
-def _test_report(model, env: PortfolioEnv, returns: np.ndarray, start: int, end: int, cost: float) -> dict:
-    """The chosen policy vs. equal weights on the same companies over the
-    test period, both held quarterly with the same cost. RL premium = relative
-    Sharpe gain, (SR_RL - SR_EW) / |SR_EW|."""
+def _policy_fn(model, env: PortfolioEnv):
+    """target_at(t, held) for `_held_test`: the deterministic policy's
+    allocation on day t, from the window before t and the current holdings."""
     def policy(t, held):
         weights = env.equal_weights(t) if held is None else held
         action, _ = model.predict(env.observation(t, weights.astype(np.float32)), deterministic=True)
         return PortfolioEnv.masked_softmax(action, env.mask(t))
+    return policy
 
-    rl = _held_test(returns, start, end, policy, cost)
+
+def _test_report(model, env: PortfolioEnv, returns: np.ndarray, start: int, end: int, cost: float) -> dict:
+    """The chosen policy vs. equal weights on the same companies over the
+    test period, both held quarterly with the same cost. RL premium = relative
+    Sharpe gain, (SR_RL - SR_EW) / |SR_EW|."""
+    rl = _held_test(returns, start, end, _policy_fn(model, env), cost)
     ew = _held_test(returns, start, end, lambda t, _held: env.equal_weights(t), cost)
     premium = None
     if rl["sharpe_ratio"] is not None and ew["sharpe_ratio"]:
         premium = round((rl["sharpe_ratio"] - ew["sharpe_ratio"]) / abs(ew["sharpe_ratio"]), 4)
     return {"rl": rl, "equal_weight": ew, "rl_premium": premium, "rebalance_days": TEST_REBALANCE_DAYS}
+
+
+# Risk-aversion values compared by cross-validation (plus the requested one).
+CV_RISK_AVERSIONS = (0.5, 1.0, 2.0)
+
+
+def cross_validate_setting() -> bool:
+    """Settings -> Portfolio Defaults -> "Cross-validate risk aversion"
+    (`portfolio.cross_validate`), on unless switched off."""
+    try:
+        doc = get_db().collection("settings").get("app") or {}
+        value = ((doc.get("values") or {}).get("portfolio") or {}).get("cross_validate")
+    except Exception:  # noqa: BLE001 - no settings -> default
+        return True
+    return True if value is None else bool(value)
+
+
+def _cross_validate(make_env, returns: np.ndarray, dates: list[str], window: int, n_pre_test: int,
+                    candidates: list[float], timesteps: int, seed: int, cost: float, progress=None) -> dict | None:
+    """Expanding-window cross-validation of the risk aversion over the days
+    before the test period (`expanding_folds`: one-year validation folds, each
+    trained on everything before it). Every candidate is trained once per
+    fold and its policy held quarterly through the fold's validation year;
+    the candidate with the best mean Sharpe ratio over the folds wins (ties
+    keep the earlier candidate). Sharpe, not the reward, is compared because
+    the reward itself depends on the risk aversion. Equal weights per fold
+    are reported for reference. None when fewer than 2 folds fit."""
+    folds = expanding_folds(n_pre_test)
+    folds = [(s, e) for s, e in folds if s - window >= 30]
+    if len(folds) < 2:
+        return None
+    ew = [_held_test(returns, s, e, lambda t, _h, env=make_env(s, e, 1.0): env.equal_weights(t), cost)["sharpe_ratio"]
+          for s, e in folds]
+    rows, done = [], 0
+    for ra in candidates:
+        per_fold = []
+        for s, e in folds:
+            model = PPO("MlpPolicy", make_env(window, s, ra), verbose=0, seed=seed)
+            model.learn(total_timesteps=timesteps, callback=progress(done) if progress else None)
+            done += timesteps
+            per_fold.append(_held_test(returns, s, e, _policy_fn(model, make_env(s, e, ra)), cost)["sharpe_ratio"])
+        valid = [x for x in per_fold if x is not None]
+        rows.append({"risk_aversion": ra, "per_fold": per_fold,
+                     "mean_sharpe": round(float(np.mean(valid)), 3) if valid else None})
+    best = max(rows, key=lambda r: -np.inf if r["mean_sharpe"] is None else r["mean_sharpe"])
+    return {
+        "method": "expanding window",
+        "folds": [{"train": {"from": dates[window], "to": dates[s - 1], "days": s - window},
+                   "validation": {"from": dates[s], "to": dates[e - 1], "days": e - s}} for s, e in folds],
+        "candidates": rows,
+        "equal_weight_sharpe": ew,
+        "chosen_risk_aversion": best["risk_aversion"],
+        "trainings": len(rows) * len(folds),
+    }
 
 
 class SocketIOProgressCallback(BaseCallback):
@@ -150,17 +209,25 @@ class SocketIOProgressCallback(BaseCallback):
     without this it would keep re-reading the one-time, completed/total
     -less snapshot `train_rl_portfolio` sets before training starts."""
 
-    def __init__(self, room: str, total_timesteps: int, event: str = "rl_progress", task=None):
+    def __init__(self, room: str, total_timesteps: int, event: str = "rl_progress", task=None,
+                 offset: int = 0, grand_total: int | None = None, stage: str = "training"):
+        """`offset` / `grand_total`: when one run trains several models
+        (cross-validation, then the final one), progress counts steps over
+        all of them."""
         super().__init__()
         self.room = room
         self.total_timesteps = total_timesteps
         self.event = event
         self.task = task
+        self.offset = offset
+        self.grand_total = grand_total or total_timesteps
+        self.stage = stage
         self._step_interval = max(1, total_timesteps // 20)
 
     def _on_step(self) -> bool:
         if self.num_timesteps % self._step_interval == 0 or self.num_timesteps >= self.total_timesteps:
-            progress = {"stage": "training", "completed": self.num_timesteps, "total": self.total_timesteps}
+            progress = {"stage": self.stage, "completed": min(self.offset + self.num_timesteps, self.grand_total),
+                        "total": self.grand_total}
             socketio.emit(self.event, progress, room=self.room)
             if self.task is not None:
                 self.task.update_state(state="PROGRESS", meta=progress)
@@ -657,10 +724,15 @@ def train_and_recommend(
     max_drawdown: float | None = None,
     training_days: int | None = None,
     seed: int = DEFAULT_SEED,
+    cross_validate: bool | None = None,
 ) -> dict:
     """`training_days`: history window in trading days (None = the shared
     Settings value, ~10 years -- the same window the LSTM and ARIMA use),
     split train | validation | test like theirs (see the module docstring).
+    `cross_validate` (None = the Settings value, on by default): choose the
+    risk aversion among `CV_RISK_AVERSIONS` + `risk_aversion` by
+    expanding-window cross-validation on the years before the test
+    (`_cross_validate`); the chosen value is used for training and stored.
     Companies listed later than the window start get weight 0 until their
     first trading day. `seed` fixes PPO's randomness.
     `max_drawdown` (optional, fraction): ceiling on the past-year max
@@ -695,19 +767,43 @@ def train_and_recommend(
     returns = returns_df.values
     dates = [str(d) for d in returns_df.index]
 
-    def make_env(start: int, end: int) -> PortfolioEnv:
+    def make_env(start: int, end: int, ra: float | None = None) -> PortfolioEnv:
         return PortfolioEnv(
-            returns, window=window, risk_aversion=risk_aversion, max_volatility=max_volatility,
-            min_return=min_return, transaction_cost=transaction_cost, available=available, start=start, end=end,
+            returns, window=window, risk_aversion=risk_aversion if ra is None else ra,
+            max_volatility=max_volatility, min_return=min_return, transaction_cost=transaction_cost,
+            available=available, start=start, end=end,
         )
 
+    # 1. Cross-validate the risk aversion on the years before the test.
+    if cross_validate is None:
+        cross_validate = cross_validate_setting()
+    candidates = sorted(set(CV_RISK_AVERSIONS) | {float(risk_aversion)})
+    n_folds = len([s for s, _e in expanding_folds(test_start) if s - window >= 30]) if cross_validate else 0
+    cv_steps = len(candidates) * n_folds * timesteps if n_folds >= 2 else 0
+    grand_total = cv_steps + timesteps
+
+    def progress(offset: int, stage: str):
+        if not progress_room:
+            return None
+        return SocketIOProgressCallback(progress_room, timesteps, task=progress_task, offset=offset,
+                                        grand_total=grand_total, stage=stage)
+
+    requested_risk_aversion = risk_aversion
+    cv = None
+    if cv_steps:
+        cv = _cross_validate(make_env, returns, dates, window, test_start, candidates, timesteps, seed,
+                             transaction_cost, progress=lambda done: progress(done, "cross-validating"))
+        if cv:
+            risk_aversion = cv["chosen_risk_aversion"]
+
+    # 2. Train with it; keep the best checkpoint on the validation year.
     env = make_env(window, val_start)
     model = PPO("MlpPolicy", env, verbose=0, seed=seed)
 
     checkpoint = ValidationCheckpoint(make_env(val_start, test_start))
     callbacks = [checkpoint]
     if progress_room:
-        callbacks.append(SocketIOProgressCallback(progress_room, timesteps, task=progress_task))
+        callbacks.append(progress(cv_steps, "training"))
     model.learn(total_timesteps=timesteps, callback=callbacks)
     checkpoint.evaluate()  # the final policy is a candidate too
     model.policy.load_state_dict(checkpoint.best_state)
@@ -722,6 +818,9 @@ def train_and_recommend(
         "validation_reward": round(checkpoint.best_score, 6),
         "validation_checks": checkpoint.evaluations,
         "seed": seed,
+        "risk_aversion": risk_aversion,
+        "requested_risk_aversion": requested_risk_aversion,
+        "cross_validation": cv,
     }
 
     # Apply the chosen policy to the most recent window to get today's recommendation.

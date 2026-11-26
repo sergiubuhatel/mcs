@@ -61,6 +61,7 @@ export const DEFAULT_SETTINGS = {
     mode: "full",
     risk_aversion: 1,
     timesteps: 20000,
+    cross_validate: true, // choose the risk aversion by time-series cross-validation (backend reads it)
     trend_window_days: 252,
     max_volatility_pct: "",
     min_return_pct: "",

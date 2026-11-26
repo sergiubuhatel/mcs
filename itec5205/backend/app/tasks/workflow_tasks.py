@@ -275,7 +275,8 @@ def run_workflow(self, run_id: str):
                 step("portfolio", 0.02, "Selecting companies with the portfolio criteria...")
             elif info.get("total"):
                 done = min(info.get("completed", 0), info["total"])
-                step("portfolio", done / info["total"], f"Training the RL agent · {done:,} / {info['total']:,} steps")
+                what = "Cross-validating the risk aversion" if info.get("stage") == "cross-validating" else "Training the RL agent"
+                step("portfolio", done / info["total"], f"{what} · {done:,} / {info['total']:,} steps")
             check_stop()
             time.sleep(POLL_SECONDS)
 

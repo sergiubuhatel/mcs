@@ -71,6 +71,7 @@ def train():
         max_drawdown=_optional(body.get("max_drawdown"), float),
         training_days=_optional(body.get("training_days"), int),
         seed=_optional(body.get("seed"), int),
+        cross_validate=None if body.get("cross_validate") is None else bool(body.get("cross_validate")),
         max_weight_range=_optional(body.get("max_weight_range"), float),
         weight_range_basis=basis,
         required_tickers=required,

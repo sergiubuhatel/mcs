@@ -58,6 +58,28 @@ def split_points(n_days: int) -> tuple[int, int]:
     return test_start - test_days(test_start), test_start
 
 
+CV_FOLDS = 5
+CV_MIN_TRAIN_DAYS = 504
+
+
+def expanding_folds(n_pre_test: int, folds: int = CV_FOLDS, fold_days: int = TEST_DAYS,
+                    min_train: int = CV_MIN_TRAIN_DAYS) -> list[tuple[int, int]]:
+    """Time-series (expanding-window, "rolling-origin") cross-validation over
+    the days before the test period: the last `folds` blocks of `fold_days`
+    each validate a model trained on everything before them, so a fold never
+    trains on later days (no shuffling, unlike k-fold). Returns
+    [(validation start, validation end), ...] oldest first; train of a fold =
+    [0, validation start). Folds with less than `min_train` training days are
+    dropped. With the 10-year window: 5 one-year folds, training on 4..8
+    years. The test period is never touched."""
+    out = []
+    for k in range(folds, 0, -1):
+        start, end = n_pre_test - k * fold_days, n_pre_test - (k - 1) * fold_days
+        if start >= min_train:
+            out.append((start, end))
+    return out
+
+
 def training_days_setting() -> int:
     """The shared training window in trading days: the saved Settings value
     (`forecast.training_days`), else `DEFAULT_LOOKBACK_DAYS`."""

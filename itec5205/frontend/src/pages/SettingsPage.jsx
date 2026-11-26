@@ -139,6 +139,7 @@ const SECTIONS = [
       { key: "trend_window_days", label: "Trend window", type: "select", options: TREND_WINDOWS, number: true, help: "How far back the straight-line trend is checked (Best subset)." },
       { key: "risk_aversion", label: "Risk aversion", type: "number", min: 0, step: 0.1, help: "Higher = more conservative allocation." },
       { key: "timesteps", label: "Training timesteps", type: "number", min: 1000, step: 1000, help: "PPO training steps; more train longer." },
+      { key: "cross_validate", label: "Cross-validate risk aversion", type: "toggle", help: "Compare risk aversion 0.5, 1 and 2 (plus the value above) by expanding-window cross-validation on the five years before the test year, and train with the best. About 10-15x longer training." },
       { key: "max_volatility_pct", label: "Max volatility", type: "number", blank: "no limit", suffix: "%", help: "Annual volatility ceiling (blank = none)." },
       { key: "min_return_pct", label: "Min annual return", type: "number", blank: "no minimum", suffix: "%", help: "Past-year return floor (blank = none)." },
       { key: "max_drawdown_pct", label: "Max drawdown", type: "number", blank: "no limit", min: 0, max: 100, suffix: "%", help: "Ceiling on the portfolio's worst past-year fall from a peak, e.g. 15 (blank = no preference). The optimizer picks companies and weights that stay within it." },

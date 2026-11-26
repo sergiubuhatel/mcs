@@ -76,6 +76,48 @@ function RLEvaluation({ evaluation: ev }) {
         Both rebalanced every {t.rebalance_days} trading days with the same transaction cost, before the investor&apos;s
         limits are applied.
       </p>
+      {ev.cross_validation && <RLCrossValidation cv={ev.cross_validation} requested={ev.requested_risk_aversion} />}
+    </>
+  );
+}
+
+/** Expanding-window cross-validation of the risk aversion: mean and
+ * per-fold Sharpe ratio of each candidate on the validation years. */
+function RLCrossValidation({ cv, requested }) {
+  const sharpe = (v) => (v == null ? "-" : v.toFixed(2));
+  return (
+    <>
+      <h4>Cross-validation (risk aversion)</h4>
+      <p className="muted">
+        {cv.folds.length} expanding-window folds before the test year: each trains on everything up to a validation
+        year and is scored there (Sharpe, held quarterly). Chosen: <strong>{cv.chosen_risk_aversion}</strong>
+        {requested != null && requested !== cv.chosen_risk_aversion && ` (requested ${requested})`}.
+      </p>
+      <table className="holdings-table">
+        <thead>
+          <tr>
+            <th>Risk aversion</th>
+            {cv.folds.map((f) => <th key={f.validation.from}>{f.validation.from.slice(0, 4)}–{f.validation.to.slice(2, 4)}</th>)}
+            <th>Mean</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cv.candidates.map((c) => (
+            <tr key={c.risk_aversion} style={c.risk_aversion === cv.chosen_risk_aversion ? { fontWeight: 600 } : undefined}>
+              <td style={{ textAlign: "left" }}>{c.risk_aversion}</td>
+              {c.per_fold.map((v, i) => <td key={i} className="weight">{sharpe(v)}</td>)}
+              <td className="weight">{sharpe(c.mean_sharpe)}</td>
+            </tr>
+          ))}
+          <tr className="muted">
+            <td style={{ textAlign: "left" }}>Equal weights</td>
+            {cv.equal_weight_sharpe.map((v, i) => <td key={i} className="weight">{sharpe(v)}</td>)}
+            <td className="weight">
+              {sharpe(cv.equal_weight_sharpe.filter((v) => v != null).reduce((a, b) => a + b, 0) / (cv.equal_weight_sharpe.filter((v) => v != null).length || 1))}
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </>
   );
 }

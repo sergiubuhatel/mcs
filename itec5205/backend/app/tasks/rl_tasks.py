@@ -34,6 +34,7 @@ def train_rl_portfolio(
     max_drawdown: float | None = None,
     training_days: int | None = None,
     seed: int | None = None,
+    cross_validate: bool | None = None,
 ):
     """The optimizer decides how many companies to keep, within the optional
     [min_companies, max_companies] bounds (see `rl_service.select_universe`). `max_volatility` / `min_return`
@@ -71,6 +72,7 @@ def train_rl_portfolio(
         progress_room=room, progress_task=self, max_volatility=max_volatility, min_return=min_return,
         anchor=optimizer["weights"] if optimizer else None, max_weight_range=max_weight_range,
         weight_range_basis=weight_range_basis, max_drawdown=max_drawdown, training_days=training_days,
+        cross_validate=cross_validate,
         **({"seed": seed} if seed is not None else {}),
     )
     constraints = result["constraints"]
@@ -92,7 +94,10 @@ def train_rl_portfolio(
     name = portfolio_name or f"RL Portfolio {result['run_id'][:8]}"
     evaluation = result["evaluation"]
     notes = (
-        f"PPO, timesteps={timesteps}, risk_aversion={risk_aversion}, window={window}, seed={evaluation['seed']}, "
+        f"PPO, timesteps={timesteps}, risk_aversion={evaluation['risk_aversion']:g}"
+        + (f" (chosen by {len(evaluation['cross_validation']['folds'])}-fold expanding-window cross-validation)"
+           if evaluation.get("cross_validation") else "")
+        + f", window={window}, seed={evaluation['seed']}, "
         f"trained on {evaluation['train']['from']}..{evaluation['train']['to']}, best checkpoint on validation "
         f"{evaluation['validation']['from']}..{evaluation['validation']['to']}, tested on "
         f"{evaluation['test']['from']}..{evaluation['test']['to']}"

@@ -169,6 +169,18 @@ A Gymnasium `Env` where:
     cost) against equal weights on the same companies, and reports both
     plus the RL premium (SR_RL − SR_EW) / |SR_EW| -- out of sample, before
     the investor's limits are applied.
+  - **cross-validation** (Settings `portfolio.cross_validate`, on by
+    default; API `cross_validate`): before the final training,
+    `_cross_validate` picks the risk aversion among 0.5 / 1 / 2 (plus the
+    requested value) by expanding-window ("rolling-origin") time-series
+    cross-validation over the years before the test (`expanding_folds`:
+    up to 5 one-year validation folds, each trained on everything before
+    it; folds with < 2 years of training dropped; never shuffled, unlike
+    k-fold). Each candidate is trained per fold and held quarterly through
+    the fold's validation year; the best mean Sharpe ratio wins (the reward
+    can't be compared, it contains the risk aversion). ~15x the training
+    time; `evaluation.cross_validation` stores folds, per-fold Sharpe
+    ratios and the equal-weight reference.
   The chosen policy applied to the most recent window gives today's
   allocation. The periods, best step and test results are stored as
   `evaluation` on the `rl_runs` document and shown in the RL panel.
