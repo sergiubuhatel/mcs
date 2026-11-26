@@ -152,21 +152,50 @@ A Gymnasium `Env` where:
   volatility (a Sharpe-like signal) − `transaction_cost` × turnover
   Σ|w_new − w_old| (`rl_service.TRANSACTION_COST` = 0.1% of the traded
   value), so the agent pays for every reallocation.
-- Trained with `stable-baselines3`'s PPO (`MlpPolicy`) in
+- A company listed after the window starts is masked (`available`): the
+  softmax runs over the listed companies only, so it has weight 0 until
+  its first trading day.
+- Trained with `stable-baselines3`'s PPO (`MlpPolicy`, `seed=42`) in
   `services/rl_service.py::train_and_recommend`, which pulls the pool's
-  returns matrix out of `stock_prices`, trains, then applies the learned
-  workflow to the most recent window to produce today's recommended
-  allocation.
+  returns matrix out of `stock_prices` over the shared training window
+  (below) and splits it like the forecasters:
+  - **train**: PPO learns on the first part;
+  - **validation** (the year before the test): after every PPO rollout
+    `ValidationCheckpoint` runs the deterministic policy through it and keeps the policy
+    with the best mean daily reward (the counterpart of the LSTM's early
+    stopping);
+  - **test** (the past year): `_test_report` holds the chosen policy's
+    allocation for a quarter at a time (63 days, rebalanced with the 0.1%
+    cost) against equal weights on the same companies, and reports both
+    plus the RL premium (SR_RL − SR_EW) / |SR_EW| -- out of sample, before
+    the investor's limits are applied.
+  The chosen policy applied to the most recent window gives today's
+  allocation. The periods, best step and test results are stored as
+  `evaluation` on the `rl_runs` document and shown in the RL panel.
+
+### One training window and split for LSTM, ARIMA and PPO
+
+All three learners use the same history and the same chronological split
+(`lstm_service.py`), so their test numbers cover the same days:
+
+- **Same window**: the most recent `forecast.training_days` trading days
+  from Settings (`training_days_setting()`; default
+  `DEFAULT_LOOKBACK_DAYS = 2515`, ~10 trading years).
+- **Same test days**: `split_index()` holds out the past year
+  (`TEST_DAYS = 252`, at most 20% of a history shorter than 5 years);
+  `split_points()` takes the year before it as validation (same rule). With
+  10 years that is ~8 / 1 / 1 years, the layout of TradeMaster (NeurIPS
+  2023) and STHAN-SR / CI-STHPAN (AAAI). LSTM uses validation for early
+  stopping, PPO for its best checkpoint, ARIMA picks its order by AIC on
+  train + validation and needs none.
 
 ### Forecasting: LSTM and ARIMA
 
 Both forecasters take the same inputs and are evaluated the same way, so
 their numbers are directly comparable:
 
-- **Same window**: the most recent `lookback_days` closes (default
-  `DEFAULT_LOOKBACK_DAYS = 2515`, ~10 trading years).
-- **Same test days**: `split_index()` cuts the window 80/20; both report
-  one-step-ahead RMSE/MAE on exactly the last 20%.
+- **Same window and test days** as above; both report one-step-ahead
+  RMSE/MAE on exactly the held-out past year.
 - **Same horizon**: 84 daily steps (4 months); `horizons.py` picks the
   1/2/3/4-month points (21/42/63/84 trading days) that agreement uses.
 
@@ -206,6 +235,24 @@ ids in a `forecast_runs` document. `GET /api/forecasts/batch/<id>`
 aggregates the task states; the first read that sees every task done stores
 `wall_seconds`. `queued` is true while a model has jobs waiting and none
 running (i.e. behind another run on the same queue).
+
+### Automatic import schedule (`services/import_schedule.py`)
+
+A scheduler thread started from `wsgi.py` runs the import of Alg. 1 by itself.
+Default: Russell 3000, `daily@04:00,16:30,18:00` (Ottawa time), stored in the
+document `settings/import_schedule` and editable on the Settings page
+(`GET/PUT /api/settings/import-schedule`, `POST .../run`, admin only). Why three
+runs: the exchanges close at 16:00 and Yahoo Finance publishes the closes of all
+companies with a lag of minutes to hours, so 16:30 gets most of them, 18:00 the
+late ones, and 04:00 anything still missing. Each run uses the incremental
+import (only missing companies/days), so a run with nothing to fetch ends
+quickly. `trading_days` skips runs that cannot see a new close (before noon =
+previous day's close; weekends). A Redis leader lock + heartbeat makes only one
+API process run the schedule; it waits while another import runs, does nothing
+in the backend's first 3 minutes (`STARTUP_GRACE_SECONDS`), and
+`reap_interrupted()` marks a run with no heartbeat for 5 minutes as interrupted
+so the next run resumes it. Runs are logged in `user_activity` as
+"Automatic import" (user `scheduler`).
 
 ### Workflows (`workflow_service.py`, `tasks/workflow_tasks.py`)
 
@@ -388,7 +435,7 @@ Socket.IO room/event.
 | `GET /api/pools`, `GET/DELETE /api/pools/<id>` | List/inspect/delete pools |
 | `POST /api/portfolios` `{name, holdings:[{ticker,weight}], method?, notes?}` | Save a portfolio (weights auto-normalized) |
 | `GET /api/portfolios`, `GET/DELETE /api/portfolios/<id>` | List/inspect/delete portfolios |
-| `POST /api/rl/train` `{pool_id \| universe[], risk_aversion?, timesteps?, max_volatility?, min_return?, min_companies?, max_companies?, mode?, portfolio_name?}` | Async: train PPO, save resulting portfolio. Socket.IO event: `rl_progress` |
+| `POST /api/rl/train` `{pool_id \| universe[], risk_aversion?, timesteps?, max_volatility?, min_return?, min_companies?, max_companies?, mode?, portfolio_name?, training_days?, seed?}` | Async: train PPO, save resulting portfolio. Socket.IO event: `rl_progress` |
 | `GET /api/rl/status/<task_id>` | Poll RL training status/result |
 | `POST /api/data/import` `{tickers[]?, period?, interval?}` | Async: bulk Yahoo Finance -> Arango import (defaults to the full `tickers.txt` universe). Socket.IO event: `import_progress` |
 | `GET /api/data/import/status/<task_id>` | Poll import status/result |

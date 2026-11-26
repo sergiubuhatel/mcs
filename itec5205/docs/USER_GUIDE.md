@@ -57,6 +57,22 @@ options, status, new price rows, duration) and **What's stored** (S&P 500
 tickers imported, daily prices, history range, how many tickers are up to
 date with the last trading day).
 
+### Automatic imports (three times a day)
+
+You don't have to press Import to keep the data current. Alpha Pilot imports
+the data automatically **three times every 24 hours: at 4:00 am, 4:30 pm and
+6:00 pm** (Ottawa time). The stock exchanges close at 4:00 pm, but Yahoo Finance
+updates the closing prices of all companies with a lag of minutes to hours, so
+one run after the close would miss some of them; three runs a day make sure
+every company is up to date. Each run imports **only the missing data**: it
+skips companies that are already current and fetches only the missing days for
+the others, so a run that finds everything current ends quickly. Runs are
+skipped on weekends and whenever no new closing price can exist yet.
+
+To change the times (or turn the schedule off), open **Settings** →
+**Automatic Import** (administrators only). Automatic runs appear in **Recent
+imports** with the source "Automatic", and you can stop one like any other import.
+
 ## Workflows (`/workflows`) and Criteria (`/criteria/...`)
 
 The sidebar follows the order a workflow runs: **Data** (Market Data, Data

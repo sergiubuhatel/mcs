@@ -114,7 +114,7 @@ const SECTIONS = [
     color: "#f59e0b",
     text: "LSTM / ARIMA runs, the Price Forecasts page and new Forecast Settings.",
     fields: [
-      { key: "training_days", label: "Training days", type: "number", min: 120, suffix: "days", help: "Most recent trading days both models train on (screener, pools, company page, Price Forecasts)." },
+      { key: "training_days", label: "Training days", type: "number", min: 120, suffix: "days", help: "Most recent trading days LSTM, ARIMA and the RL agent learn from (screener, pools, company page, Price Forecasts, portfolios). The past year is held out as the test period for all three." },
       { key: "lstm_epochs", label: "LSTM max epochs", type: "number", min: 1, help: "Upper bound on LSTM epochs (early stopping may end sooner)." },
       { key: "horizon", label: "Signal horizon", type: "select", options: opts(["1M", "2M", "3M", "4M"]), help: "Horizon the Price Forecasts page rates signals at first." },
       { key: "band_level", label: "Forecast band confidence", type: "select", options: opts(BAND_LEVELS.map((lv) => ({ value: lv, label: `${lv}%` }))), number: true, help: "Initial confidence level of the shaded forecast bands on the company, portfolio and Price Forecasts charts (each chart can still change it)." },

@@ -1,8 +1,19 @@
 """Train a PPO agent (stable-baselines3) on a ``PortfolioEnv`` built from
 historical returns pulled out of ArangoDB, then turn the learned policy into
 a concrete recommended allocation.
+
+The agent learns from the same window and the same chronological split as
+the LSTM and ARIMA forecasters (`lstm_service.split_points`): it trains on
+the first part, the policy is scored on the validation period after every
+PPO rollout and the best checkpoint is kept (the counterpart of the LSTM's
+early stopping), and that policy is then tested on the past year -- held
+quarterly against equal weights on the same companies with the same cost --
+which gives an out-of-sample RL premium. Today's allocation is the chosen
+policy applied to the latest window, as the LSTM's forecast is its chosen
+network applied to the latest closes.
 """
 
+import copy
 import os
 import uuid
 
@@ -14,6 +25,7 @@ from ..config import RL_MODELS_DIR
 from ..db.arango_client import get_db
 from ..extensions import socketio
 from ..rl.portfolio_env import PortfolioEnv
+from .lstm_service import split_points, training_days_setting
 from .portfolio_service import compute_metrics, metrics_from_returns, returns_past_year
 from .portfolio_service import _returns_matrix as returns_matrix
 
@@ -32,6 +44,99 @@ TRANSACTION_COST = 0.001
 
 # Blend steps tried by `_enforce_constraints` (0 = pure RL weights).
 BLEND_STEPS = [i / 20 for i in range(21)]
+# Fixed PPO seed (network init + sampling), like the LSTM's, so training on
+# the same data gives the same portfolio.
+DEFAULT_SEED = 42
+# The test holds each allocation for a quarter, then rebalances (as the
+# Stage 4 walk-forward evaluation does).
+TEST_REBALANCE_DAYS = 63
+
+
+class ValidationCheckpoint(BaseCallback):
+    """After every PPO rollout (and once more after training), runs the
+    current deterministic policy through the validation period and keeps a
+    copy of the policy with the best mean daily reward -- the same objective
+    it is trained on, measured on days it never trained on."""
+
+    def __init__(self, val_env: PortfolioEnv):
+        super().__init__()
+        self.val_env = val_env
+        self.best_score = -np.inf
+        self.best_step = 0
+        self.best_state = None
+        self.evaluations = 0
+
+    def _on_step(self) -> bool:
+        return True
+
+    def _on_rollout_end(self) -> None:
+        self.evaluate()
+
+    def evaluate(self) -> None:
+        obs, _ = self.val_env.reset()
+        rewards, done = [], False
+        while not done:
+            action, _ = self.model.predict(obs, deterministic=True)
+            obs, reward, done, _, _ = self.val_env.step(action)
+            rewards.append(reward)
+        score = float(np.mean(rewards))
+        self.evaluations += 1
+        if score > self.best_score:
+            self.best_score, self.best_step = score, int(self.num_timesteps)
+            self.best_state = copy.deepcopy(self.model.policy.state_dict())
+
+
+def _series_metrics(daily: np.ndarray) -> dict:
+    """Annualized return (compounded), volatility, Sharpe ratio (no risk-free
+    rate, as everywhere in the app) and max drawdown of daily net returns."""
+    daily = np.asarray(daily, dtype=np.float64)
+    growth = np.cumprod(1 + daily)
+    years = len(daily) / TRADING_DAYS_PER_YEAR
+    std = daily.std()
+    peak = np.maximum.accumulate(np.concatenate([[1.0], growth]))
+    return {
+        "total_return": round(float(growth[-1] - 1), 4),
+        "annual_return": round(float(growth[-1] ** (1 / years) - 1), 4) if years > 0 else None,
+        "volatility": round(float(std * np.sqrt(TRADING_DAYS_PER_YEAR)), 4),
+        "sharpe_ratio": round(float(daily.mean() / std * np.sqrt(TRADING_DAYS_PER_YEAR)), 3) if std > 0 else None,
+        "max_drawdown": round(float((np.concatenate([[1.0], growth]) / peak - 1).min()), 4),
+    }
+
+
+def _held_test(returns: np.ndarray, start: int, end: int, target_at, cost: float) -> dict:
+    """Days [start, end): every TEST_REBALANCE_DAYS the portfolio is reset to
+    `target_at(t)` (decided with data before day t) and then drifts with
+    prices; each rebalance pays `cost` x turnover (the first buys from cash,
+    turnover 1)."""
+    held, daily = None, []
+    for t in range(start, end):
+        turnover = 0.0
+        if (t - start) % TEST_REBALANCE_DAYS == 0:
+            target = np.asarray(target_at(t, held), dtype=np.float64)
+            turnover = 1.0 if held is None else float(np.abs(target - held).sum())
+            held = target
+        r = float(held @ returns[t])
+        daily.append(r - cost * turnover)
+        held = held * (1 + returns[t])
+        held = held / held.sum() if held.sum() > 0 else held
+    return _series_metrics(np.array(daily))
+
+
+def _test_report(model, env: PortfolioEnv, returns: np.ndarray, start: int, end: int, cost: float) -> dict:
+    """The chosen policy vs. equal weights on the same companies over the
+    test period, both held quarterly with the same cost. RL premium = relative
+    Sharpe gain, (SR_RL - SR_EW) / |SR_EW|."""
+    def policy(t, held):
+        weights = env.equal_weights(t) if held is None else held
+        action, _ = model.predict(env.observation(t, weights.astype(np.float32)), deterministic=True)
+        return PortfolioEnv.masked_softmax(action, env.mask(t))
+
+    rl = _held_test(returns, start, end, policy, cost)
+    ew = _held_test(returns, start, end, lambda t, _held: env.equal_weights(t), cost)
+    premium = None
+    if rl["sharpe_ratio"] is not None and ew["sharpe_ratio"]:
+        premium = round((rl["sharpe_ratio"] - ew["sharpe_ratio"]) / abs(ew["sharpe_ratio"]), 4)
+    return {"rl": rl, "equal_weight": ew, "rl_premium": premium, "rebalance_days": TEST_REBALANCE_DAYS}
 
 
 class SocketIOProgressCallback(BaseCallback):
@@ -550,8 +655,15 @@ def train_and_recommend(
     weight_range_basis: str = "smallest",
     transaction_cost: float = TRANSACTION_COST,
     max_drawdown: float | None = None,
+    training_days: int | None = None,
+    seed: int = DEFAULT_SEED,
 ) -> dict:
-    """`max_drawdown` (optional, fraction): ceiling on the past-year max
+    """`training_days`: history window in trading days (None = the shared
+    Settings value, ~10 years -- the same window the LSTM and ARIMA use),
+    split train | validation | test like theirs (see the module docstring).
+    Companies listed later than the window start get weight 0 until their
+    first trading day. `seed` fixes PPO's randomness.
+    `max_drawdown` (optional, fraction): ceiling on the past-year max
     drawdown of the final weights, enforced like the volatility / return
     limits (blend toward the optimizer's weights).
     `max_weight_range` (optional, fraction): cap on max(w) - min(w) across
@@ -562,34 +674,61 @@ def train_and_recommend(
     if len(tickers) < 2:
         raise ValueError("Need at least 2 tickers to build a portfolio")
 
-    returns_df = returns_matrix(tickers, lookback_days=756)  # ~3 trading years, capped by what's stored
+    training_days = int(training_days or training_days_setting())
+    returns_df = returns_matrix(tickers, lookback_days=training_days)  # capped by what's stored
     returns_df = returns_df.dropna(axis=1, thresh=MIN_HISTORY_DAYS)
     if returns_df.shape[1] < 2:
         raise ValueError("Not enough tickers with sufficient price history to train on")
+    # Listed from its first stored return on; before that the agent can't hold it.
+    available = returns_df.notna().cummax().values
     returns_df = returns_df.fillna(0.0)
 
-    if returns_df.shape[0] <= window + 10:
+    n_days = returns_df.shape[0]
+    val_start, test_start = split_points(n_days)
+    if val_start - window < 30 or test_start - val_start < 5 or n_days - test_start < 5:
         raise ValueError(
-            f"Not enough historical days ({returns_df.shape[0]}) for window={window}; import more history first"
+            f"Not enough historical days ({n_days}) for window={window} plus validation and test periods; "
+            "import more history first"
         )
 
     used_tickers = list(returns_df.columns)
     returns = returns_df.values
+    dates = [str(d) for d in returns_df.index]
 
-    env = PortfolioEnv(
-        returns, window=window, risk_aversion=risk_aversion, max_volatility=max_volatility, min_return=min_return,
-        transaction_cost=transaction_cost,
-    )
-    model = PPO("MlpPolicy", env, verbose=0)
+    def make_env(start: int, end: int) -> PortfolioEnv:
+        return PortfolioEnv(
+            returns, window=window, risk_aversion=risk_aversion, max_volatility=max_volatility,
+            min_return=min_return, transaction_cost=transaction_cost, available=available, start=start, end=end,
+        )
 
-    callback = SocketIOProgressCallback(progress_room, timesteps, task=progress_task) if progress_room else None
-    model.learn(total_timesteps=timesteps, callback=callback)
+    env = make_env(window, val_start)
+    model = PPO("MlpPolicy", env, verbose=0, seed=seed)
 
-    # Apply the learned policy to the most recent window to get today's recommendation.
-    final_obs = env.reset()[0]
-    final_obs[: window * len(used_tickers)] = returns[-window:].flatten()
-    action, _ = model.predict(final_obs, deterministic=True)
-    weights = PortfolioEnv.softmax(np.asarray(action, dtype=np.float64))
+    checkpoint = ValidationCheckpoint(make_env(val_start, test_start))
+    callbacks = [checkpoint]
+    if progress_room:
+        callbacks.append(SocketIOProgressCallback(progress_room, timesteps, task=progress_task))
+    model.learn(total_timesteps=timesteps, callback=callbacks)
+    checkpoint.evaluate()  # the final policy is a candidate too
+    model.policy.load_state_dict(checkpoint.best_state)
+
+    test = _test_report(model, make_env(test_start, n_days), returns, test_start, n_days, transaction_cost)
+    evaluation = {
+        "training_days": n_days,
+        "train": {"from": dates[window], "to": dates[val_start - 1], "days": val_start - window},
+        "validation": {"from": dates[val_start], "to": dates[test_start - 1], "days": test_start - val_start},
+        "test": {"from": dates[test_start], "to": dates[-1], "days": n_days - test_start, **test},
+        "best_timestep": checkpoint.best_step,
+        "validation_reward": round(checkpoint.best_score, 6),
+        "validation_checks": checkpoint.evaluations,
+        "seed": seed,
+    }
+
+    # Apply the chosen policy to the most recent window to get today's recommendation.
+    last = len(returns) - 1
+    final_obs = np.concatenate([returns[-window:].flatten(), np.ones(len(used_tickers)) / len(used_tickers)])
+    action, _ = model.predict(final_obs.astype(np.float32), deterministic=True)
+    weights = PortfolioEnv.masked_softmax(action, available[last])
 
     constrained = max_volatility is not None or min_return is not None or max_drawdown is not None
     blend = 0.0
@@ -630,10 +769,13 @@ def train_and_recommend(
         "holdings": holdings,
         "metrics": metrics,
         "constraints": constraints,
+        "evaluation": evaluation,
         "model_path": model_path,
         "hyperparams": {
             "algorithm": "PPO",
             "timesteps": timesteps,
+            "training_days": n_days,
+            "seed": seed,
             "risk_aversion": risk_aversion,
             "window": window,
             "transaction_cost": transaction_cost,

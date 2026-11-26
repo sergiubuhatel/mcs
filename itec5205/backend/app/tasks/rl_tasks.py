@@ -32,6 +32,8 @@ def train_rl_portfolio(
     required_tickers: list[str] | None = None,
     excluded_tickers: list[str] | None = None,
     max_drawdown: float | None = None,
+    training_days: int | None = None,
+    seed: int | None = None,
 ):
     """The optimizer decides how many companies to keep, within the optional
     [min_companies, max_companies] bounds (see `rl_service.select_universe`). `max_volatility` / `min_return`
@@ -68,7 +70,8 @@ def train_rl_portfolio(
         universe=universe, risk_aversion=risk_aversion, timesteps=timesteps, window=window,
         progress_room=room, progress_task=self, max_volatility=max_volatility, min_return=min_return,
         anchor=optimizer["weights"] if optimizer else None, max_weight_range=max_weight_range,
-        weight_range_basis=weight_range_basis, max_drawdown=max_drawdown,
+        weight_range_basis=weight_range_basis, max_drawdown=max_drawdown, training_days=training_days,
+        **({"seed": seed} if seed is not None else {}),
     )
     constraints = result["constraints"]
     excluded = excluded_for_history(requested, result["tickers"], mode, optimizer is not None, lookback_days)
@@ -87,7 +90,15 @@ def train_rl_portfolio(
         constraints = {**constraints, "feasible": optimizer["feasible"], "best_achievable": optimizer["metrics"]}
 
     name = portfolio_name or f"RL Portfolio {result['run_id'][:8]}"
-    notes = f"PPO, timesteps={timesteps}, risk_aversion={risk_aversion}, window={window}"
+    evaluation = result["evaluation"]
+    notes = (
+        f"PPO, timesteps={timesteps}, risk_aversion={risk_aversion}, window={window}, seed={evaluation['seed']}, "
+        f"trained on {evaluation['train']['from']}..{evaluation['train']['to']}, best checkpoint on validation "
+        f"{evaluation['validation']['from']}..{evaluation['validation']['to']}, tested on "
+        f"{evaluation['test']['from']}..{evaluation['test']['to']}"
+    )
+    if evaluation["test"]["rl_premium"] is not None:
+        notes += f" (RL premium vs. equal weights {evaluation['test']['rl_premium']:+.1%})"
     if mode == "subset":
         notes += f", candidates filtered by trend consistency (K-ratio, {lookback_days}-day lookback)"
     elif mode == "strong":
@@ -143,6 +154,7 @@ def train_rl_portfolio(
             "selection": selection,
             "subset_size_auto": auto_sized,
             "constraints": constraints,
+            "evaluation": evaluation,
             "excluded": excluded,
             "mandatory": mandatory_report,
             "user_excluded": user_excluded,
@@ -158,6 +170,7 @@ def train_rl_portfolio(
         "selection": selection,
         "subset_size_auto": auto_sized,
         "constraints": constraints,
+        "evaluation": evaluation,
         "excluded": excluded,
         "mandatory": mandatory_report,
         "user_excluded": user_excluded,

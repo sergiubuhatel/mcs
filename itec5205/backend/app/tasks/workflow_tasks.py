@@ -283,7 +283,7 @@ def run_workflow(self, run_id: str):
         step(
             "portfolio", 1, f"Portfolio created with {len(result['holdings'])} companies",
             status="done", portfolio_id=result["portfolio_id"], metrics=result["metrics"],
-            constraints=result.get("constraints"), holdings=len(result["holdings"]),
+            constraints=result.get("constraints"), evaluation=result.get("evaluation"), holdings=len(result["holdings"]),
             mandatory=result.get("mandatory"), user_excluded=result.get("user_excluded"),
         )
         finish(save, started, "succeeded", portfolio_id=result["portfolio_id"], percent=100,

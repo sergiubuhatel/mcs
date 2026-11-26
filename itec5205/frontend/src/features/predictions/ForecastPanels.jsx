@@ -57,8 +57,8 @@ export default function ForecastPanels({ ticker }) {
             <input type="number" min={120} value={trainingDays} onChange={(e) => setTrainingDays(e.target.value)} style={{ width: 110 }} />
           </div>
           <p className="muted" style={{ margin: 0 }}>
-            Most recent trading days used by both LSTM and ARIMA. The last 20% ({days - Math.floor(days * 0.8)} days) are held out to
-            compute test RMSE/MAE on the same days for both models. Minimum 120. Both forecast 1, 2, 3 and 4 months ahead.
+            Most recent trading days used by LSTM, ARIMA and the RL agent. The past year ({Math.min(252, Math.floor(days * 0.2))} days;
+            at most 20% of a shorter window) is held out to compute test RMSE/MAE on the same days for both models. Minimum 120. Both forecast 1, 2, 3 and 4 months ahead.
           </p>
         </div>
       </div>

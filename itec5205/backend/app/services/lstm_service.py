@@ -20,17 +20,53 @@ from ..db.arango_client import get_db
 from .horizons import MAX_HORIZON_DAYS, backtest_bands, band_fields, horizon_points
 
 MIN_HISTORY_DAYS = 120
-# Shared by the LSTM and ARIMA forecasters so both learn from the same window
-# (10 years: trading days 2016-10-10..2026-10-09 in the stored data) and are
-# scored on the same held-out days.
+# Shared by the LSTM and ARIMA forecasters AND the PPO portfolio agent so all
+# three learn from the same window (10 years: trading days 2016-10-10..
+# 2026-10-09 in the stored data) and are scored on the same held-out days.
+# The Settings page's Forecast Defaults -> "Training days"
+# (`forecast.training_days`) overrides it (see `training_days_setting`).
 DEFAULT_LOOKBACK_DAYS = 2515
+# Chronological train | validation | test split, the same for all three:
+# test = the past year (252 trading days -- the "1Y" the app's metrics and the
+# investor's limits are measured on), validation = the year before it, each at
+# most 20% of a shorter history (LSTM: early stopping; PPO: best checkpoint;
+# ARIMA picks its order by AIC on train + validation and needs none). With the
+# 10-year window that is ~8 / 1 / 1 years -- the layout of TradeMaster
+# (NeurIPS 2023: 10 years, last year test, the year before validation) and
+# STHAN-SR / CI-STHPAN (AAAI: 756 / 252 / 237 days).
+TEST_DAYS = 252
 TEST_FRACTION = 0.2
+
+
+def test_days(n_days: int) -> int:
+    """Held-out test days in a window of `n_days`: the past year, or 20% of
+    a history shorter than five years."""
+    return min(TEST_DAYS, int(n_days * TEST_FRACTION))
 
 
 def split_index(n_closes: int) -> int:
     """Index of the first held-out close: closes[split_index:] are the test days
-    for both models (chronological 80/20 split of the lookback window)."""
-    return int(n_closes * (1 - TEST_FRACTION))
+    for all models (the past year, see `test_days`)."""
+    return n_closes - test_days(n_closes)
+
+
+def split_points(n_days: int) -> tuple[int, int]:
+    """(validation start, test start) of a window of `n_days`: train =
+    [0, validation start), validation = [validation start, test start),
+    test = [test start, n_days)."""
+    test_start = split_index(n_days)
+    return test_start - test_days(test_start), test_start
+
+
+def training_days_setting() -> int:
+    """The shared training window in trading days: the saved Settings value
+    (`forecast.training_days`), else `DEFAULT_LOOKBACK_DAYS`."""
+    try:
+        doc = get_db().collection("settings").get("app") or {}
+        days = int(((doc.get("values") or {}).get("forecast") or {}).get("training_days"))
+    except Exception:  # noqa: BLE001 - no settings collection/doc/value -> default
+        return DEFAULT_LOOKBACK_DAYS
+    return days if days >= MIN_HISTORY_DAYS else DEFAULT_LOOKBACK_DAYS
 
 
 class LSTMPricePredictor(nn.Module):
@@ -127,7 +163,7 @@ def train_and_predict(
     # RMSE/MAE). Sample i predicts closes[i + seq_len], so the test samples are
     # exactly those predicting closes[split_index:] -- the same days ARIMA is scored on.
     split = split_index(len(closes64)) - seq_len
-    val_start = int(split * 0.9)
+    val_start = split_points(len(closes64))[0] - seq_len  # the year before the test
     X_t = torch.tensor(X).unsqueeze(-1)
     y_t = torch.tensor(y).unsqueeze(-1)
     X_train_t, y_train_t = X_t[:val_start], y_t[:val_start]

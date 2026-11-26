@@ -207,7 +207,7 @@ function ModelComparison({ lstm, arima }) {
   ];
   return (
     <div className="card" style={{ minWidth: 0 }}>
-      <CardTitle icon={LayersIcon} color="#8b5cf6" title="Model comparison" subtitle="Errors on the same held-out last 20% of the training window; lower is better" />
+      <CardTitle icon={LayersIcon} color="#8b5cf6" title="Model comparison" subtitle="Errors on the same held-out past year of the training window; lower is better" />
       <table>
         <thead>
           <tr>

@@ -38,6 +38,48 @@ function pctOrNull(v) {
   return v === "" || v === null || v === undefined ? null : Number(v) / 100;
 }
 
+/** Train / validation / test periods of the PPO run and its out-of-sample
+ * test: the chosen policy vs. equal weights on the same companies, both held
+ * quarterly with the same cost (before the investor's limits are applied). */
+function RLEvaluation({ evaluation: ev }) {
+  const period = (p) => `${p.from} → ${p.to} (${p.days.toLocaleString()} days)`;
+  const t = ev.test;
+  const row = (label, m) => (
+    <tr>
+      <td style={{ textAlign: "left" }}>{label}</td>
+      <td className="weight">{fmtPct(m.total_return)}</td>
+      <td className="weight">{fmtPct(m.volatility)}</td>
+      <td className="weight">{m.sharpe_ratio ?? "-"}</td>
+      <td className="weight">{fmtPct(m.max_drawdown)}</td>
+    </tr>
+  );
+  return (
+    <>
+      <h4>Out-of-sample test</h4>
+      <p className="muted">
+        Trained on {period(ev.train)}; best checkpoint chosen on validation {period(ev.validation)} (step{" "}
+        {ev.best_timestep.toLocaleString()}, {ev.validation_checks} checks); tested on {period(t)}, days the agent
+        never saw. Seed {ev.seed}.
+      </p>
+      <table className="holdings-table">
+        <thead>
+          <tr><th>Test period</th><th>Return</th><th>Volatility</th><th>Sharpe</th><th>Max drawdown</th></tr>
+        </thead>
+        <tbody>
+          {row("RL policy", t.rl)}
+          {row("Equal weights", t.equal_weight)}
+        </tbody>
+      </table>
+      <p className="muted">
+        RL premium (Sharpe vs. equal weights):{" "}
+        <strong>{t.rl_premium == null ? "-" : `${t.rl_premium > 0 ? "+" : ""}${fmtPct(t.rl_premium)}`}</strong>.
+        Both rebalanced every {t.rebalance_days} trading days with the same transaction cost, before the investor&apos;s
+        limits are applied.
+      </p>
+    </>
+  );
+}
+
 export default function RLTrainingPanel({ pool }) {
   const dispatch = useDispatch();
   const { status, progress, result, error } = useSelector((s) => s.rl);
@@ -346,6 +388,7 @@ export default function RLTrainingPanel({ pool }) {
                 )} max drawdown`}
             </p>
           )}
+          {result.evaluation && <RLEvaluation evaluation={result.evaluation} />}
           <table className="holdings-table">
             <thead><tr><th>Ticker</th><th>Weight</th></tr></thead>
             <tbody>

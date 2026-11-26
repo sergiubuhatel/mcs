@@ -69,6 +69,8 @@ def train():
         max_volatility=_optional(body.get("max_volatility"), float),
         min_return=_optional(body.get("min_return"), float),
         max_drawdown=_optional(body.get("max_drawdown"), float),
+        training_days=_optional(body.get("training_days"), int),
+        seed=_optional(body.get("seed"), int),
         max_weight_range=_optional(body.get("max_weight_range"), float),
         weight_range_basis=basis,
         required_tickers=required,

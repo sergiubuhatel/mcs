@@ -95,7 +95,7 @@ On a company's detail page (or the **Prediction** page) there are two panels:
   p, q ∈ 0..3, keeps the one with the lowest AIC, and shows a 7-day forecast
   with a 95% confidence interval.
 
-Both report test RMSE/MAE on the same chronological 80/20 split, so the two
+Both report test RMSE/MAE on the same held-out past year (252 trading days), so the two
 models can be compared directly. API equivalents:
 
 ```
