@@ -133,7 +133,15 @@ def get_up_to_date_tickers() -> set[str]:
         """,
         bind_vars={"cutoff": cutoff},
     )
-    return set(cursor)
+    # Also tickers Yahoo was already asked about for this session and had
+    # nothing newer for (`companies.prices_checked_through`, set by
+    # import_ticker): companies that stopped trading would otherwise be
+    # re-fetched by every import. They are checked again once per session.
+    checked = db.aql.execute(
+        "FOR c IN companies FILTER c.prices_checked_through >= @cutoff RETURN c._key",
+        bind_vars={"cutoff": cutoff},
+    )
+    return set(cursor) | set(checked)
 
 
 def get_latest_price_date(ticker: str) -> str | None:
@@ -313,12 +321,18 @@ def import_ticker(
 
     history_rows = []
     if import_history:
+        checked_through = _last_closed_session_date().isoformat()
         latest_date = get_latest_price_date(ticker)
         history_rows = fetch_ticker_history(ticker, years=years, interval=interval, since=latest_date)
         prices_col = db.collection("stock_prices")
         for row in history_rows:
             row["_key"] = f"{ticker}_{row['date']}"
             prices_col.insert(row, overwrite=True)
+        # Yahoo answered for this session even if it had nothing newer (a
+        # company that stopped trading: acquired, merged, halted). Without
+        # this mark such tickers look "behind" forever and every "update"
+        # import re-fetched them (get_up_to_date_tickers reads it).
+        db.collection("companies").update({"_key": ticker, "prices_checked_through": checked_through})
 
     if import_calculated_stats:
         # Change(1Y)/volatility are derived from `stock_prices`, not from
