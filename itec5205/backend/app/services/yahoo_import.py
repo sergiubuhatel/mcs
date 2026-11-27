@@ -18,6 +18,7 @@ from yfinance.exceptions import YFPricesMissingError, YFTickerMissingError
 
 from ..db.arango_client import get_db
 from .earnings import import_earnings as store_earnings
+from .market_calendar import previous_trading_day
 from .price_metrics import price_history_metrics
 
 _KEY_SAFE = re.compile(r"[^A-Za-z0-9_\-:.@()+,=;$!*'%]")
@@ -35,16 +36,14 @@ _CLOSE_SETTLE_MINUTES = 30
 
 def _last_closed_session_date() -> date:
     """Most recent calendar date whose regular session has already
-    finished. Before today's close (+ settle time) this is yesterday. Weekends step back to
-    Friday -- a Saturday cutoff has no close to reach, so "only what's
-    missing" would re-import every ticker all weekend. (Market holidays
-    aren't known here; on one, every ticker still looks one day behind.)"""
+    finished. Before today's close (+ settle time) this is yesterday. Weekends and
+    market holidays (Thanksgiving, Christmas, ...; services/market_calendar.py)
+    step back to the last trading day -- a cutoff with no close to reach would
+    make "only what's missing" re-import every ticker all day."""
     now_et = datetime.now(_MARKET_TZ)
     settled = now_et.replace(hour=_MARKET_CLOSE_HOUR, minute=_CLOSE_SETTLE_MINUTES, second=0, microsecond=0)
     day = now_et.date() if now_et >= settled else now_et.date() - timedelta(days=1)
-    while day.weekday() >= 5:  # Saturday, Sunday
-        day -= timedelta(days=1)
-    return day
+    return previous_trading_day(day)
 
 
 def _slugify_key(value: str) -> str:

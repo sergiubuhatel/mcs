@@ -9,7 +9,7 @@ policy that outputs portfolio weights.
 
 import os
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import numpy as np
 import torch
@@ -18,6 +18,7 @@ from torch import nn
 from ..config import RL_MODELS_DIR
 from ..db.arango_client import get_db
 from .horizons import MAX_HORIZON_DAYS, backtest_bands, band_fields, horizon_points
+from .market_calendar import next_trading_days
 
 MIN_HISTORY_DAYS = 120
 # Shared by the LSTM and ARIMA forecasters AND the PPO portfolio agent so all
@@ -271,12 +272,8 @@ def train_and_predict(
         bands, band_info = backtest_bands(predicted, actual, forecast_prices)
 
     last_date = datetime.strptime(dates[-1], "%Y-%m-%d")
-    forecast_dates = []
-    d = last_date
-    while len(forecast_dates) < forecast_days:
-        d = d + timedelta(days=1)
-        if d.weekday() < 5:  # skip weekends
-            forecast_dates.append(d.strftime("%Y-%m-%d"))
+    # Skip weekends and market holidays.
+    forecast_dates = [d.isoformat() for d in next_trading_days(last_date.date(), forecast_days)]
 
     model_path = None
     if save_model:

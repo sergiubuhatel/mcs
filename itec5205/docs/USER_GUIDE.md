@@ -67,7 +67,8 @@ one run after the close would miss some of them; three runs a day make sure
 every company is up to date. Each run imports **only the missing data**: it
 skips companies that are already current and fetches only the missing days for
 the others, so a run that finds everything current ends quickly. Runs are
-skipped on weekends and whenever no new closing price can exist yet.
+skipped on weekends, on US stock market holidays (for example Thanksgiving,
+Christmas and Good Friday), and whenever no new closing price can exist yet.
 
 To change the times (or turn the schedule off), open **Settings** →
 **Automatic Import** (administrators only). Automatic runs appear in **Recent

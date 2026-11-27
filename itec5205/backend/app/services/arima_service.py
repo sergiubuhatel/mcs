@@ -15,7 +15,7 @@ import os
 import pickle
 import time
 import warnings
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import numpy as np
 from statsmodels.tools.sm_exceptions import ConvergenceWarning
@@ -23,6 +23,7 @@ from statsmodels.tsa.arima.model import ARIMA
 
 from ..config import RL_MODELS_DIR
 from .horizons import MAX_HORIZON_DAYS, backtest_bands, band_fields, horizon_points
+from .market_calendar import next_trading_days
 from .lstm_service import DEFAULT_LOOKBACK_DAYS, MIN_HISTORY_DAYS, _load_closes, split_index
 
 
@@ -124,12 +125,8 @@ def train_and_predict(
     bands, band_info = backtest_bands(predicted, actual, forecast_prices)
 
     last_date = datetime.strptime(dates[-1], "%Y-%m-%d")
-    forecast_dates = []
-    day = last_date
-    while len(forecast_dates) < forecast_days:
-        day = day + timedelta(days=1)
-        if day.weekday() < 5:  # skip weekends
-            forecast_dates.append(day.strftime("%Y-%m-%d"))
+    # Skip weekends and market holidays.
+    forecast_dates = [d.isoformat() for d in next_trading_days(last_date.date(), forecast_days)]
 
     model_path = None
     if save_model:

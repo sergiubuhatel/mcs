@@ -259,7 +259,13 @@ companies with a lag of minutes to hours, so 16:30 gets most of them, 18:00 the
 late ones, and 04:00 anything still missing. Each run uses the incremental
 import (only missing companies/days), so a run with nothing to fetch ends
 quickly. `trading_days` skips runs that cannot see a new close (before noon =
-previous day's close; weekends). A Redis leader lock + heartbeat makes only one
+previous day's close; weekends and NYSE holidays). The holidays come from
+`services/market_calendar.py`: the NYSE rules (New Year's, MLK, Washington's
+Birthday, Good Friday, Memorial Day, Juneteenth, July 4, Labor Day,
+Thanksgiving, Christmas; Saturday → Friday, Sunday → Monday, New Year's on a
+Saturday not observed) plus one-off closures. The same calendar sets the
+"up to date" cutoff (`_last_closed_session_date`) and skips holidays in the
+LSTM/ARIMA forecast dates. A Redis leader lock + heartbeat makes only one
 API process run the schedule; it waits while another import runs, does nothing
 in the backend's first 3 minutes (`STARTUP_GRACE_SECONDS`), and
 `reap_interrupted()` marks a run with no heartbeat for 5 minutes as interrupted

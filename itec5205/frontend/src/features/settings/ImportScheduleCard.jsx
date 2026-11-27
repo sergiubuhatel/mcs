@@ -222,7 +222,7 @@ export default function ImportScheduleCard() {
           </label>
         )}
         {mode === "daily" && (
-          <label className="toggle" htmlFor="schedule-trading-days" title="Skip the runs that would find no new close (a run before noon fetches the previous day's close)">
+          <label className="toggle" htmlFor="schedule-trading-days" title="Skip the runs that would find no new close: weekends and US market holidays such as Thanksgiving (a run before noon fetches the previous day's close)">
             <input id="schedule-trading-days" type="checkbox" checked={tradingDays} onChange={(e) => setTradingDays(e.target.checked)} />
             <span className="toggle-track"><span className="toggle-thumb" /></span>
             <span className="muted">Trading days only</span>

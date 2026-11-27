@@ -6,7 +6,8 @@ The schedule is one document, `settings/import_schedule`:
                    the last import started)
     trading_days   daily only: run only when there is a new close to fetch
                    (a run before noon fetches the previous day's close, so
-                   4:00 AM runs Tuesday-Saturday)
+                   4:00 AM runs Tuesday-Saturday); weekends and NYSE holidays
+                   (services/market_calendar.py) are skipped
     universe       companies to import: "russell3000" (default) | "sp500" | "all"
 
 Default: every day at 4:00 AM, 4:30 PM and 6:00 PM, the whole Russell 3000. The other options
@@ -37,6 +38,7 @@ import redis
 
 from ..config import REDIS_URL
 from ..db.arango_client import get_db
+from .market_calendar import is_trading_day
 
 log = logging.getLogger(__name__)
 
@@ -183,9 +185,11 @@ def _daily_slots(sched: dict, now: datetime) -> list[datetime]:
 
 def _trading_day(local: datetime) -> bool:
     """A run at this local time has a new close to fetch: the same day's close
-    in the afternoon/evening, the previous day's before noon."""
+    in the afternoon/evening, the previous day's before noon. Weekends and
+    market holidays have none (e.g. Thanksgiving: no 4:30/6:00 PM runs that
+    day, no 4:00 AM run the Friday after)."""
     market_day = local if local.hour >= 12 else local - timedelta(days=1)
-    return market_day.weekday() < 5
+    return is_trading_day(market_day.date())
 
 
 def next_run(sched: dict | None = None, now: datetime | None = None) -> datetime | None:
